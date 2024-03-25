@@ -89,16 +89,22 @@ func WithEventChannel(ch chan event.GenericEvent) Option {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.17.0/pkg/reconcile
 func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	// TODO(user): your logic here
+	logger.Info("reconcile")
 
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PersistentVolumeClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	src := &source.Channel{
+		Source: r.eventCh,
+	}
+	handler := &handler.EnqueueRequestForObject{}
+
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&corev1.PersistentVolumeClaim{}).
+		Named(Name).
+		WatchesRawSource(src, handler).
 		Complete(r)
 }
