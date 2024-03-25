@@ -41,14 +41,13 @@ type PersistentVolumeClaimReconciler struct {
 }
 
 // Option is a function which configures the [PersistentVolumeClaimReconciler].
-type Option func(r *PersistentVolumeClaimReconciler) error
+type Option func(r *PersistentVolumeClaimReconciler)
 
 // WithClient configures the [PersistentVolumeClaimReconciler] with the given
 // client.
 func WithClient(c client.Client) Option {
-	opt := func(r *PersistentVolumeClaimReconciler) error {
+	opt := func(r *PersistentVolumeClaimReconciler) {
 		r.client = c
-		return nil
 	}
 
 	return opt
@@ -56,9 +55,8 @@ func WithClient(c client.Client) Option {
 
 // WithScheme configures the [PersistentVolumeClaimReconciler] with the given scheme
 func WithScheme(s *runtime.Scheme) Option {
-	opt := func(r *PersistentVolumeClaimReconciler) error {
+	opt := func(r *PersistentVolumeClaimReconciler) {
 		r.scheme = s
-		return nil
 	}
 
 	return opt
@@ -67,9 +65,8 @@ func WithScheme(s *runtime.Scheme) Option {
 // WithEventChannel configures the [PersistentVolumeClaimReconciler] to use the
 // given channel for receiving reconcile events.
 func WithEventChannel(ch chan event.GenericEvent) Option {
-	opt := func(r *PersistentVolumeClaimReconciler) error {
+	opt := func(r *PersistentVolumeClaimReconciler) {
 		r.eventCh = ch
-		return nil
 	}
 
 	return opt
