@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
@@ -19,6 +20,8 @@ type Runner struct {
 	interval time.Duration
 	eventCh  chan event.GenericEvent
 }
+
+var _ manager.Runnable = &Runner{}
 
 // Option is a function which configures the [Runner].
 type Option func(c *Runner)
