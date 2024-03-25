@@ -43,6 +43,17 @@ type PersistentVolumeClaimReconciler struct {
 // Option is a function which configures the [PersistentVolumeClaimReconciler].
 type Option func(r *PersistentVolumeClaimReconciler)
 
+// New creates a new [PersistentVolumeClaimReconciler] and configures it with
+// the given options.
+func New(opts ...Option) *PersistentVolumeClaimReconciler {
+	r := &PersistentVolumeClaimReconciler{}
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
+}
+
 // WithClient configures the [PersistentVolumeClaimReconciler] with the given
 // client.
 func WithClient(c client.Client) Option {
