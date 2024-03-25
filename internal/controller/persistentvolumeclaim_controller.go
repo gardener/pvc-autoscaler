@@ -19,17 +19,60 @@ package controller
 import (
 	"context"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/source"
+)
+
+const (
+	// Name is the name of the controller
+	Name = "pvc_autoscaler"
 )
 
 // PersistentVolumeClaimReconciler reconciles a PersistentVolumeClaim object
 type PersistentVolumeClaimReconciler struct {
-	client.Client
-	Scheme *runtime.Scheme
+	client  client.Client
+	scheme  *runtime.Scheme
+	eventCh chan event.GenericEvent
+}
+
+// Option is a function which configures the [PersistentVolumeClaimReconciler].
+type Option func(r *PersistentVolumeClaimReconciler) error
+
+// WithClient configures the [PersistentVolumeClaimReconciler] with the given
+// client.
+func WithClient(c client.Client) Option {
+	opt := func(r *PersistentVolumeClaimReconciler) error {
+		r.client = c
+		return nil
+	}
+
+	return opt
+}
+
+// WithScheme configures the [PersistentVolumeClaimReconciler] with the given scheme
+func WithScheme(s *runtime.Scheme) Option {
+	opt := func(r *PersistentVolumeClaimReconciler) error {
+		r.scheme = s
+		return nil
+	}
+
+	return opt
+}
+
+// WithEventChannel configures the [PersistentVolumeClaimReconciler] to use the
+// given channel for receiving reconcile events.
+func WithEventChannel(ch chan event.GenericEvent) Option {
+	opt := func(r *PersistentVolumeClaimReconciler) error {
+		r.eventCh = ch
+		return nil
+	}
+
+	return opt
 }
 
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
