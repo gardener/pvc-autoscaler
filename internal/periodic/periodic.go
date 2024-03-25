@@ -21,25 +21,22 @@ type Runner struct {
 }
 
 // Option is a function which configures the [Runner].
-type Option func(c *Runner) error
+type Option func(c *Runner)
 
 // New creates a new [Runner] with the given options.
-func New(opts ...Option) (*Runner, error) {
+func New(opts ...Option) *Runner {
 	r := &Runner{}
 	for _, opt := range opts {
-		if err := opt(r); err != nil {
-			return nil, err
-		}
+		opt(r)
 	}
 
-	return r, nil
+	return r
 }
 
 // WithClient configures the [Runner] with the given client.
 func WithClient(c client.Client) Option {
-	opt := func(r *Runner) error {
+	opt := func(r *Runner) {
 		r.client = c
-		return nil
 	}
 
 	return opt
@@ -47,9 +44,8 @@ func WithClient(c client.Client) Option {
 
 // WithInterval configures the [Runner] with the given interval.
 func WithInterval(interval time.Duration) Option {
-	opt := func(r *Runner) error {
+	opt := func(r *Runner) {
 		r.interval = interval
-		return nil
 	}
 
 	return opt
@@ -58,9 +54,8 @@ func WithInterval(interval time.Duration) Option {
 // WithEventChannel configures the [Runner] to use the given channel for
 // enqueuing.
 func WithEventChannel(ch chan event.GenericEvent) Option {
-	opt := func(r *Runner) error {
+	opt := func(r *Runner) {
 		r.eventCh = ch
-		return nil
 	}
 
 	return opt
