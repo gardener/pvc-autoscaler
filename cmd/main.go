@@ -26,16 +26,20 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/gardener/pvc-autoscaler/internal/controller"
+	"github.com/gardener/pvc-autoscaler/internal/index"
+	"github.com/gardener/pvc-autoscaler/internal/periodic"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -57,6 +61,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var interval time.Duration
+
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -123,13 +128,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.PersistentVolumeClaimReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
-	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "PersistentVolumeClaim")
+	ctx := ctrl.SetupSignalHandler()
+	eventCh := make(chan event.GenericEvent)
+
+	// Create our index
+	if err := mgr.GetFieldIndexer().IndexField(ctx, &corev1.PersistentVolumeClaim{}, index.Key, index.IndexerFunc); err != nil {
+		setupLog.Error(err, "unable to create index", "controller", controller.Name)
 		os.Exit(1)
 	}
+
+	// Add the periodic runner
+	runner := periodic.New(
+		periodic.WithClient(mgr.GetClient()),
+		periodic.WithInterval(interval),
+		periodic.WithEventChannel(eventCh),
+	)
+
+	if err := mgr.Add(runner); err != nil {
+		setupLog.Error(err, "unable to add periodic runner to manager", "controller", controller.Name)
+		os.Exit(1)
+	}
+
+	// And create our controller
+	reconciler := controller.New(
+		controller.WithClient(mgr.GetClient()),
+		controller.WithScheme(mgr.GetScheme()),
+		controller.WithEventChannel(eventCh),
+	)
+
+	if err := reconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", controller.Name)
+		os.Exit(1)
+	}
+
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -142,7 +173,8 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
