@@ -18,7 +18,7 @@ func IndexerFunc(rawObj client.Object) []string {
 		return []string{}
 	}
 
-	value, ok := obj.Annotations[annotation.Enable]
+	value, ok := obj.Annotations[annotation.IsEnabled]
 	if !ok {
 		return []string{}
 	}
