@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
@@ -24,6 +25,8 @@ var ErrNoPrometheusAddress = errors.New("no address specified")
 type Prometheus struct {
 	address              string
 	api                  v1.API
+	httpClient           *http.Client
+	roundTripper         http.RoundTripper
 	availableBytesQuery  string
 	capacityBytesQuery   string
 	availableInodesQuery string
@@ -40,6 +43,25 @@ type Option func(p *Prometheus)
 func WithAddress(addr string) Option {
 	opt := func(p *Prometheus) {
 		p.address = addr
+	}
+
+	return opt
+}
+
+// WithHTTPClient configures [Prometheus] to use the given [http.Client].
+func WithHTTPClient(client *http.Client) Option {
+	opt := func(p *Prometheus) {
+		p.httpClient = client
+	}
+
+	return opt
+}
+
+// WithRoundTripper configures [Prometheus] to use the given
+// [http.RoundTripper].
+func WithRoundTripper(rt http.RoundTripper) Option {
+	opt := func(p *Prometheus) {
+		p.roundTripper = rt
 	}
 
 	return opt
@@ -99,7 +121,9 @@ func New(opts ...Option) (*Prometheus, error) {
 
 	// Configure the Prometheus API client
 	cfg := api.Config{
-		Address: p.address,
+		Address:      p.address,
+		Client:       p.httpClient,
+		RoundTripper: p.roundTripper,
 	}
 
 	client, err := api.NewClient(cfg)
