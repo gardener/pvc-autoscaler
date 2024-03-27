@@ -15,8 +15,9 @@ const (
 
 	// Threshold is an annotation which specifies the threshold value in
 	// percentage (e.g. 10%, 20%, etc.) for the PVC. Once the available
-	// capacity for the PVC reaches or exceeds the specified threshold this
-	// will trigger a resize operation by the controller.
+	// capacity (free space) for the PVC reaches or drops below the
+	// specified threshold this will trigger a resize operation by the
+	// controller.
 	Threshold = Prefix + "threshold"
 
 	// MaxCapacity is an annotation which specifies the maximum capacity up
