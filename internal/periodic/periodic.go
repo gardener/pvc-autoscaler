@@ -155,7 +155,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 
 	metrics, err := r.metricsSource.Get(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get metrics: %w", err)
 	}
 
 	toReconcile := make([]corev1.PersistentVolumeClaim, 0)
