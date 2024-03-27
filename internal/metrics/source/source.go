@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"errors"
 
 	"k8s.io/apimachinery/pkg/types"
 )
@@ -37,6 +38,54 @@ type VolumeInfo struct {
 
 	// CapacityInodes represents the max supported number of inodes in the volume.
 	CapacityInodes int
+}
+
+// ErrCapacityIsZero is an error which is returned when the capacity of
+// [VolumeInfo] is zero and trying to calculate the percentage of free/used
+// space/inodes. This error is returned in order to avoid division by zero
+// runtime errors.
+var ErrCapacityIsZero = errors.New("capacity is zero")
+
+// FreeSpacePercentage returns the free space as a percentage.
+func (vi *VolumeInfo) FreeSpacePercentage() (float64, error) {
+	if vi.CapacityBytes == 0 {
+		return 0.0, ErrCapacityIsZero
+	}
+
+	val := float64(vi.AvailableBytes) / float64(vi.CapacityBytes) * 100.0
+	return val, nil
+}
+
+// UsedSpacePercentage returns the used space as a percentage.
+func (vi *VolumeInfo) UsedSpacePercentage() (float64, error) {
+	free, err := vi.FreeSpacePercentage()
+	if err != nil {
+		return 0.0, err
+	}
+	val := 100.0 - free
+
+	return val, nil
+}
+
+// FreeInodesPercentage returns the number of free inodes as a percentage.
+func (vi *VolumeInfo) FreeInodesPercentage() (float64, error) {
+	if vi.CapacityInodes == 0 {
+		return 0.0, ErrCapacityIsZero
+	}
+	val := float64(vi.AvailableInodes) / float64(vi.CapacityInodes) * 100.0
+
+	return val, nil
+}
+
+// UsedInodesPercentage returns the number of used inodes as a percentage.
+func (vi *VolumeInfo) UsedInodesPercentage() (float64, error) {
+	free, err := vi.FreeInodesPercentage()
+	if err != nil {
+		return 0.0, err
+	}
+	val := 100.0 - free
+
+	return val, nil
 }
 
 // Metrics is a collection of metrics about persistent volume claims grouped by
