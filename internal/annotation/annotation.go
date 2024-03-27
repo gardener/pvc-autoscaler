@@ -23,4 +23,20 @@ const (
 	// to which a PVC is allowed to be extended. The max capacity is
 	// specified as a [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
 	MaxCapacity = Prefix + "max-capacity"
+
+	// LastCheck is the annotation which specifies the time since Unix epoch
+	// of the last periodic check.
+	LastCheck = Prefix + "last-check"
+
+	// NextCheck is the annotation which specifies the time since Unix epoch
+	// at which the next check is scheduled for.
+	NextCheck = Prefix + "next-check"
+
+	// UsedSpacePercentage is the annotation which specifies the last
+	// observed used space of the PVC as a percentage.
+	UsedSpacePercentage = Prefix + "used-space"
+
+	// FreeSpacePercentage is the annotation which specifies the last
+	// observed free space of the PVC as a percentage.
+	FreeSpacePercentage = Prefix + "free-space"
 )
