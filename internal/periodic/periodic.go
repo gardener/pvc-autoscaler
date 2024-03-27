@@ -64,6 +64,15 @@ func WithEventChannel(ch chan event.GenericEvent) Option {
 	return opt
 }
 
+// WithMetricsSource configures the [Runner] to use the given source of metrics.
+func WithMetricsSource(src source.Source) Option {
+	opt := func(r *Runner) {
+		r.metricsSource = src
+	}
+
+	return opt
+}
+
 // Start implements the
 // [sigs.k8s.io/controller-runtime/pkg/manager.Runnable] interface.
 func (r *Runner) Start(ctx context.Context) error {
