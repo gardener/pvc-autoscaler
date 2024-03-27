@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gardener/pvc-autoscaler/internal/annotation"
+	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/index"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
@@ -36,10 +37,6 @@ var ErrNoMetricsSource = errors.New("no metrics source provided")
 // the max capacity.
 var ErrNoMaxCapacity = errors.New("no max capacity specified")
 
-// ErrBadPercentageValue is an error which is returned when attempting to parse
-// a bad percentage value.
-var ErrBadPercentageValue = errors.New("bad percentage value")
-
 // ErrVolumeModeIsNotFilesystem is an error which is returned if a target PVC
 // for resizing is not using the Filesystem VolumeMode.
 var ErrVolumeModeIsNotFilesystem = errors.New("volume mode is not filesystem")
@@ -51,14 +48,6 @@ var ErrStorageClassNotFound = errors.New("no storage class found")
 // ErrStorageClassDoesNotSupportExpansion is an error which is returned when an
 // annotated PVC uses a storage class that does not support volume expansion.
 var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not support expansion")
-
-const (
-	// The default threshold value, if not specified for a PVC object
-	defaultThresholdValue = "10%"
-
-	// The default increase-by value, if not specified for a PVC object
-	defaultIncreaseByValue = "10%"
-)
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
 // enqueues PersistentVolumeClaims for reconciling on regular basis.
@@ -249,10 +238,10 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, ErrNoMetrics
 	}
 
-	thresholdVal := utils.GetAnnotation(obj, annotation.Threshold, defaultThresholdValue)
+	thresholdVal := utils.GetAnnotation(obj, annotation.Threshold, common.DefaultThresholdValue)
 	threshold, err := utils.ParsePercentage(thresholdVal)
 	if err != nil {
-		return false, ErrBadPercentageValue
+		return false, fmt.Errorf("cannot parse threshold: %w", err)
 	}
 
 	// Having a max capacity is required.
@@ -267,12 +256,6 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 
 	if maxCapacity.IsZero() {
 		return false, ErrNoMaxCapacity
-	}
-
-	increaseByVal := utils.GetAnnotation(obj, annotation.IncreaseBy, defaultIncreaseByValue)
-	_, err = utils.ParsePercentage(increaseByVal)
-	if err != nil {
-		return false, ErrBadPercentageValue
 	}
 
 	// VolumeMode should be Filesystem
