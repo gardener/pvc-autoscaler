@@ -23,10 +23,10 @@ import (
 	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/controller"
 	"github.com/gardener/pvc-autoscaler/internal/index"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/prometheus"
@@ -138,7 +138,7 @@ func main() {
 
 	// Create our index
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &corev1.PersistentVolumeClaim{}, index.Key, index.IndexerFunc); err != nil {
-		setupLog.Error(err, "unable to create index", "controller", controller.Name)
+		setupLog.Error(err, "unable to create index", "controller", common.ControllerName)
 		os.Exit(1)
 	}
 
@@ -147,7 +147,7 @@ func main() {
 		prometheus.WithAddress(prometheusAddress),
 	)
 	if err != nil {
-		setupLog.Error(err, "unable to create metrics source", "controller", controller.Name)
+		setupLog.Error(err, "unable to create metrics source", "controller", common.ControllerName)
 		os.Exit(1)
 	}
 
@@ -160,12 +160,12 @@ func main() {
 	)
 
 	if err != nil {
-		setupLog.Error(err, "unable to create periodic runner", "controller", controller.Name)
+		setupLog.Error(err, "unable to create periodic runner", "controller", common.ControllerName)
 		os.Exit(1)
 	}
 
 	if err := mgr.Add(runner); err != nil {
-		setupLog.Error(err, "unable to add periodic runner to manager", "controller", controller.Name)
+		setupLog.Error(err, "unable to add periodic runner to manager", "controller", common.ControllerName)
 		os.Exit(1)
 	}
 
@@ -177,7 +177,7 @@ func main() {
 	)
 
 	if err := reconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", controller.Name)
+		setupLog.Error(err, "unable to create controller", "controller", common.ControllerName)
 		os.Exit(1)
 	}
 
