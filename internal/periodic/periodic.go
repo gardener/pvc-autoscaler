@@ -137,7 +137,28 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		return err
 	}
 
+	metrics, err := r.metricsSource.Get(ctx)
+	if err != nil {
+		return err
+	}
+
+	toReconcile := make([]corev1.PersistentVolumeClaim, 0)
 	for _, item := range items.Items {
+		volInfo := metrics[client.ObjectKeyFromObject(&item)]
+		logger := log.FromContext(ctx, "namespace", item.Namespace, "name", item.Name)
+
+		ok, err := r.shouldReconcilePVC(ctx, &item, volInfo)
+		if err != nil {
+			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
+			continue
+		}
+
+		if ok {
+			toReconcile = append(toReconcile, item)
+		}
+	}
+
+	for _, item := range toReconcile {
 		event := event.GenericEvent{
 			Object: &item,
 		}
@@ -145,4 +166,113 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// stampPVC stamps the given persistent volume claim by updating the list of the
+// managed annotations.
+func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *source.VolumeInfo) error {
+	patch := client.MergeFrom(obj.DeepCopy())
+	now := time.Now()
+	nextCheck := now.Add(r.interval)
+
+	freeSpaceStr := "unknown"
+	usedSpaceStr := "unknown"
+
+	if volInfo != nil {
+		if freeSpace, err := volInfo.FreeSpacePercentage(); err == nil {
+			freeSpaceStr = fmt.Sprintf("%.2f%%", freeSpace)
+		}
+
+		if usedSpace, err := volInfo.UsedSpacePercentage(); err == nil {
+			usedSpaceStr = fmt.Sprintf("%.2f%%", usedSpace)
+		}
+	}
+
+	obj.Annotations[annotation.LastCheck] = strconv.FormatInt(now.Unix(), 10)
+	obj.Annotations[annotation.NextCheck] = strconv.FormatInt(nextCheck.Unix(), 10)
+	obj.Annotations[annotation.UsedSpacePercentage] = usedSpaceStr
+	obj.Annotations[annotation.FreeSpacePercentage] = freeSpaceStr
+
+	return r.client.Patch(ctx, obj, patch)
+}
+
+// shouldReconcilePVC is a predicate which checks whether the given
+// PersistentVolumeClaim object should be considered for reconciliation.
+func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *source.VolumeInfo) (bool, error) {
+	if err := r.stampPVC(ctx, obj, volInfo); err != nil {
+		return false, err
+	}
+
+	// No metrics found, nothing to do for now
+	if volInfo == nil {
+		return false, ErrNoMetrics
+	}
+
+	// We need a StorageClass with expansion support
+	scName := ptr.Deref(obj.Spec.StorageClassName, "")
+	if scName == "" {
+		return false, ErrStorageClassNotFound
+	}
+
+	var sc storagev1.StorageClass
+	scKey := types.NamespacedName{Name: scName}
+	if err := r.client.Get(ctx, scKey, &sc); err != nil {
+		return false, err
+	}
+
+	if !ptr.Deref(sc.AllowVolumeExpansion, false) {
+		return false, ErrStorageClassDoesNotSupportExpansion
+	}
+
+	// TODO(dnaeon): Work with inodes as well
+	freeSpace, err := volInfo.FreeSpacePercentage()
+	if err != nil {
+		// Getting an error from FreeSpacePercentage() means that the
+		// capacity for the volume is zero, which in turn means that we
+		// didn't get any metrics for it.
+		return false, ErrNoMetrics
+	}
+
+	// TODO(dnaeon): make this configurable
+	thresholdVal := utils.GetAnnotation(obj, annotation.Threshold, "60%")
+	threshold, err := utils.ParsePercentage(thresholdVal)
+	if err != nil {
+		return false, ErrBadPercentageValue
+	}
+
+	// Having a max capacity is required.
+	maxCapacityVal := utils.GetAnnotation(obj, annotation.MaxCapacity, "")
+	if maxCapacityVal == "" {
+		return false, ErrNoMaxCapacity
+	}
+	maxCapacity, err := resource.ParseQuantity(maxCapacityVal)
+	if err != nil {
+		return false, err
+	}
+
+	if maxCapacity.IsZero() {
+		return false, ErrNoMaxCapacity
+	}
+
+	// TODO(dnaeon): make this one configurable
+	increaseByVal := utils.GetAnnotation(obj, annotation.IncreaseBy, "10%")
+	_, err = utils.ParsePercentage(increaseByVal)
+	if err != nil {
+		return false, ErrBadPercentageValue
+	}
+
+	// VolumeMode should be Filesystem
+	if obj.Spec.VolumeMode == nil {
+		return false, nil
+	}
+	if *obj.Spec.VolumeMode != corev1.PersistentVolumeFilesystem {
+		return false, ErrVolumeModeIsNotFilesystem
+	}
+
+	// The PVC should be bound
+	if obj.Status.Phase != corev1.ClaimBound {
+		return false, nil
+	}
+
+	return freeSpace <= threshold, nil
 }
