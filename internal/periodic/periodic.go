@@ -28,6 +28,10 @@ import (
 // missing.
 var ErrNoMetrics = errors.New("no metrics found")
 
+// ErrNoMetricsSource is returned when the [Runner] is configured without a
+// metrics source.
+var ErrNoMetricsSource = errors.New("no metrics source provided")
+
 // ErrNoMaxCapacity is an error which is returned when a PVC does not specify
 // the max capacity.
 var ErrNoMaxCapacity = errors.New("no max capacity specified")
@@ -71,13 +75,17 @@ var _ manager.Runnable = &Runner{}
 type Option func(c *Runner)
 
 // New creates a new [Runner] with the given options.
-func New(opts ...Option) *Runner {
+func New(opts ...Option) (*Runner, error) {
 	r := &Runner{}
 	for _, opt := range opts {
 		opt(r)
 	}
 
-	return r
+	if r.metricsSource == nil {
+		return nil, ErrNoMetricsSource
+	}
+
+	return r, nil
 }
 
 // WithClient configures the [Runner] with the given client.
