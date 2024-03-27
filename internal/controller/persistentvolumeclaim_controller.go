@@ -28,11 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const (
-	// Name is the name of the controller
-	Name = "pvc_autoscaler"
-)
-
 // PersistentVolumeClaimReconciler reconciles a PersistentVolumeClaim object
 type PersistentVolumeClaimReconciler struct {
 	client  client.Client
@@ -112,7 +107,7 @@ func (r *PersistentVolumeClaimReconciler) SetupWithManager(mgr ctrl.Manager) err
 	handler := &handler.EnqueueRequestForObject{}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		Named(Name).
+		Named(common.ControllerName).
 		WatchesRawSource(src, handler).
 		Complete(r)
 }

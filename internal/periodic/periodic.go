@@ -118,7 +118,7 @@ func WithMetricsSource(src source.Source) Option {
 // [sigs.k8s.io/controller-runtime/pkg/manager.Runnable] interface.
 func (r *Runner) Start(ctx context.Context) error {
 	ticker := time.NewTicker(r.interval)
-	logger := log.FromContext(ctx)
+	logger := log.FromContext(ctx, "controller", common.ControllerName)
 	defer ticker.Stop()
 	defer close(r.eventCh)
 
@@ -150,7 +150,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 	toReconcile := make([]corev1.PersistentVolumeClaim, 0)
 	for _, item := range items.Items {
 		volInfo := metrics[client.ObjectKeyFromObject(&item)]
-		logger := log.FromContext(ctx, "namespace", item.Namespace, "name", item.Name)
+		logger := log.FromContext(ctx, "controller", common.ControllerName, "namespace", item.Namespace, "name", item.Name)
 
 		ok, err := r.shouldReconcilePVC(ctx, &item, volInfo)
 		if err != nil {
