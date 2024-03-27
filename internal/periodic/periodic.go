@@ -48,6 +48,14 @@ var ErrStorageClassNotFound = errors.New("no storage class found")
 // annotated PVC uses a storage class that does not support volume expansion.
 var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not support expansion")
 
+const (
+	// The default threshold value, if not specified for a PVC object
+	defaultThresholdValue = "10%"
+
+	// The default increase-by value, if not specified for a PVC object
+	defaultIncreaseByValue = "10%"
+)
+
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
 // enqueues PersistentVolumeClaims for reconciling on regular basis.
 type Runner struct {
@@ -224,7 +232,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, ErrStorageClassDoesNotSupportExpansion
 	}
 
-	// TODO(dnaeon): Work with inodes as well
+	// TODO(dnaeon): Add support for inodes as well
 	freeSpace, err := volInfo.FreeSpacePercentage()
 	if err != nil {
 		// Getting an error from FreeSpacePercentage() means that the
@@ -233,8 +241,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, ErrNoMetrics
 	}
 
-	// TODO(dnaeon): make this configurable
-	thresholdVal := utils.GetAnnotation(obj, annotation.Threshold, "60%")
+	thresholdVal := utils.GetAnnotation(obj, annotation.Threshold, defaultThresholdValue)
 	threshold, err := utils.ParsePercentage(thresholdVal)
 	if err != nil {
 		return false, ErrBadPercentageValue
@@ -254,8 +261,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, ErrNoMaxCapacity
 	}
 
-	// TODO(dnaeon): make this one configurable
-	increaseByVal := utils.GetAnnotation(obj, annotation.IncreaseBy, "10%")
+	increaseByVal := utils.GetAnnotation(obj, annotation.IncreaseBy, defaultIncreaseByValue)
 	_, err = utils.ParsePercentage(increaseByVal)
 	if err != nil {
 		return false, ErrBadPercentageValue
