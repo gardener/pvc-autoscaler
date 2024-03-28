@@ -2,10 +2,14 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/gardener/pvc-autoscaler/internal/annotation"
+	"github.com/gardener/pvc-autoscaler/internal/common"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -60,4 +64,38 @@ func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolum
 	}
 
 	return false
+}
+
+// ValidatePersistentVolumeClaimAnnotations sanity checks the custom annotations
+// in order to ensure they contain valid values. Returns nil if all
+// user-specified annotations are valid, otherwise it returns a non-nil error.
+func ValidatePersistentVolumeClaimAnnotations(obj *corev1.PersistentVolumeClaim) error {
+	thresholdVal := GetAnnotation(obj, annotation.Threshold, common.DefaultThresholdValue)
+	threshold, err := ParsePercentage(thresholdVal)
+	if err != nil {
+		return fmt.Errorf("cannot parse threshold: %w", err)
+	}
+	if threshold == 0.0 {
+		return fmt.Errorf("invalid threshold: %w", common.ErrZeroPercentage)
+	}
+
+	maxCapacityVal := GetAnnotation(obj, annotation.MaxCapacity, "0Gi")
+	maxCapacity, err := resource.ParseQuantity(maxCapacityVal)
+	if err != nil {
+		return fmt.Errorf("cannot parse max-capacity: %w", err)
+	}
+	if maxCapacity.IsZero() {
+		return fmt.Errorf("invalid max-capacity: %w", common.ErrNoMaxCapacity)
+	}
+
+	increaseByVal := GetAnnotation(obj, annotation.IncreaseBy, common.DefaultIncreaseByValue)
+	increaseBy, err := ParsePercentage(increaseByVal)
+	if err != nil {
+		return fmt.Errorf("cannot parse increase-by value: %w", err)
+	}
+	if increaseBy == 0.0 {
+		return fmt.Errorf("invalid increase-by: %w", common.ErrZeroPercentage)
+	}
+
+	return nil
 }
