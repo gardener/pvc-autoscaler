@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -34,4 +35,22 @@ func GetAnnotation(obj client.Object, name, defaultVal string) string {
 	}
 
 	return val
+}
+
+// IsPersistentVolumeClaimConditionTrue is a predicate which tests whether the
+// given PersistentVolumeClaim object's status condition is set to [corev1.ConditionTrue].
+func IsPersistentVolumeClaimConditionTrue(obj *corev1.PersistentVolumeClaim, conditionType corev1.PersistentVolumeClaimConditionType) bool {
+	return IsPersistentVolumeClaimConditionPresentAndEqual(obj, conditionType, corev1.ConditionTrue)
+}
+
+// IsPersistentVolumeClaimConditionPresentAndEqual is a predicate which returns
+// whether the condition of the given type is equal to the given status.
+func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolumeClaim, conditionType corev1.PersistentVolumeClaimConditionType, status corev1.ConditionStatus) bool {
+	for _, condition := range obj.Status.Conditions {
+		if condition.Type == conditionType {
+			return condition.Status == status
+		}
+	}
+
+	return false
 }
