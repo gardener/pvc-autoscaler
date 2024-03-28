@@ -16,10 +16,17 @@ var ErrBadPercentageValue = errors.New("bad percentage value")
 // ParsePercentage parses a string value, which represents percentage, e.g. 10%.
 func ParsePercentage(s string) (float64, error) {
 	s = strings.TrimSpace(s)
+
+	if !strings.HasSuffix(s, "%") {
+		return 0.0, ErrBadPercentageValue
+	}
 	s = strings.TrimRight(s, "%")
 	val, err := strconv.ParseFloat(s, 64)
-
 	if err != nil {
+		return val, ErrBadPercentageValue
+	}
+
+	if val < 0.0 || val > 100.0 {
 		return val, ErrBadPercentageValue
 	}
 
