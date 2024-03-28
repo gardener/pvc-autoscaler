@@ -33,10 +33,6 @@ var ErrNoMetrics = errors.New("no metrics found")
 // metrics source.
 var ErrNoMetricsSource = errors.New("no metrics source provided")
 
-// ErrNoMaxCapacity is an error which is returned when a PVC does not specify
-// the max capacity.
-var ErrNoMaxCapacity = errors.New("no max capacity specified")
-
 // ErrVolumeModeIsNotFilesystem is an error which is returned if a target PVC
 // for resizing is not using the Filesystem VolumeMode.
 var ErrVolumeModeIsNotFilesystem = errors.New("volume mode is not filesystem")
@@ -245,17 +241,14 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 	}
 
 	// Having a max capacity is required.
-	maxCapacityVal := utils.GetAnnotation(obj, annotation.MaxCapacity, "")
-	if maxCapacityVal == "" {
-		return false, ErrNoMaxCapacity
-	}
+	maxCapacityVal := utils.GetAnnotation(obj, annotation.MaxCapacity, "0Gi")
 	maxCapacity, err := resource.ParseQuantity(maxCapacityVal)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("cannot parse max-capacity: %w", err)
 	}
 
 	if maxCapacity.IsZero() {
-		return false, ErrNoMaxCapacity
+		return false, common.ErrNoMaxCapacity
 	}
 
 	// VolumeMode should be Filesystem
