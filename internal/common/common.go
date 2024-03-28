@@ -6,9 +6,9 @@ import "errors"
 // the max capacity.
 var ErrNoMaxCapacity = errors.New("no max capacity specified")
 
-// ErrMaxCapacityReached is an error which is returned when the PVC max capacity
-// has been reached.
-var ErrMaxCapacityReached = errors.New("max capacity reached")
+// ErrZeroPercentage is returned whenever we expect a non-zero percentage
+// values, but zero was found.
+var ErrZeroPercentage = errors.New("zero percentage")
 
 const (
 	// ControllerName is the name of the controller

@@ -18,8 +18,18 @@ package controller
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"math"
+
+	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/runtime"
+
+	"github.com/gardener/pvc-autoscaler/internal/annotation"
+	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/utils"
+	"k8s.io/apimachinery/pkg/api/resource"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -27,6 +37,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
+
+// ErrNoStorageRequests is an error which is returned in case a PVC does not
+// have (should not happen, but still) the .spec.resources.requests.storage
+// field.
+var ErrNoStorageRequests = errors.New("no .spec.resources.requests.storage field")
+
+// ErrNoStorageStatus is an error which is returned in case a PVC does not have
+// (should not happen, but still) the .status.capacity.storage field.
+var ErrNoStorageStatus = errors.New("no .status.capacity.storage field")
 
 // PersistentVolumeClaimReconciler reconciles a PersistentVolumeClaim object
 type PersistentVolumeClaimReconciler struct {
@@ -94,9 +113,108 @@ func WithEventChannel(ch chan event.GenericEvent) Option {
 func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	logger.Info("reconcile")
+	var obj corev1.PersistentVolumeClaim
+	err := r.client.Get(ctx, req.NamespacedName, &obj)
+	if err != nil {
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
 
-	return ctrl.Result{}, nil
+	// This kind of an error is something we should not retry on
+	if err := utils.ValidatePersistentVolumeClaimAnnotations(&obj); err != nil {
+		logger.Info("refusing to proceed with reconciling", "reason", err.Error())
+		return ctrl.Result{}, nil
+	}
+
+	prevSizeVal := utils.GetAnnotation(&obj, annotation.PrevSize, "0Gi")
+	prevSize, err := resource.ParseQuantity(prevSizeVal)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("cannot parse prev-size: %w", err)
+	}
+
+	currSpecSize := obj.Spec.Resources.Requests.Storage()
+	if currSpecSize.IsZero() {
+		return ctrl.Result{}, ErrNoStorageRequests
+	}
+
+	currStatusSize := obj.Status.Capacity.Storage()
+	if currStatusSize.IsZero() {
+		return ctrl.Result{}, ErrNoStorageStatus
+	}
+
+	// Check if a resize is already in progress
+	if prevSize.Equal(*currStatusSize) {
+		logger.Info("persistent volume claim is still being resized")
+		return ctrl.Result{}, nil
+	}
+
+	// Calculate the new size
+	increaseByVal := utils.GetAnnotation(&obj, annotation.IncreaseBy, common.DefaultIncreaseByValue)
+	increaseBy, err := utils.ParsePercentage(increaseByVal)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("cannot parse increase-by value: %w", err)
+	}
+
+	increment := float64(currSpecSize.Value()) * (increaseBy / 100.0)
+	newSizeBytes := int64(math.Ceil((float64(currSpecSize.Value())+increment)/1073741824)) * 1073741824
+	newSize := resource.NewQuantity(newSizeBytes, resource.BinarySI)
+
+	// Check that we've got a valid new size. If we end up in any of these
+	// cases below, it pretty much means the logic is broken, so we don't
+	// want to retry any of them.
+	cmp := newSize.Cmp(*currSpecSize)
+	switch cmp {
+	case 0:
+		logger.Info("new and current size are the same")
+		return ctrl.Result{}, nil
+	case -1:
+		logger.Info("new size is less than current")
+		return ctrl.Result{}, nil
+	}
+
+	// We don't want to exceed the max capacity
+	maxCapacityVal := utils.GetAnnotation(&obj, annotation.MaxCapacity, "0Gi")
+	maxCapacity, err := resource.ParseQuantity(maxCapacityVal)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("cannot parse max-capacity: %w", err)
+	}
+
+	if newSize.Value() > maxCapacity.Value() {
+		// TODO: event
+		logger.Info("max capacity reached")
+		return ctrl.Result{}, nil
+	}
+
+	if maxCapacity.Value() < currStatusSize.Value() {
+		logger.Info("max capacity cannot be less than current size")
+		return ctrl.Result{}, nil
+	}
+
+	// Make sure that the PVC is not being modified at the moment.  Note
+	// that we are not treating the following status conditions as errors,
+	// as these are transient conditions.
+	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimResizing) {
+		logger.Info("resize has been started")
+		return ctrl.Result{}, nil
+	}
+
+	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimFileSystemResizePending) {
+		logger.Info("filesystem resize is pending")
+		return ctrl.Result{}, nil
+	}
+
+	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimVolumeModifyingVolume) {
+		logger.Info("volume is being modified")
+		return ctrl.Result{}, nil
+	}
+
+	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", newSize.String())
+
+	// And finally we should be good to resize now
+	patch := client.MergeFrom(obj.DeepCopy())
+	obj.Spec.Resources.Requests[corev1.ResourceStorage] = *newSize
+	obj.Annotations[annotation.PrevSize] = currStatusSize.String()
+
+	return ctrl.Result{}, r.client.Patch(ctx, &obj, patch)
 }
 
 // SetupWithManager sets up the controller with the Manager.
