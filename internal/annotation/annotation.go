@@ -40,4 +40,8 @@ const (
 	// FreeSpacePercentage is the annotation which specifies the last
 	// observed free space of the PVC as a percentage.
 	FreeSpacePercentage = Prefix + "free-space"
+
+	// PrevSize is the annotation which is used to record the previous
+	// .status.capacity.storage value before the PVC is being resized.
+	PrevSize = Prefix + "prev-size"
 )
