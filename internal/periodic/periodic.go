@@ -16,7 +16,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 
-	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -209,6 +208,12 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, ErrNoMetrics
 	}
 
+	// Validate the user-specified annotations and return early, if they are
+	// invalid.
+	if err := utils.ValidatePersistentVolumeClaimAnnotations(obj); err != nil {
+		return false, err
+	}
+
 	// We need a StorageClass with expansion support
 	scName := ptr.Deref(obj.Spec.StorageClassName, "")
 	if scName == "" {
@@ -238,17 +243,6 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 	threshold, err := utils.ParsePercentage(thresholdVal)
 	if err != nil {
 		return false, fmt.Errorf("cannot parse threshold: %w", err)
-	}
-
-	// Having a max capacity is required.
-	maxCapacityVal := utils.GetAnnotation(obj, annotation.MaxCapacity, "0Gi")
-	maxCapacity, err := resource.ParseQuantity(maxCapacityVal)
-	if err != nil {
-		return false, fmt.Errorf("cannot parse max-capacity: %w", err)
-	}
-
-	if maxCapacity.IsZero() {
-		return false, common.ErrNoMaxCapacity
 	}
 
 	// VolumeMode should be Filesystem
