@@ -82,10 +82,10 @@ func ValidatePersistentVolumeClaimAnnotations(obj *corev1.PersistentVolumeClaim)
 	maxCapacityVal := GetAnnotation(obj, annotation.MaxCapacity, "0Gi")
 	maxCapacity, err := resource.ParseQuantity(maxCapacityVal)
 	if err != nil {
-		return fmt.Errorf("cannot parse max-capacity: %w", err)
+		return fmt.Errorf("cannot parse max capacity: %w", err)
 	}
 	if maxCapacity.IsZero() {
-		return fmt.Errorf("invalid max-capacity: %w", common.ErrNoMaxCapacity)
+		return fmt.Errorf("invalid max capacity: %w", common.ErrNoMaxCapacity)
 	}
 
 	increaseByVal := GetAnnotation(obj, annotation.IncreaseBy, common.DefaultIncreaseByValue)
