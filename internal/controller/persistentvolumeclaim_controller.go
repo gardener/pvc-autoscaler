@@ -22,14 +22,14 @@ import (
 	"fmt"
 	"math"
 
-	corev1 "k8s.io/api/core/v1"
-
-	"k8s.io/apimachinery/pkg/runtime"
-
 	"github.com/gardener/pvc-autoscaler/internal/annotation"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
+
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -49,9 +49,10 @@ var ErrNoStorageStatus = errors.New("no .status.capacity.storage field")
 
 // PersistentVolumeClaimReconciler reconciles a PersistentVolumeClaim object
 type PersistentVolumeClaimReconciler struct {
-	client  client.Client
-	scheme  *runtime.Scheme
-	eventCh chan event.GenericEvent
+	client        client.Client
+	scheme        *runtime.Scheme
+	eventCh       chan event.GenericEvent
+	eventRecorder record.EventRecorder
 }
 
 // Option is a function which configures the [PersistentVolumeClaimReconciler].
@@ -59,13 +60,17 @@ type Option func(r *PersistentVolumeClaimReconciler)
 
 // New creates a new [PersistentVolumeClaimReconciler] and configures it with
 // the given options.
-func New(opts ...Option) *PersistentVolumeClaimReconciler {
+func New(opts ...Option) (*PersistentVolumeClaimReconciler, error) {
 	r := &PersistentVolumeClaimReconciler{}
 	for _, opt := range opts {
 		opt(r)
 	}
 
-	return r
+	if r.eventRecorder == nil {
+		return nil, common.ErrNoEventRecorder
+	}
+
+	return r, nil
 }
 
 // WithClient configures the [PersistentVolumeClaimReconciler] with the given
@@ -97,9 +102,19 @@ func WithEventChannel(ch chan event.GenericEvent) Option {
 	return opt
 }
 
-//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/finalizers,verbs=update
+// WithEventRecorder configures the [PersistentVolumeClaimReconciler] to use the
+// given event recorder.
+func WithEventRecorder(recorder record.EventRecorder) Option {
+	opt := func(r *PersistentVolumeClaimReconciler) {
+		r.eventRecorder = recorder
+	}
+
+	return opt
+}
+
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;update;patch
+//+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
+//+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.

@@ -10,6 +10,10 @@ var ErrNoMaxCapacity = errors.New("no max capacity specified")
 // values, but zero was found.
 var ErrZeroPercentage = errors.New("zero percentage")
 
+// ErrNoEventRecorder is returned when there was no event recorder specified to
+// either the controller or any of the runnables, which need to use a recorder.
+var ErrNoEventRecorder = errors.New("no event recorder provided")
+
 const (
 	// ControllerName is the name of the controller
 	ControllerName = "pvc_autoscaler"

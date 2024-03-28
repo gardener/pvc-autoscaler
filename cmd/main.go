@@ -157,6 +157,7 @@ func main() {
 		periodic.WithInterval(interval),
 		periodic.WithEventChannel(eventCh),
 		periodic.WithMetricsSource(metricsSource),
+		periodic.WithEventRecorder(mgr.GetEventRecorderFor(common.ControllerName)),
 	)
 
 	if err != nil {
@@ -170,11 +171,16 @@ func main() {
 	}
 
 	// And create our controller
-	reconciler := controller.New(
+	reconciler, err := controller.New(
 		controller.WithClient(mgr.GetClient()),
 		controller.WithScheme(mgr.GetScheme()),
 		controller.WithEventChannel(eventCh),
+		controller.WithEventRecorder(mgr.GetEventRecorderFor(common.ControllerName)),
 	)
+	if err != nil {
+		setupLog.Error(err, "unable to create reconciler", "controller", common.ControllerName)
+		os.Exit(1)
+	}
 
 	if err := reconciler.SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", common.ControllerName)

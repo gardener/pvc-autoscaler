@@ -17,6 +17,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -51,12 +52,13 @@ type Runner struct {
 	interval      time.Duration
 	eventCh       chan event.GenericEvent
 	metricsSource source.Source
+	eventRecorder record.EventRecorder
 }
 
 var _ manager.Runnable = &Runner{}
 
 // Option is a function which configures the [Runner].
-type Option func(c *Runner)
+type Option func(r *Runner)
 
 // New creates a new [Runner] with the given options.
 func New(opts ...Option) (*Runner, error) {
@@ -67,6 +69,10 @@ func New(opts ...Option) (*Runner, error) {
 
 	if r.metricsSource == nil {
 		return nil, ErrNoMetricsSource
+	}
+
+	if r.eventRecorder == nil {
+		return nil, common.ErrNoEventRecorder
 	}
 
 	return r, nil
@@ -104,6 +110,15 @@ func WithEventChannel(ch chan event.GenericEvent) Option {
 func WithMetricsSource(src source.Source) Option {
 	opt := func(r *Runner) {
 		r.metricsSource = src
+	}
+
+	return opt
+}
+
+// WithEventRecorder configures the [Runner] to use the given event recorder.
+func WithEventRecorder(recorder record.EventRecorder) Option {
+	opt := func(r *Runner) {
+		r.eventRecorder = recorder
 	}
 
 	return opt
