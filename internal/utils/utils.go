@@ -88,6 +88,15 @@ func ValidatePersistentVolumeClaimAnnotations(obj *corev1.PersistentVolumeClaim)
 		return fmt.Errorf("invalid max capacity: %w", common.ErrNoMaxCapacity)
 	}
 
+	currStatusSize := obj.Status.Capacity.Storage()
+	if currStatusSize.IsZero() {
+		return fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
+	}
+
+	if maxCapacity.Value() < currStatusSize.Value() {
+		return fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", maxCapacity.String(), currStatusSize.String())
+	}
+
 	increaseByVal := GetAnnotation(obj, annotation.IncreaseBy, common.DefaultIncreaseByValue)
 	increaseBy, err := ParsePercentage(increaseByVal)
 	if err != nil {
