@@ -193,16 +193,18 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, fmt.Errorf("cannot parse max-capacity: %w", err)
 	}
 
-	if maxCapacity.Value() < currStatusSize.Value() {
-		logger.Info("max capacity cannot be less than current size")
-		return ctrl.Result{}, nil
-	}
-
 	if newSize.Value() > maxCapacity.Value() {
-		// TODO: event
+		r.eventRecorder.Eventf(
+			&obj,
+			corev1.EventTypeWarning,
+			"MaxCapacityReached",
+			"max capacity has been reached, will not resize",
+			maxCapacity.String(),
+		)
 		logger.Info("max capacity reached")
 		return ctrl.Result{}, nil
 	}
+
 	// Make sure that the PVC is not being modified at the moment.  Note
 	// that we are not treating the following status conditions as errors,
 	// as these are transient conditions.
@@ -222,6 +224,14 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", newSize.String())
+	r.eventRecorder.Eventf(
+		&obj,
+		corev1.EventTypeNormal,
+		"ResizingStorage",
+		"resizing storage from %s to %s",
+		currSpecSize.String(),
+		newSize.String(),
+	)
 
 	// And finally we should be good to resize now
 	patch := client.MergeFrom(obj.DeepCopy())

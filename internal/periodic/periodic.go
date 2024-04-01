@@ -273,5 +273,16 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, nil
 	}
 
-	return freeSpace <= threshold, nil
+	if freeSpace < threshold {
+		r.eventRecorder.Eventf(
+			obj,
+			corev1.EventTypeWarning,
+			"FreeSpaceThresholdReached",
+			"available free space (%.2f%%) is less than the configured threshold (%.2f%%)",
+			freeSpace,
+			threshold,
+		)
+	}
+
+	return freeSpace < threshold, nil
 }
