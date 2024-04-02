@@ -41,6 +41,14 @@ const (
 	// observed free space of the PVC as a percentage.
 	FreeSpacePercentage = Prefix + "free-space"
 
+	// UsedInodesPercentage is the annotation which specifies the last
+	// observed used inodes of the PVC as a percentage.
+	UsedInodesPercentage = Prefix + "used-inodes"
+
+	// FreeInodesPercentage is the annotation which specifies the last
+	// observed free inodes of the PVC as a percentage.
+	FreeInodesPercentage = Prefix + "free-inodes"
+
 	// PrevSize is the annotation which is used to record the previous
 	// .status.capacity.storage value before the PVC is being resized.
 	PrevSize = Prefix + "prev-size"
