@@ -140,6 +140,24 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
+	// Make sure that the PVC is not being modified at the moment.  Note,
+	// that we are not treating the following status conditions as errors,
+	// as these are transient conditions.
+	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimResizing) {
+		logger.Info("resize has been started")
+		return ctrl.Result{}, nil
+	}
+
+	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimFileSystemResizePending) {
+		logger.Info("filesystem resize is pending")
+		return ctrl.Result{}, nil
+	}
+
+	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimVolumeModifyingVolume) {
+		logger.Info("volume is being modified")
+		return ctrl.Result{}, nil
+	}
+
 	prevSizeVal := utils.GetAnnotation(&obj, annotation.PrevSize, "0Gi")
 	prevSize, err := resource.ParseQuantity(prevSizeVal)
 	if err != nil {
@@ -156,7 +174,8 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, ErrNoStorageStatus
 	}
 
-	// Check if a resize is already in progress
+	// If previously recorded size is equal to the current status it means
+	// we are still waiting for the resize to complete
 	if prevSize.Equal(*currStatusSize) {
 		logger.Info("persistent volume claim is still being resized")
 		return ctrl.Result{}, nil
@@ -205,24 +224,7 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, nil
 	}
 
-	// Make sure that the PVC is not being modified at the moment.  Note
-	// that we are not treating the following status conditions as errors,
-	// as these are transient conditions.
-	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimResizing) {
-		logger.Info("resize has been started")
-		return ctrl.Result{}, nil
-	}
-
-	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimFileSystemResizePending) {
-		logger.Info("filesystem resize is pending")
-		return ctrl.Result{}, nil
-	}
-
-	if utils.IsPersistentVolumeClaimConditionTrue(&obj, corev1.PersistentVolumeClaimVolumeModifyingVolume) {
-		logger.Info("volume is being modified")
-		return ctrl.Result{}, nil
-	}
-
+	// And finally we should be good to resize now
 	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", newSize.String())
 	r.eventRecorder.Eventf(
 		&obj,
@@ -233,7 +235,6 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 		newSize.String(),
 	)
 
-	// And finally we should be good to resize now
 	patch := client.MergeFrom(obj.DeepCopy())
 	obj.Spec.Resources.Requests[corev1.ResourceStorage] = *newSize
 	obj.Annotations[annotation.PrevSize] = currStatusSize.String()
