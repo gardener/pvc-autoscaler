@@ -25,6 +25,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
+// UnknownUtilizationValue is the value which will be used when the free
+// space/inodes utilization is unknown.
+const UnknownUtilizationValue = "unknown"
+
 // ErrNoMetrics is an error which is returned when metrics about a PVC are
 // missing.
 var ErrNoMetrics = errors.New("no metrics found")
@@ -194,10 +198,10 @@ func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim
 	now := time.Now()
 	nextCheck := now.Add(r.interval)
 
-	freeSpaceStr := "unknown"
-	usedSpaceStr := "unknown"
-	freeInodesStr := "unknown"
-	usedInodesStr := "unknown"
+	freeSpaceStr := UnknownUtilizationValue
+	usedSpaceStr := UnknownUtilizationValue
+	freeInodesStr := UnknownUtilizationValue
+	usedInodesStr := UnknownUtilizationValue
 
 	if volInfo != nil {
 		if freeSpace, err := volInfo.FreeSpacePercentage(); err == nil {
