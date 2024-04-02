@@ -70,6 +70,10 @@ func New(opts ...Option) (*PersistentVolumeClaimReconciler, error) {
 		return nil, common.ErrNoEventRecorder
 	}
 
+	if r.eventCh == nil {
+		return nil, common.ErrNoEventChannel
+	}
+
 	return r, nil
 }
 

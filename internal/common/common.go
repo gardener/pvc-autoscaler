@@ -14,6 +14,10 @@ var ErrZeroPercentage = errors.New("zero percentage")
 // either the controller or any of the runnables, which need to use a recorder.
 var ErrNoEventRecorder = errors.New("no event recorder provided")
 
+// ErrNoEventChannel is returned when no event channel was configured for the
+// controller.
+var ErrNoEventChannel = errors.New("no event channel provided")
+
 const (
 	// ControllerName is the name of the controller
 	ControllerName = "pvc_autoscaler"
