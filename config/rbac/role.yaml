@@ -7,10 +7,15 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentvolumeclaims
+  - events
   verbs:
   - create
-  - delete
+  - patch
+- apiGroups:
+  - ""
+  resources:
+  - persistentvolumeclaims
+  verbs:
   - get
   - list
   - patch
@@ -19,14 +24,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - persistentvolumeclaims/finalizers
-  verbs:
-  - update
-- apiGroups:
-  - ""
-  resources:
   - persistentvolumeclaims/status
   verbs:
   - get
-  - patch
-  - update
