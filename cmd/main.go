@@ -137,7 +137,8 @@ func main() {
 	eventCh := make(chan event.GenericEvent)
 
 	// Create our index
-	if err := mgr.GetFieldIndexer().IndexField(ctx, &corev1.PersistentVolumeClaim{}, index.Key, index.IndexerFunc); err != nil {
+	err = mgr.GetFieldIndexer().IndexField(ctx, &corev1.PersistentVolumeClaim{}, index.Key, index.IndexerFunc)
+	if err != nil {
 		setupLog.Error(err, "unable to create index", "controller", common.ControllerName)
 		os.Exit(1)
 	}
