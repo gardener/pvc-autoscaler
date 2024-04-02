@@ -75,6 +75,10 @@ func New(opts ...Option) (*Runner, error) {
 		return nil, common.ErrNoEventRecorder
 	}
 
+	if r.eventCh == nil {
+		return nil, common.ErrNoEventChannel
+	}
+
 	return r, nil
 }
 
