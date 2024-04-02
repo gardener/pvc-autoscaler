@@ -42,8 +42,8 @@ type VolumeInfo struct {
 
 // ErrCapacityIsZero is an error which is returned when the capacity of
 // [VolumeInfo] is zero and trying to calculate the percentage of free/used
-// space/inodes. This error is returned in order to avoid division by zero
-// runtime errors.
+// space/inodes is not possible. This error is returned in order to avoid
+// division by zero runtime errors.
 var ErrCapacityIsZero = errors.New("capacity is zero")
 
 // FreeSpacePercentage returns the free space as a percentage.
