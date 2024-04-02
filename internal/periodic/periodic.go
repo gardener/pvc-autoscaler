@@ -261,14 +261,16 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, ErrStorageClassDoesNotSupportExpansion
 	}
 
-	// TODO(dnaeon): Add support for inodes as well
+	// Getting an error from FreeSpacePercentage() means that the
+	// capacity for the volume is zero, which in turn means that we
+	// didn't get any metrics for it.
 	freeSpace, err := volInfo.FreeSpacePercentage()
 	if err != nil {
-		// Getting an error from FreeSpacePercentage() means that the
-		// capacity for the volume is zero, which in turn means that we
-		// didn't get any metrics for it.
 		return false, ErrNoMetrics
 	}
+
+	// Even, if we don't have inode metrics we still want to proceed here.
+	freeInodes, _ := volInfo.FreeInodesPercentage()
 
 	thresholdVal := utils.GetAnnotation(obj, annotation.Threshold, common.DefaultThresholdValue)
 	threshold, err := utils.ParsePercentage(thresholdVal)
@@ -289,16 +291,33 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, nil
 	}
 
-	if freeSpace < threshold {
+	switch {
+	// Free space reached threshold
+	case freeSpace < threshold:
 		r.eventRecorder.Eventf(
 			obj,
 			corev1.EventTypeWarning,
 			"FreeSpaceThresholdReached",
-			"available free space (%.2f%%) is less than the configured threshold (%.2f%%)",
+			"free space (%.2f%%) is less than the configured threshold (%.2f%%)",
 			freeSpace,
 			threshold,
 		)
-	}
+		return true, nil
 
-	return freeSpace < threshold, nil
+	// Free inodes reached threshold
+	case volInfo.CapacityInodes > 0.0 && (freeInodes < threshold):
+		r.eventRecorder.Eventf(
+			obj,
+			corev1.EventTypeWarning,
+			"FreeInodesThresholdReached",
+			"free inodes (%.2f%%) are less than the configured threshold (%.2f%%)",
+			freeInodes,
+			threshold,
+		)
+		return true, nil
+
+	// No need to reconcile the PVC for now
+	default:
+		return false, nil
+	}
 }
