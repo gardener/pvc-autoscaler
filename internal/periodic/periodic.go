@@ -188,7 +188,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 }
 
 // stampPVC stamps the given persistent volume claim by updating the list of the
-// managed annotations.
+// annotations, which record the last observed state for the PVC.
 func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *source.VolumeInfo) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 	now := time.Now()
@@ -196,6 +196,8 @@ func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim
 
 	freeSpaceStr := "unknown"
 	usedSpaceStr := "unknown"
+	freeInodesStr := "unknown"
+	usedInodesStr := "unknown"
 
 	if volInfo != nil {
 		if freeSpace, err := volInfo.FreeSpacePercentage(); err == nil {
@@ -205,12 +207,22 @@ func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim
 		if usedSpace, err := volInfo.UsedSpacePercentage(); err == nil {
 			usedSpaceStr = fmt.Sprintf("%.2f%%", usedSpace)
 		}
+
+		if freeInodes, err := volInfo.FreeInodesPercentage(); err == nil {
+			freeInodesStr = fmt.Sprintf("%.2f%%", freeInodes)
+		}
+
+		if usedInodes, err := volInfo.UsedInodesPercentage(); err == nil {
+			usedInodesStr = fmt.Sprintf("%.2f%%", usedInodes)
+		}
 	}
 
 	obj.Annotations[annotation.LastCheck] = strconv.FormatInt(now.Unix(), 10)
 	obj.Annotations[annotation.NextCheck] = strconv.FormatInt(nextCheck.Unix(), 10)
 	obj.Annotations[annotation.UsedSpacePercentage] = usedSpaceStr
 	obj.Annotations[annotation.FreeSpacePercentage] = freeSpaceStr
+	obj.Annotations[annotation.UsedInodesPercentage] = usedInodesStr
+	obj.Annotations[annotation.FreeInodesPercentage] = freeInodesStr
 
 	return r.client.Patch(ctx, obj, patch)
 }
