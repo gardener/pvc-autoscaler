@@ -45,7 +45,7 @@ all: build
 
 .PHONY: help
 help: ## Display this help.
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 ##@ Development
 
@@ -83,12 +83,20 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
 .PHONY: minikube-start
-minikube-start:  ## Start a local dev environment
+minikube-start: minikube  ## Start a local dev environment
 	env MINIKUBE_PROFILE=$(MINIKUBE_PROFILE) ./hack/minikube-start.sh
 
 .PHONY: minikube-stop
-minikube-stop:  ## Stop the local dev environment
-	minikube delete --profile $(MINIKUBE_PROFILE)
+minikube-stop: minikube  ## Stop the local dev environment
+	$(MINIKUBE) delete --profile $(MINIKUBE_PROFILE)
+
+.PHONY: minikube-load-image
+minikube-load-image: minikube docker-build  ## Load the operator image into the minikube nodes
+	# minikube image load is broken in recent Docker releases, so we need to
+	# use this workaround
+	$(CONTAINER_TOOL) image save -o image.tar ${IMG}
+	$(MINIKUBE) image load --overwrite=true image.tar
+	rm -f image.tar
 
 ##@ Build
 
@@ -202,7 +210,7 @@ $(KUSTOMIZE): $(LOCALBIN) $(call gen-tool-version,$(KUSTOMIZE),$(KUSTOMIZE_VERSI
 .PHONY: minikube
 minikube: $(MINIKUBE)  # Download minikube locally if necessary.
 $(MINIKUBE): $(LOCALBIN) $(call gen-tool-version,$(MINIKUBE),$(MINIKUBE_VERSION))
-	$(call download-tool,minikube,https://github.com/kubernetes/minikube/releases/tag/$(MINIKUBE_VERSION)/minikube-$(GOOS)-$(GOARCH))
+	$(call download-tool,minikube,https://github.com/kubernetes/minikube/releases/download/$(MINIKUBE_VERSION)/minikube-$(GOOS)-$(GOARCH))
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -237,5 +245,6 @@ define download-tool
 @set -e; \
 tool=$(1) ;\
 echo "Downloading $${tool}" ;\
-curl -o $(LOCALBIN)/$(1) -sSfL $(2)
+curl -o $(LOCALBIN)/$(1) -sSfL $(2) ;\
+chmod +x $(LOCALBIN)/$(1)
 endef
