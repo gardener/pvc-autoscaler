@@ -171,3 +171,19 @@ func GetProjectDir() (string, error) {
 	wd = strings.Replace(wd, "/test/e2e", "", -1)
 	return wd, nil
 }
+
+// Make invokes `make` with the given args
+func Make(args ...string) error {
+	cmd := exec.Command("make", args...)
+	_, err := Run(cmd)
+
+	return err
+}
+
+// Kubectl invokes `kubectl` with the given args
+func Kubectl(args ...string) error {
+	cmd := exec.Command("kubectl", args...)
+	_, err := Run(cmd)
+
+	return err
+}
