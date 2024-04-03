@@ -13,6 +13,9 @@ else
 GOBIN=$(shell go env GOBIN)
 endif
 
+GOOS = $(shell go env GOOS)
+GOARCH = $(shell go env GOARCH)
+
 # CONTAINER_TOOL defines the container tool to be used for building images.
 # Be aware that the target commands are only tested with Docker which is
 # scaffolded by default. However, you might want to replace it to use other
@@ -172,12 +175,14 @@ KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
+MINIKUBE ?= $(LOCALBIN)/minikube
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.3.0
 CONTROLLER_TOOLS_VERSION ?= v0.14.0
 ENVTEST_VERSION ?= latest
 GOLANGCI_LINT_VERSION ?= v1.54.2
+MINIKUBE_VERSION ?= v1.32.0
 
 # A target which is used to clean up previous versions of tools
 $(LOCALBIN)/.version_%:
@@ -193,6 +198,11 @@ gen-tool-version = $(LOCALBIN)/.version_$(subst $(LOCALBIN)/,,$(1))_$(2)
 kustomize: $(KUSTOMIZE)  ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN) $(call gen-tool-version,$(KUSTOMIZE),$(KUSTOMIZE_VERSION))
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
+
+.PHONY: minikube
+minikube: $(MINIKUBE)  # Download minikube locally if necessary.
+$(MINIKUBE): $(LOCALBIN) $(call gen-tool-version,$(MINIKUBE),$(MINIKUBE_VERSION))
+	$(call download-tool,minikube,https://github.com/kubernetes/minikube/releases/tag/$(MINIKUBE_VERSION)/minikube-$(GOOS)-$(GOARCH))
 
 .PHONY: controller-gen
 controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
@@ -218,4 +228,14 @@ define go-install-tool
 package=$(2)@$(3) ;\
 echo "Downloading $${package}" ;\
 GOBIN=$(LOCALBIN) go install $${package}
+endef
+
+# download-tool will download a binary package from the given URL
+# $1 - name of the tool
+# $2 - HTTP URL to download the tool from
+define download-tool
+@set -e; \
+tool=$(1) ;\
+echo "Downloading $${tool}" ;\
+curl -o $(LOCALBIN)/$(1) -sSfL $(2)
 endef
