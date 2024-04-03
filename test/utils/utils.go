@@ -115,6 +115,39 @@ func LoadImageToKindClusterWithName(name string) error {
 	return err
 }
 
+// MinikubeSetProfile sets the minikube profile to the given name
+func MinikubeSetProfile(name string) error {
+	opts := []string{"profile", name}
+	cmd := exec.Command("minikube", opts...)
+	_, err := Run(cmd)
+	return err
+}
+
+// LoadImageToMinikubeProfileWithName loads the host image to the nodes of the
+// given minikube profile.
+func LoadImageToMinikubeProfileWithName(image string) error {
+	// We cannot use `minikube image load ...` on recent Docker versions.
+	// See [1] for more details. Until [1] is resolved we will use this
+	// workaround instead.
+	//
+	// [1]: https://github.com/kubernetes/minikube/issues/18021
+	archiveName := "image.tar"
+	dockerOpts := []string{"image", "save", "-o", archiveName, image}
+	dockerCmd := exec.Command("docker", dockerOpts...)
+	if _, err := Run(dockerCmd); err != nil {
+		return err
+	}
+	defer os.Remove(archiveName)
+
+	minikubeOpts := []string{"image", "load", "--overwrite", "true", archiveName}
+	minikubeCmd := exec.Command("minikube", minikubeOpts...)
+	if _, err := Run(minikubeCmd); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // GetNonEmptyLines converts given command output string into individual objects
 // according to line breakers, and ignores the empty elements in it.
 func GetNonEmptyLines(output string) []string {
