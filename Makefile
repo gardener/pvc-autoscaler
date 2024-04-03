@@ -1,3 +1,5 @@
+# The minikube profile name to use
+MINIKUBE_PROFILE ?= pvc-autoscaler
 
 # Image URL to use all building/pushing image targets
 IMG ?= controller:latest
@@ -76,6 +78,14 @@ lint: golangci-lint ## Run golangci-lint linter & yamllint
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
+
+.PHONY: minikube-start
+minikube-start:  ## Start a local dev environment
+	env MINIKUBE_PROFILE=$(MINIKUBE_PROFILE) ./hack/minikube-start.sh
+
+.PHONY: minikube-stop
+minikube-stop:  ## Stop the local dev environment
+	minikube delete --profile $(MINIKUBE_PROFILE)
 
 ##@ Build
 
