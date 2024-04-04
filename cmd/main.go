@@ -74,7 +74,7 @@ func main() {
 		"If set the metrics endpoint is served securely")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.DurationVar(&interval, "interval", 30*time.Second, "The interval at which to run the periodic check")
+	flag.DurationVar(&interval, "interval", 5*time.Minute, "The interval at which to run the periodic check")
 	flag.StringVar(&prometheusAddress, "prometheus-address", "http://localhost:9090", "The Prometheus instance address")
 
 	opts := zap.Options{
