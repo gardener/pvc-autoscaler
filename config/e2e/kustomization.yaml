@@ -1,7 +1,0 @@
----
-namespace: pvc-autoscaler-e2e-system
-resources:
-  - ../default
-
-patches:
-  - path: manager_deployment_patch.yaml
