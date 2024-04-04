@@ -1,0 +1,13 @@
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: openebs-lvm
+parameters:
+  storage: lvm
+  fstype: ext4
+  volgroup: vg0
+provisioner: local.csi.openebs.io
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+allowVolumeExpansion: true
