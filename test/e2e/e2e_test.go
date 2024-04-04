@@ -27,7 +27,7 @@ import (
 
 const (
 	// namespace to use during the e2e tests
-	namespace = "pvc-autoscaler-system-e2e"
+	namespace = "pvc-autoscaler-e2e-system"
 
 	// projectImage stores the name of the image used in the example
 	projectImage = "example.com/pvc-autoscaler:v0.0.1"
