@@ -156,7 +156,7 @@ deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: deploy-e2e
-deploy-e2e: manifests kustomize ## Deploy controller to the test e2e K8scluster specified in ~/.kube/config.
+deploy-e2e: manifests kustomize ## Deploy controller to the test e2e K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/e2e | $(KUBECTL) apply -f -
 
@@ -207,7 +207,7 @@ $(KUSTOMIZE): $(LOCALBIN) $(call gen-tool-version,$(KUSTOMIZE),$(KUSTOMIZE_VERSI
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 .PHONY: minikube
-minikube: $(MINIKUBE)  # Download minikube locally if necessary.
+minikube: $(MINIKUBE)  ## Download minikube locally if necessary.
 $(MINIKUBE): $(LOCALBIN) $(call gen-tool-version,$(MINIKUBE),$(MINIKUBE_VERSION))
 	$(call download-tool,minikube,https://github.com/kubernetes/minikube/releases/download/$(MINIKUBE_VERSION)/minikube-$(GOOS)-$(GOARCH))
 
