@@ -42,7 +42,7 @@ var _ = Describe("controller", Ordered, func() {
 
 			By("loading the manager(Operator) image in Minikube")
 			err = utils.LoadImageToMinikubeProfileWithName(projectImage)
-			ExpectWithOffset(1, err).NotTo(HaveOccurred())
+			Expect(err).NotTo(HaveOccurred())
 
 			By("deploying the controller-manager")
 			err = utils.Make("deploy-e2e", fmt.Sprintf("IMG=%s", projectImage))
