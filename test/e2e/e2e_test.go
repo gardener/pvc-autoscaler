@@ -45,7 +45,7 @@ var _ = Describe("controller", Ordered, func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			By("deploying the controller-manager")
-			err = utils.Make("deploy-e2e", fmt.Sprintf("IMG=%s", projectImage))
+			err = utils.Make("deploy", fmt.Sprintf("IMG=%s", projectImage))
 			Expect(err).NotTo(HaveOccurred())
 
 			By("validate that the controller-manager is up and running")

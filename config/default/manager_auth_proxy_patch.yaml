@@ -37,3 +37,4 @@ spec:
         - "--health-probe-bind-address=:8081"
         - "--metrics-bind-address=127.0.0.1:8080"
         - "--leader-elect"
+        - "--prometheus-address=http://prometheus-k8s.monitoring.svc.cluster.local:9090"
