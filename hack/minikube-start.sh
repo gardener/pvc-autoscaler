@@ -134,8 +134,8 @@ function _install_openebs_lvm_driver() {
   minikube ssh -- sudo pvcreate "${_lo_dev}"
   minikube ssh -- sudo vgcreate vg0 "${_lo_dev}"
 
-  _msg_info "Installing Storage Class ..."
-  kubectl apply -f "${_TEST_MANIFESTS_DIR}/storageclasses/openebs-lvm.yaml"
+  _msg_info "Installing LVM-backed Storage Class ..."
+  kubectl apply -f "${_TEST_MANIFESTS_DIR}/storageclass/openebs-lvm.yaml"
 }
 
 function _main() {
