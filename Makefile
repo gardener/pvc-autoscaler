@@ -2,7 +2,9 @@
 MINIKUBE_PROFILE ?= pvc-autoscaler
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= europe-docker.pkg.dev/gardener-project/releases/pvc-autoscaler
+IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
+
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
 
@@ -92,7 +94,7 @@ minikube-stop: minikube  ## Stop the local dev environment
 
 .PHONY: minikube-load-image
 minikube-load-image: minikube docker-build  ## Load the operator image into the minikube nodes
-	$(CONTAINER_TOOL) image save -o image.tar ${IMG}
+	$(CONTAINER_TOOL) image save -o image.tar ${IMG}:${IMAGE_TAG}
 	$(MINIKUBE) image load --overwrite=true image.tar
 	rm -f image.tar
 
@@ -111,11 +113,11 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
 docker-build: ## Build docker image with the manager.
-	$(CONTAINER_TOOL) build -t ${IMG} .
+	$(CONTAINER_TOOL) build -t ${IMG}:${IMAGE_TAG} .
 
 .PHONY: docker-push
 docker-push: ## Push docker image with the manager.
-	$(CONTAINER_TOOL) push ${IMG}
+	$(CONTAINER_TOOL) push ${IMG}:${IMAGE_TAG}
 
 # PLATFORMS defines the target platforms for the manager image be built to provide support to multiple
 # architectures. (i.e. make docker-buildx IMG=myregistry/mypoperator:0.0.1). To use this option you need to:
@@ -130,7 +132,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
 	- $(CONTAINER_TOOL) buildx create --name project-v3-builder
 	$(CONTAINER_TOOL) buildx use project-v3-builder
-	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG}:${IMAGE_TAG} -f Dockerfile.cross .
 	- $(CONTAINER_TOOL) buildx rm project-v3-builder
 	rm Dockerfile.cross
 
@@ -141,7 +143,7 @@ build-installer: manifests generate kustomize ## Generate a consolidated YAML wi
 		$(KUSTOMIZE) build config/crd > dist/install.yaml; \
 	fi
 	echo "---" >> dist/install.yaml  # Add a document separator before appending
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:${IMAGE_TAG}
 	$(KUSTOMIZE) build config/default >> dist/install.yaml
 
 ##@ Deployment
@@ -152,7 +154,7 @@ endif
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:${IMAGE_TAG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
