@@ -1,0 +1,18 @@
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: test-pvc-1
+  annotations:
+    pvc.autoscaling.gardener.cloud/is-enabled: "true"
+    pvc.autoscaling.gardener.cloud/max-capacity: 3Gi
+    pvc.autoscaling.gardener.cloud/threshold: '20%'
+    # pvc.autoscaling.gardener.cloud/increase-by: '20%'
+spec:
+  storageClassName: openebs-lvm
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
