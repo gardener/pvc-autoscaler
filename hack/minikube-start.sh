@@ -78,7 +78,7 @@ function _install_kube_prometheus() {
 
   kubectl apply -f manifests/
   _msg_info "Waiting for monitoring pods to become ready ..."
-  sleep 10
+  sleep 15
   kubectl wait \
           --for condition=Ready \
           --all Pod \
@@ -97,7 +97,7 @@ function _install_openebs_operator() {
   kubectl apply -f "${OPENEBS_OPERATOR}"
 
   _msg_info "Waiting for OpenEBS pods to become ready ..."
-  sleep 10
+  sleep 15
   kubectl wait \
           --for condition=Ready \
           --all Pod \
@@ -113,7 +113,7 @@ function _install_openebs_lvm_driver() {
 
   kubectl apply -f "${OPENEBS_CSI_DRIVER}"
   _msg_info "Waiting for OpenEBS LVM CSI driver pods to become ready ..."
-  sleep 10
+  sleep 15
 
   # The OpenEBS LVM CSI driver installs daemonsets in the kube-system (sigh), so
   # we wait for them there.
@@ -135,7 +135,7 @@ function _install_openebs_lvm_driver() {
   minikube ssh -- sudo vgcreate vg0 "${_lo_dev}"
 
   _msg_info "Installing LVM-backed Storage Class ..."
-  kubectl apply -f "${_TEST_MANIFESTS_DIR}/storageclass/openebs-lvm.yaml"
+  kubectl apply -f "${_TEST_MANIFESTS_DIR}/storageclass.yaml"
 }
 
 function _main() {
