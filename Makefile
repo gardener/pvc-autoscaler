@@ -98,8 +98,11 @@ minikube-load-image: minikube docker-build  ## Load the operator image into the 
 	$(MINIKUBE) image load --overwrite=true image.tar
 	rm -f image.tar
 
-.PHONY: e2e-env
-e2e-env: minikube-start minikube-load-image deploy  ## Create a new E2E test environment
+.PHONY: e2e-env-setup
+e2e-env-setup: minikube-start minikube-load-image deploy  ## Create a new e2e test environment.
+
+.PHONY: e2e-env-teardown
+e2e-env-teardown: minikube-stop  ## Teardown the e2e test environment.
 
 ##@ Build
 
