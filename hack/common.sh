@@ -31,3 +31,70 @@ function _msg_error() {
     exit ${_rc}
   fi
 }
+
+# Wait until a given event occurs
+#
+# $1: event type (e.g. Normal or Warning)
+# $2: event reason
+# $3: object (e.g. pod/sample-pod)
+function _wait_for_event() {
+  local _type="${1}"
+  local _reason="${2}"
+  local _object="${3}"
+  local _poll_sec=10
+  local _max_attempts=60
+
+  for i in $( seq 1 "${_max_attempts}" ); do
+    _msg_info "[${i}/${_max_attempts}] waiting for '${_reason}' (${_type}) event(s) ..."
+    local _events=$( kubectl events \
+                             --for "${_object}" \
+                             --types "${_type}" \
+                             -o yaml | \
+                       yq ".items.[] | select(.reason == \"${_reason}\") | .message" )
+    if [ -n "${_events}" ]; then
+      _msg_info "received '${_reason}' event(s)"
+      echo "---"
+      echo "${_events}"
+      echo "---"
+      return
+    fi
+    sleep "${_poll_sec}"
+  done
+
+  _msg_error "did not receive any '${_reason}' event(s)" 1
+}
+
+# Waits for a given event to occur N times
+#
+# $1: event type (e.g. Normal or Warning)
+# $2: event reason
+# $3: object (e.g. pod/sample-pod)
+# $4: expected number of times event has occurred
+function _wait_for_event_to_occur_n_times() {
+  local _type="${1}"
+  local _reason="${2}"
+  local _object="${3}"
+  local _n="${4}"
+  local _poll_sec=10
+  local _max_attempts=60
+
+  for i in $( seq 1 "${_max_attempts}" ); do
+    _msg_info "[${i}/${_max_attempts}] waiting for '${_reason}' (${_type}) event to occur ${_n} time(s) ..."
+    local _events=$( kubectl events \
+                             --for "${_object}" \
+                             --types "${_type}" \
+                             -o yaml | \
+                       yq ".items.[] | select(.reason == \"${_reason}\") | .count" )
+
+    # Do we have the correct match?
+    for count in ${_events}; do
+      if [ ${count} -eq ${_n} ]; then
+        _msg_info "received ${_n} time(s) '${_reason}' event(s)"
+        return
+      fi
+    done
+    sleep "${_poll_sec}"
+  done
+
+  _msg_error "did not receive any '${_reason}' event(s)" 1
+}
