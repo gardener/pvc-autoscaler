@@ -119,6 +119,7 @@ func WithEventRecorder(recorder record.EventRecorder) Option {
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims,verbs=get;list;watch;update;patch
 //+kubebuilder:rbac:groups=core,resources=persistentvolumeclaims/status,verbs=get
 //+kubebuilder:rbac:groups=core,resources=events,verbs=create;patch
+//+kubebuilder:rbac:groups=storage.k8s.io,resources=storageclasses,verbs=get;list;watch
 
 // Reconcile implements the
 // [sigs.k8s.io/controller-runtime/pkg/reconcile.Reconciler] interface.
