@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-2
+spec:
+  volumes:
+    - name: app-vol
+      persistentVolumeClaim:
+        claimName: test-pvc-2
+  containers:
+    - name: test-pod-2
+      image: debian:latest
+      command:
+        - sleep
+        - infinity
+      volumeMounts:
+        - mountPath: /app
+          name: app-vol

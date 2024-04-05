@@ -2,7 +2,7 @@
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: test-pvc-1
+  name: test-pvc-2
   annotations:
     pvc.autoscaling.gardener.cloud/is-enabled: "true"
     pvc.autoscaling.gardener.cloud/max-capacity: 3Gi
