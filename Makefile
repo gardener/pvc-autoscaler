@@ -98,6 +98,9 @@ minikube-load-image: minikube docker-build  ## Load the operator image into the 
 	$(MINIKUBE) image load --overwrite=true image.tar
 	rm -f image.tar
 
+.PHONY: e2e-env
+e2e-env: minikube-start minikube-load-image deploy  ## Create a new E2E test environment
+
 ##@ Build
 
 .PHONY: build
@@ -221,6 +224,7 @@ golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN) $(call gen-tool-version,$(GOLANGCI_LINT),$(GOLANGCI_LINT_VERSION))
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
+.PHONY: yq
 yq: $(YQ)  ## Download yq locally if necessary.
 $(YQ): $(LOCALBIN) $(call gen-tool-version,$(YQ),$(YQ_VERSION))
 	$(call download-tool,yq,https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(GOOS)_$(GOARCH))
