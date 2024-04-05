@@ -214,7 +214,7 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 			&obj,
 			corev1.EventTypeWarning,
 			"MaxCapacityReached",
-			"max capacity has been reached, will not resize",
+			"max capacity (%s) has been reached, will not resize",
 			maxCapacity.String(),
 		)
 		logger.Info("max capacity reached")
