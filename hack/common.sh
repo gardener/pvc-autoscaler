@@ -14,7 +14,7 @@ _NO_COLOR='\033[0m'
 function _msg_info() {
   local _msg="${1}"
 
-  echo -e "[$( date +%Y-%m-%d-%H:%M:%S)] ${_SCRIPT_NAME} ${_GREEN}INFO${_NO_COLOR}: ${_msg}"
+  echo -e "[$( date +%Y-%m-%d-%T.%3N)] ${_SCRIPT_NAME} ${_GREEN}INFO${_NO_COLOR}: ${_msg}"
 }
 
 # Display an ERROR message
@@ -25,7 +25,7 @@ function _msg_error() {
   local _msg="${1}"
   local _rc=${2}
 
-  echo -e "[$( date +%Y-%m-%d-%H:%M:%S)] ${_SCRIPT_NAME} ${_RED}ERROR${_NO_COLOR}: ${_msg}"
+  echo -e "[$( date +%Y-%m-%d-%T.%3N)] ${_SCRIPT_NAME} ${_RED}ERROR${_NO_COLOR}: ${_msg}"
 
   if [[ ${_rc} -ne 0 ]]; then
     exit ${_rc}
