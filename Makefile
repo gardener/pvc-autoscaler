@@ -1,12 +1,6 @@
-# The minikube profile name to use
-MINIKUBE_PROFILE ?= pvc-autoscaler
-
 # Image URL to use all building/pushing image targets
 IMG ?= europe-docker.pkg.dev/gardener-project/releases/pvc-autoscaler
 IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
-
-# ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.29.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -52,32 +46,29 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-
-.PHONY: generate
-generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+manifests: controller-gen  ## Generate ClusterRole objects.
+	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./..."
 
 .PHONY: fmt
-fmt: ## Run go fmt against code.
+fmt:  ## Run go fmt against code.
 	go fmt ./...
 
 .PHONY: vet
-vet: ## Run go vet against code.
+vet:  ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
+test: manifests fmt vet ## Run tests.
+	go test -v -coverprofile cover.out ./...
 
-# Utilize Kind or modify the e2e tests to load the image locally, enabling compatibility with other vendors.
-.PHONY: test-e2e  # Run the e2e tests against a Kind k8s instance that is spun up.
+.PHONY: test-e2e  # Run the e2e tests against a minikube k8s instance that is spun up.
 test-e2e:
-	go test ./test/e2e/ -v -ginkgo.v
+	$(MAKE) e2e-env-setup
+	./hack/run-e2e-tests.sh
+	$(MAKE) e2e-env-teardown
 
 .PHONY: lint
-lint: golangci-lint ## Run golangci-lint linter & yamllint
+lint: golangci-lint  ## Run golangci-lint linter & yamllint
 	$(GOLANGCI_LINT) run
 
 .PHONY: lint-fix
@@ -99,19 +90,21 @@ minikube-load-image: minikube docker-build  ## Load the operator image into the 
 	rm -f image.tar
 
 .PHONY: e2e-env-setup
-e2e-env-setup: minikube-start minikube-load-image deploy  ## Create a new e2e test environment.
+e2e-env-setup:  ## Create a new e2e test environment.
+	$(MAKE) minikube-start minikube-load-image deploy
 
 .PHONY: e2e-env-teardown
-e2e-env-teardown: minikube-stop  ## Teardown the e2e test environment.
+e2e-env-teardown:  ## Teardown the e2e test environment.
+	$(MAKE) minikube-stop
 
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
+build: manifests fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 .PHONY: run
-run: manifests generate fmt vet ## Run a controller from your host.
+run: manifests fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
@@ -143,12 +136,9 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	rm Dockerfile.cross
 
 .PHONY: build-installer
-build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+build-installer: manifests kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
-	@if [ -d "config/crd" ]; then \
-		$(KUSTOMIZE) build config/crd > dist/install.yaml; \
-	fi
-	echo "---" >> dist/install.yaml  # Add a document separator before appending
+	echo "---" > dist/install.yaml  # Add a document separator before appending
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:${IMAGE_TAG}
 	$(KUSTOMIZE) build config/default >> dist/install.yaml
 
@@ -179,18 +169,19 @@ $(LOCALBIN):
 KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
-ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 MINIKUBE ?= $(LOCALBIN)/minikube
 YQ ?= $(LOCALBIN)/yq
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.3.0
+KUSTOMIZE_VERSION ?= v5.4.1
 CONTROLLER_TOOLS_VERSION ?= v0.14.0
-ENVTEST_VERSION ?= latest
-GOLANGCI_LINT_VERSION ?= v1.54.2
+GOLANGCI_LINT_VERSION ?= v1.57.2
 MINIKUBE_VERSION ?= v1.32.0
 YQ_VERSION ?= v4.43.1
+
+# The minikube profile name to use
+MINIKUBE_PROFILE ?= pvc-autoscaler
 
 # A target which is used to clean up previous versions of tools
 $(LOCALBIN)/.version_%:
@@ -217,11 +208,6 @@ controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessar
 $(CONTROLLER_GEN): $(LOCALBIN) $(call gen-tool-version,$(CONTROLLER_GEN),$(CONTROLLER_TOOLS_VERSION))
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
-.PHONY: envtest
-envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
-$(ENVTEST): $(LOCALBIN) $(call gen-tool-version,$(ENVTEST),$(ENVTEST_VERSION))
-	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
-
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(LOCALBIN) $(call gen-tool-version,$(GOLANGCI_LINT),$(GOLANGCI_LINT_VERSION))
@@ -233,6 +219,7 @@ $(YQ): $(LOCALBIN) $(call gen-tool-version,$(YQ),$(YQ_VERSION))
 	$(call download-tool,yq,https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(GOOS)_$(GOARCH))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
+#
 # $1 - target path with name of binary (ideally with version)
 # $2 - package url which can be installed
 # $3 - specific version of package
@@ -243,7 +230,8 @@ echo "Downloading $${package}" ;\
 GOBIN=$(LOCALBIN) go install $${package}
 endef
 
-# download-tool will download a binary package from the given URL
+# download-tool will download a binary package from the given URL.
+#
 # $1 - name of the tool
 # $2 - HTTP URL to download the tool from
 define download-tool
