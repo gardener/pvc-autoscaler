@@ -2,7 +2,7 @@
 #
 # A script to run the e2e tests
 
-set -e
+set -eu -o pipefail
 
 _SCRIPT_NAME="${0##*/}"
 _SCRIPT_DIR=$( dirname `readlink -f -- "${0}"` )
@@ -73,6 +73,71 @@ function _test_consume_space_and_resize() {
   _wait_for_event Warning MaxCapacityReached "pvc/${_pvc_name}"
 }
 
+# Tests the PVC autoscaler by consuming inodes from a volume and then expects
+# the PVC autoscaler to resize the volume.
+function _test_consume_inodes_and_resize() {
+  local _pod_name="test-pod-2"
+  local _pod_path="/app"
+  local _pvc_name="test-pvc-2"
+  local _namespace="default"
+
+  _msg_info "starting test: consume inodes and resize"
+  _msg_info "creating test pvc and pod ..."
+  kubectl create -f "${_TEST_MANIFESTS_DIR}/pvc-2.yaml"
+  kubectl create -f "${_TEST_MANIFESTS_DIR}/pod-2.yaml"
+
+  _msg_info "waiting for test pod to be ready ..."
+  kubectl wait "pod/${_pod_name}" \
+          --for condition=Ready \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  # The test pod initially comes a PVC of size 1Gi, which gives us ~ 65K of
+  # available inodes.
+  _msg_info "consuming 60K inodes ..."
+  env POD="${_pod_name}" \
+      NAMESPACE="${_namespace}" \
+      NUM_FILES=60000 \
+      FILE_SIZE=1B \
+      POD_PATH="${_pod_path}" \
+      ${_SCRIPT_DIR}/consume-pod-space.sh
+
+  # We should see these events
+  _wait_for_event Warning FreeInodesThresholdReached "pvc/${_pvc_name}"
+  _wait_for_event Normal ResizingStorage "pvc/${_pvc_name}"
+  _wait_for_event Normal Resizing "pvc/${_pvc_name}"
+  _wait_for_event Normal FileSystemResizeRequired "pvc/${_pvc_name}"
+  _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
+
+  # After the first increase of the volume we should have a total of ~ 130K inodes.
+  _msg_info "consuming another 60K inodes ..."
+  env POD="${_pod_name}" \
+      NAMESPACE="${_namespace}" \
+      NUM_FILES=60000 \
+      FILE_SIZE=1B \
+      POD_PATH="${_pod_path}" \
+      ${_SCRIPT_DIR}/consume-pod-space.sh
+
+  # We should see a second occurrence of these events
+  _wait_for_event_to_occur_n_times Normal Resizing "pvc/${_pvc_name}" 2
+  _wait_for_event_to_occur_n_times Normal FileSystemResizeRequired "pvc/${_pvc_name}" 2
+  _wait_for_event_to_occur_n_times Normal FileSystemResizeSuccessful "pvc/${_pvc_name}" 2
+
+  # Once the volume resizes for a second time we should have a total of ~196K inodes.
+  _msg_info "consuming all available inodes ..."
+  env POD="${_pod_name}" \
+      NAMESPACE="${_namespace}" \
+      NUM_FILES=100000 \
+      FILE_SIZE=1B \
+      POD_PATH="${_pod_path}" \
+      ${_SCRIPT_DIR}/consume-pod-space.sh >& /dev/null || \
+    _msg_info "available inodes consumed"
+
+  # And finally we should be at the max limit, so no more resizing happens
+  _wait_for_event Warning MaxCapacityReached "pvc/${_pvc_name}"
+}
+
+# Main entrypoint
 function _main() {
   local _has_failed="false"
   if ! _test_consume_space_and_resize; then
@@ -80,11 +145,16 @@ function _main() {
     _has_failed="true"
   fi
 
+  if ! _test_consume_inodes_and_resize; then
+    _msg_error "test consume inodes and resize has failed" 0
+    _has_failed="true"
+  fi
+
   if [ "${_has_failed}" == "true" ]; then
     _msg_error "Failed" 1
   fi
 
-  _msg_info "done"
+  _msg_info "Success"
 }
 
 _main $*
