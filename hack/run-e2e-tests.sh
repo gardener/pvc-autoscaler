@@ -32,7 +32,10 @@ function _test_consume_space_and_resize() {
           --namespace "${_namespace}" \
           --timeout 10m
 
-  # The test pod initially comes with a PVC of size 1Gi.  Consume 90% of it.
+  # The test pod initially comes with a PVC of size 1Gi.
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 1Gi
+
+  # Consume 90% of the PVC capacity.
   _msg_info "consuming 900MB of the space ..."
   env POD="${_pod_name}" \
       NAMESPACE="${_namespace}" \
@@ -48,6 +51,9 @@ function _test_consume_space_and_resize() {
   _wait_for_event Normal FileSystemResizeRequired "pvc/${_pvc_name}"
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
 
+  # We should be at 2Gi now
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
+
   _msg_info "consuming another 900MB of space ..."
   env POD="${_pod_name}" \
       NAMESPACE="${_namespace}" \
@@ -61,6 +67,9 @@ function _test_consume_space_and_resize() {
   _wait_for_event_to_occur_n_times Normal FileSystemResizeRequired "pvc/${_pvc_name}" 2
   _wait_for_event_to_occur_n_times Normal FileSystemResizeSuccessful "pvc/${_pvc_name}" 2
 
+  # We should be at 3Gi now
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
+
   _msg_info "consuming all available disk space ..."
   env POD="${_pod_name}" \
       NAMESPACE="${_namespace}" \
@@ -73,6 +82,9 @@ function _test_consume_space_and_resize() {
   # And finally we should be at the max capacity, which is to 3Gi in the test
   # manifests.
   _wait_for_event Warning MaxCapacityReached "pvc/${_pvc_name}"
+
+  # We should remain at 3Gi
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
 }
 
 # Tests the PVC autoscaler by consuming inodes from a volume and then expects
@@ -96,6 +108,9 @@ function _test_consume_inodes_and_resize() {
           --namespace "${_namespace}" \
           --timeout 10m
 
+  # The test pod initially comes with a PVC of size 1Gi.
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 1Gi
+
   # The test pod initially comes a PVC of size 1Gi, which gives us ~ 65K of
   # available inodes.
   _msg_info "consuming 60K inodes ..."
@@ -113,6 +128,9 @@ function _test_consume_inodes_and_resize() {
   _wait_for_event Normal FileSystemResizeRequired "pvc/${_pvc_name}"
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
 
+  # We should be at 2Gi now
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
+
   # After the first increase of the volume we should have a total of ~ 130K inodes.
   _msg_info "consuming another 60K inodes ..."
   env POD="${_pod_name}" \
@@ -127,6 +145,9 @@ function _test_consume_inodes_and_resize() {
   _wait_for_event_to_occur_n_times Normal FileSystemResizeRequired "pvc/${_pvc_name}" 2
   _wait_for_event_to_occur_n_times Normal FileSystemResizeSuccessful "pvc/${_pvc_name}" 2
 
+  # We should be at 3Gi now
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
+
   # Once the volume resizes for a second time we should have a total of ~196K inodes.
   _msg_info "consuming all available inodes ..."
   env POD="${_pod_name}" \
@@ -139,6 +160,9 @@ function _test_consume_inodes_and_resize() {
 
   # And finally we should be at the max limit, so no more resizing happens
   _wait_for_event Warning MaxCapacityReached "pvc/${_pvc_name}"
+
+  # We should remain at 3Gi
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
 }
 
 # Main entrypoint
