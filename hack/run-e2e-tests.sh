@@ -15,6 +15,7 @@ source "${_SCRIPT_DIR}/common.sh"
 # autoscaler to resize the volume until we fully exhaust the space.
 function _test_consume_space_and_resize() {
   local _pod_name="test-pod-1"
+  local _pod_path="/app"
   local _pvc_name="test-pvc-1"
   local _namespace="default"
 
@@ -35,6 +36,7 @@ function _test_consume_space_and_resize() {
       NAMESPACE="${_namespace}" \
       NUM_FILES=9 \
       FILE_SIZE=100M \
+      POD_PATH="${_pod_path}" \
       ${_SCRIPT_DIR}/consume-pod-space.sh
 
   # Once we consume the space we expect to see these events for the PVC object.
@@ -49,6 +51,7 @@ function _test_consume_space_and_resize() {
       NAMESPACE="${_namespace}" \
       NUM_FILES=9 \
       FILE_SIZE=100M \
+      POD_PATH="${_pod_path}" \
       ${_SCRIPT_DIR}/consume-pod-space.sh
 
   # We should see a second occurrence of these events
@@ -61,6 +64,7 @@ function _test_consume_space_and_resize() {
       NAMESPACE="${_namespace}" \
       NUM_FILES=100 \
       FILE_SIZE=100M \
+      POD_PATH="${_pod_path}" \
       ${_SCRIPT_DIR}/consume-pod-space.sh >& /dev/null || \
     _msg_info "available disk space consumed"
 
