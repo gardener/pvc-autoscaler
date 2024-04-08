@@ -14,15 +14,17 @@ source "${_SCRIPT_DIR}/common.sh"
 # Tests the PVC autoscaler by consuming space from a PVC and expecting the PVC
 # autoscaler to resize the volume until we fully exhaust the space.
 function _test_consume_space_and_resize() {
-  local _pod_name="test-pod-1"
-  local _pod_path="/app"
-  local _pvc_name="test-pvc-1"
-  local _namespace="default"
+  local _pvc_yaml="${_TEST_MANIFESTS_DIR}/pvc-1.yaml"
+  local _pod_yaml="${_TEST_MANIFESTS_DIR}/pod-1.yaml"
+  local _pod_name=$( yq '.metadata.name' "${_pod_yaml}" )
+  local _pod_path=$( yq '.spec.containers[0].volumeMounts[0].mountPath' "${_pod_yaml}" )
+  local _pvc_name=$( yq '.metadata.name' "${_pvc_yaml}" )
+  local _namespace=$( yq '.metadata.namespace // "default"' "${_pod_yaml}" )
 
   _msg_info "starting test: consume space and resize"
   _msg_info "creating test pvc and pod ..."
-  kubectl create -f "${_TEST_MANIFESTS_DIR}/pvc-1.yaml"
-  kubectl create -f "${_TEST_MANIFESTS_DIR}/pod-1.yaml"
+  kubectl create -f "${_pvc_yaml}"
+  kubectl create -f "${_pod_yaml}"
 
   _msg_info "waiting for test pod to be ready ..."
   kubectl wait "pod/${_pod_name}" \
@@ -76,15 +78,17 @@ function _test_consume_space_and_resize() {
 # Tests the PVC autoscaler by consuming inodes from a volume and then expects
 # the PVC autoscaler to resize the volume.
 function _test_consume_inodes_and_resize() {
-  local _pod_name="test-pod-2"
-  local _pod_path="/app"
-  local _pvc_name="test-pvc-2"
-  local _namespace="default"
+  local _pvc_yaml="${_TEST_MANIFESTS_DIR}/pvc-2.yaml"
+  local _pod_yaml="${_TEST_MANIFESTS_DIR}/pod-2.yaml"
+  local _pod_name=$( yq '.metadata.name' "${_pod_yaml}" )
+  local _pod_path=$( yq '.spec.containers[0].volumeMounts[0].mountPath' "${_pod_yaml}" )
+  local _pvc_name=$( yq '.metadata.name' "${_pvc_yaml}" )
+  local _namespace=$( yq '.metadata.namespace // "default"' "${_pod_yaml}" )
 
   _msg_info "starting test: consume inodes and resize"
   _msg_info "creating test pvc and pod ..."
-  kubectl create -f "${_TEST_MANIFESTS_DIR}/pvc-2.yaml"
-  kubectl create -f "${_TEST_MANIFESTS_DIR}/pod-2.yaml"
+  kubectl create -f "${_pvc_yaml}"
+  kubectl create -f "${_pod_yaml}"
 
   _msg_info "waiting for test pod to be ready ..."
   kubectl wait "pod/${_pod_name}" \
