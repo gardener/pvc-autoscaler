@@ -180,8 +180,9 @@ GOLANGCI_LINT_VERSION ?= v1.57.2
 MINIKUBE_VERSION ?= v1.32.0
 YQ_VERSION ?= v4.43.1
 
-# The minikube profile name to use
+# minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
+MINIKUBE_DRIVER ?= qemu
 
 # A target which is used to clean up previous versions of tools
 $(LOCALBIN)/.version_%:
