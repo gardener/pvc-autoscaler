@@ -65,7 +65,7 @@ The following annotations can be configured by an operator in order to control
 the behaviour of `pvc-autoscaler`.
 
 | Annotation                                    | Description                                          | Default |
-|:---------------------------------------------:|:----------------------------------------------------:|:-------:|
+|:----------------------------------------------|:-----------------------------------------------------|:-------:|
 | `pvc.autoscaling.gardener.cloud/is-enabled`   | Enable autoscaling when set to `true`                | N/A     |
 | `pvc.autoscaling.gardener.cloud/increase-by`  | Specifies how much to increase the PVC in percentage | `10%`   |
 | `pvc.autoscaling.gardener.cloud/threshold`    | Specify the threshold in percentage                  | `10%`   |
@@ -75,7 +75,7 @@ The following additional annotations are populated by the controller, which
 provide information about the latest observed state for a PVC.
 
 | Annotation                                   | Description                               |
-|:--------------------------------------------:|:-----------------------------------------:|
+|:---------------------------------------------|:------------------------------------------|
 | `pvc.autoscaling.gardener.cloud/free-space`  | Latest observed free space as percentage  |
 | `pvc.autoscaling.gardener.cloud/used-space`  | Latest observed used space as percentage  |
 | `pvc.autoscaling.gardener.cloud/free-inodes` | Latest observed free inodes as percentage |
