@@ -24,6 +24,7 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/internal/annotation"
 	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
 
 	corev1 "k8s.io/api/core/v1"
@@ -222,11 +223,13 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 			maxCapacity.String(),
 		)
 		logger.Info("max capacity reached")
+		metrics.MaxCapacityReachedTotal.WithLabelValues(obj.Namespace, obj.Name).Inc()
 		return ctrl.Result{}, nil
 	}
 
 	// And finally we should be good to resize now
 	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", newSize.String())
+	metrics.ResizedTotal.WithLabelValues(obj.Namespace, obj.Name).Inc()
 	r.eventRecorder.Eventf(
 		&obj,
 		corev1.EventTypeNormal,
