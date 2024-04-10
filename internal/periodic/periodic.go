@@ -14,6 +14,7 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/annotation"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/index"
+	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
 
@@ -164,19 +165,20 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		return err
 	}
 
-	metrics, err := r.metricsSource.Get(ctx)
+	metricsData, err := r.metricsSource.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get metrics: %w", err)
 	}
 
 	toReconcile := make([]corev1.PersistentVolumeClaim, 0)
 	for _, item := range items.Items {
-		volInfo := metrics[client.ObjectKeyFromObject(&item)]
+		volInfo := metricsData[client.ObjectKeyFromObject(&item)]
 		logger := log.FromContext(ctx, "controller", common.ControllerName, "namespace", item.Namespace, "name", item.Name)
 
 		ok, err := r.shouldReconcilePVC(ctx, &item, volInfo)
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
+			metrics.SkippedTotal.WithLabelValues(item.Namespace, item.Name, err.Error()).Inc()
 			continue
 		}
 
@@ -310,6 +312,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 			freeSpace,
 			threshold,
 		)
+		metrics.ThresholdReachedTotal.WithLabelValues(obj.Namespace, obj.Name, "space").Inc()
 		return true, nil
 
 	// Free inodes reached threshold
@@ -322,6 +325,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 			freeInodes,
 			threshold,
 		)
+		metrics.ThresholdReachedTotal.WithLabelValues(obj.Namespace, obj.Name, "inodes").Inc()
 		return true, nil
 
 	// No need to reconcile the PVC for now

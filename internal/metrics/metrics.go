@@ -46,6 +46,8 @@ var (
 		[]string{"namespace", "persistentvolumeclaim"},
 	)
 
+	// SkippedTotal is a metric which increments each time a PVC is skipped
+	// from being reconciled.
 	SkippedTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: Namespace,
