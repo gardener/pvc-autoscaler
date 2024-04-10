@@ -14,7 +14,7 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/annotation"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/index"
-	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
+	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
 
 	corev1 "k8s.io/api/core/v1"
@@ -59,7 +59,7 @@ type Runner struct {
 	client        client.Client
 	interval      time.Duration
 	eventCh       chan event.GenericEvent
-	metricsSource source.Source
+	metricsSource metricssource.Source
 	eventRecorder record.EventRecorder
 }
 
@@ -119,7 +119,7 @@ func WithEventChannel(ch chan event.GenericEvent) Option {
 }
 
 // WithMetricsSource configures the [Runner] to use the given source of metrics.
-func WithMetricsSource(src source.Source) Option {
+func WithMetricsSource(src metricssource.Source) Option {
 	opt := func(r *Runner) {
 		r.metricsSource = src
 	}
@@ -197,7 +197,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 
 // stampPVC stamps the given persistent volume claim by updating the list of the
 // annotations, which record the last observed state for the PVC.
-func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *source.VolumeInfo) error {
+func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *metricssource.VolumeInfo) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 	now := time.Now()
 	nextCheck := now.Add(r.interval)
@@ -237,7 +237,7 @@ func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim
 
 // shouldReconcilePVC is a predicate which checks whether the given
 // PersistentVolumeClaim object should be considered for reconciliation.
-func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *source.VolumeInfo) (bool, error) {
+func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *metricssource.VolumeInfo) (bool, error) {
 	if err := r.stampPVC(ctx, obj, volInfo); err != nil {
 		return false, err
 	}
