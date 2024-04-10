@@ -11,12 +11,12 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
-	"k8s.io/apimachinery/pkg/types"
+	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
@@ -24,7 +24,7 @@ import (
 // endpoint address was configured.
 var ErrNoPrometheusAddress = errors.New("no address specified")
 
-// Prometheus is an implementation of [metrics.Source], which collects metrics
+// Prometheus is an implementation of [metricssource.Source], which collects metrics
 // about persistent volume claims from a Prometheus instance.
 type Prometheus struct {
 	address              string
@@ -37,7 +37,7 @@ type Prometheus struct {
 	capacityInodesQuery  string
 }
 
-var _ source.Source = &Prometheus{}
+var _ metricssource.Source = &Prometheus{}
 
 // Option is a function which can configure a [Prometheus] instance.
 type Option func(p *Prometheus)
@@ -141,42 +141,42 @@ func New(opts ...Option) (*Prometheus, error) {
 	// See https://kubernetes.io/docs/reference/instrumentation/metrics/ for
 	// more details.
 	if p.availableBytesQuery == "" {
-		p.availableBytesQuery = source.KubeletVolumeStatsAvailableBytes
+		p.availableBytesQuery = metricssource.KubeletVolumeStatsAvailableBytes
 	}
 	if p.capacityBytesQuery == "" {
-		p.capacityBytesQuery = source.KubeletVolumeStatsCapacityBytes
+		p.capacityBytesQuery = metricssource.KubeletVolumeStatsCapacityBytes
 	}
 	if p.availableInodesQuery == "" {
-		p.availableInodesQuery = source.KubeletVolumeStatsInodesFree
+		p.availableInodesQuery = metricssource.KubeletVolumeStatsInodesFree
 	}
 	if p.capacityInodesQuery == "" {
-		p.capacityInodesQuery = source.KubeletVolumeStatsInodes
+		p.capacityInodesQuery = metricssource.KubeletVolumeStatsInodes
 	}
 
 	return p, nil
 }
 
 // valueMapperFunc is a function which knows how to map a given metric value to
-// a field in [source.VolumeInfo].
-type valueMapperFunc func(val int, info *source.VolumeInfo)
+// a field in [metricssource.VolumeInfo].
+type valueMapperFunc func(val int, info *metricssource.VolumeInfo)
 
-// Get implements the [source.Source] interface
-func (p *Prometheus) Get(ctx context.Context) (source.Metrics, error) {
-	result := make(source.Metrics)
+// Get implements the [metricssource.Source] interface
+func (p *Prometheus) Get(ctx context.Context) (metricssource.Metrics, error) {
+	result := make(metricssource.Metrics)
 
 	// Maps queries to mappers for setting the values to the respective
-	// source.VolumeInfo fields.
+	// metricssource.VolumeInfo fields.
 	queryToMapper := map[string]valueMapperFunc{
-		p.availableBytesQuery: func(val int, info *source.VolumeInfo) {
+		p.availableBytesQuery: func(val int, info *metricssource.VolumeInfo) {
 			info.AvailableBytes = val
 		},
-		p.capacityBytesQuery: func(val int, info *source.VolumeInfo) {
+		p.capacityBytesQuery: func(val int, info *metricssource.VolumeInfo) {
 			info.CapacityBytes = val
 		},
-		p.availableInodesQuery: func(val int, info *source.VolumeInfo) {
+		p.availableInodesQuery: func(val int, info *metricssource.VolumeInfo) {
 			info.AvailableInodes = val
 		},
-		p.capacityInodesQuery: func(val int, info *source.VolumeInfo) {
+		p.capacityInodesQuery: func(val int, info *metricssource.VolumeInfo) {
 			info.CapacityInodes = val
 		},
 	}
@@ -190,9 +190,9 @@ func (p *Prometheus) Get(ctx context.Context) (source.Metrics, error) {
 	return result, nil
 }
 
-// getMetric retrieves the given metric specified by `query' and and maps the
-// values to `metrics' using a provided valueMapperFunc.
-func (p *Prometheus) getMetric(ctx context.Context, query string, metrics source.Metrics, mapValue valueMapperFunc) error {
+// getMetric retrieves the given metric specified by `query' and maps the values
+// to `metrics' using a provided valueMapperFunc.
+func (p *Prometheus) getMetric(ctx context.Context, query string, metrics metricssource.Metrics, mapValue valueMapperFunc) error {
 	result, warnings, err := p.api.Query(ctx, query, time.Now())
 	if err != nil {
 		return err
@@ -226,7 +226,7 @@ func (p *Prometheus) getMetric(ctx context.Context, query string, metrics source
 
 		volInfo, exists := metrics[key]
 		if !exists {
-			volInfo = &source.VolumeInfo{}
+			volInfo = &metricssource.VolumeInfo{}
 			metrics[key] = volInfo
 		}
 		metricValue := int(val.Value)
