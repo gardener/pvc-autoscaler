@@ -14,6 +14,8 @@ import (
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	_ "github.com/gardener/pvc-autoscaler/internal/metrics"
+
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/controller"
 	"github.com/gardener/pvc-autoscaler/internal/index"
