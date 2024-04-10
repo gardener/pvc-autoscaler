@@ -34,8 +34,28 @@ var (
 		},
 		[]string{"namespace", "persistentvolumeclaim", "reason"},
 	)
+
+	// MaxCapacityReachedTotal is a metric which increments each time the
+	// max capacity for a PVC has been reached.
+	MaxCapacityReachedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Name:      "max_capacity_reached_total",
+			Help:      "Total number of times the max capacity has been reached for a PVC",
+		},
+		[]string{"namespace", "persistentvolumeclaim"},
+	)
+
+	SkippedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Name:      "skipped_total",
+			Help:      "Total number of times a PVC has been skipped",
+		},
+		[]string{"namespace", "persistentvolumeclaim", "reason"},
+	)
 )
 
 func init() {
-	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal)
+	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal)
 }
