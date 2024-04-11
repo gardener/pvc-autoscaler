@@ -54,4 +54,45 @@ var _ = Describe("Utils", func() {
 			Expect(utils.GetAnnotation(pod, "missing", "default")).To(Equal("default"))
 		})
 	})
+
+	Context("# IsPersistentVolumeClaimConditionPresentAndEqual", func() {
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "sample-pvc",
+			},
+			Status: corev1.PersistentVolumeClaimStatus{
+				Conditions: []corev1.PersistentVolumeClaimCondition{
+					{
+						Type:   corev1.PersistentVolumeClaimFileSystemResizePending,
+						Status: corev1.ConditionTrue,
+					},
+					{
+						Type:   corev1.PersistentVolumeClaimResizing,
+						Status: corev1.ConditionFalse,
+					},
+					{
+						Type:   corev1.PersistentVolumeClaimVolumeModifyingVolume,
+						Status: corev1.ConditionUnknown,
+					},
+				},
+			},
+		}
+
+		It("is present and true", func() {
+			Expect(utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending)).To(BeTrue())
+		})
+
+		It("is present and equal", func() {
+			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimFileSystemResizePending, corev1.ConditionTrue)).To(BeTrue())
+			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimResizing, corev1.ConditionFalse)).To(BeTrue())
+			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimVolumeModifyingVolume, corev1.ConditionUnknown)).To(BeTrue())
+		})
+
+		It("is present and false", func() {
+			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimFileSystemResizePending, corev1.ConditionFalse)).To(BeFalse())
+			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimResizing, corev1.ConditionTrue)).To(BeFalse())
+			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimResizing, corev1.ConditionTrue)).To(BeFalse())
+			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimVolumeModifyVolumeError, corev1.ConditionTrue)).To(BeFalse())
+		})
+	})
 })
