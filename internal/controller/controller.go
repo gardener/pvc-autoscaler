@@ -124,7 +124,10 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// This kind of an error is something we should not retry on
+	// This kind of an error is something we should not retry on. In fact,
+	// we should not even have received a request in the first place, as it
+	// is the job of the periodic runner to validate that each PVC contains
+	// valid annotations, but we add this safety check here anyways.
 	if err := utils.ValidatePersistentVolumeClaimAnnotations(&obj); err != nil {
 		logger.Info("refusing to proceed with reconciling", "reason", err.Error())
 		return ctrl.Result{}, nil
@@ -155,14 +158,7 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 	}
 
 	currSpecSize := obj.Spec.Resources.Requests.Storage()
-	if currSpecSize.IsZero() {
-		return ctrl.Result{}, ErrNoStorageRequests
-	}
-
 	currStatusSize := obj.Status.Capacity.Storage()
-	if currStatusSize.IsZero() {
-		return ctrl.Result{}, ErrNoStorageStatus
-	}
 
 	// If previously recorded size is equal to the current status it means
 	// we are still waiting for the resize to complete
