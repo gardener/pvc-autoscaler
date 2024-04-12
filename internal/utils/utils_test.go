@@ -40,7 +40,8 @@ var _ = Describe("Utils", func() {
 	Context("# GetAnnotation", func() {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "sample-pod",
+				Name:      "sample-pod",
+				Namespace: "default",
 				Annotations: map[string]string{
 					"foo": "bar",
 					"baz": "qux",
@@ -61,7 +62,8 @@ var _ = Describe("Utils", func() {
 	Context("# IsPersistentVolumeClaimConditionPresentAndEqual", func() {
 		pvc := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: "sample-pvc",
+				Name:      "sample-pvc",
+				Namespace: "default",
 			},
 			Status: corev1.PersistentVolumeClaimStatus{
 				Conditions: []corev1.PersistentVolumeClaimCondition{
@@ -103,7 +105,8 @@ var _ = Describe("Utils", func() {
 		It("shoud succeed with good annotations", func() {
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						annotation.IsEnabled:            "true",
 						annotation.IncreaseBy:           "25%",
@@ -130,7 +133,8 @@ var _ = Describe("Utils", func() {
 		It("shoud fail with zero capacity", func() {
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						annotation.IsEnabled:   "true",
 						annotation.MaxCapacity: "100Gi",
@@ -148,7 +152,8 @@ var _ = Describe("Utils", func() {
 		It("should fail with invalid max-capacity annotation", func() {
 			pvc1 := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						// No max capacity specified
 						annotation.IsEnabled: "true",
@@ -162,7 +167,8 @@ var _ = Describe("Utils", func() {
 			}
 			pvc2 := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						annotation.IsEnabled:   "true",
 						annotation.MaxCapacity: "foobar", // Bad resource value
@@ -182,7 +188,8 @@ var _ = Describe("Utils", func() {
 		It("should fail with bad increase-by annotation", func() {
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						annotation.IsEnabled:   "true",
 						annotation.MaxCapacity: "100Gi",
@@ -201,7 +208,8 @@ var _ = Describe("Utils", func() {
 		It("should fail with zero increase-by annotation", func() {
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						annotation.IsEnabled:   "true",
 						annotation.IncreaseBy:  "0%",
@@ -220,7 +228,8 @@ var _ = Describe("Utils", func() {
 		It("should fail with invalid threshold annotation", func() {
 			pvc1 := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						annotation.IsEnabled:   "true",
 						annotation.Threshold:   "0%", // Zero threshold is invalid
@@ -235,7 +244,8 @@ var _ = Describe("Utils", func() {
 			}
 			pvc2 := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						annotation.IsEnabled:   "true",
 						annotation.Threshold:   "foobar", // Bad threshold
@@ -256,7 +266,8 @@ var _ = Describe("Utils", func() {
 		It("should fail with max capacity less than current capacity", func() {
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "sample-pvc",
+					Name:      "sample-pvc",
+					Namespace: "default",
 					Annotations: map[string]string{
 						annotation.IsEnabled:   "true",
 						annotation.MaxCapacity: "50Gi",
