@@ -310,5 +310,40 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("cannot parse prev-size"))
 		})
+
+		It("should skip reconcile if pvc is still being resized", func() {
+			ctx := context.Background()
+			pvc, err := createPvc(ctx, "pvc-vol-is-still-being-resized", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "100Gi",
+				annotation.PrevSize:    "1Gi", // Prev size matches current size
+			}
+			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+
+			// We should see this PVC being skipped because current
+			// and previous recorded size are the same, which means
+			// that the pvc hasn't transitioned at all.
+			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
+			reconciler, err := newReconciler()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			result, err := reconciler.Reconcile(newCtx, req)
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(buf.String()).To(ContainSubstring("persistent volume claim is still being resized"))
+			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
+		})
 	})
 })
