@@ -77,6 +77,13 @@ func createPvc(ctx context.Context, name string, capacity string) (*corev1.Persi
 	return pvc, nil
 }
 
+// helper function to annotate the PVC with the given annotations
+func annotatePvc(ctx context.Context, pvc *corev1.PersistentVolumeClaim, annotations map[string]string) error {
+	patch := client.MergeFrom(pvc.DeepCopy())
+	pvc.ObjectMeta.Annotations = annotations
+	return k8sClient.Patch(ctx, pvc, patch)
+}
+
 var _ = Describe("PersistentVolumeClaim Controller", func() {
 	Context("Create reconciler instance", func() {
 		It("should fail without event channel", func() {
@@ -121,30 +128,21 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 		})
 
 		It("should refuse to reconcile pvc with invalid annotations", func() {
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "pvc-invalid-annotations",
-					Namespace: "default",
-					Annotations: map[string]string{
-						annotation.IsEnabled:   "true",
-						annotation.MaxCapacity: "100Gi",
-						annotation.IncreaseBy:  "bad-increase-by",
-					},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{
-							corev1.ResourceStorage: resource.MustParse("1Gi"),
-						},
-					},
-				},
-			}
-
-			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
 			ctx := context.Background()
-			Expect(k8sClient.Create(ctx, pvc)).To(Succeed())
+			pvc, err := createPvc(ctx, "pvc-with-invalid-annotations", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
 
+			// Annotate it with some invalid annotations
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "100Gi",
+				annotation.IncreaseBy:  "bad-increase-by",
+			}
+			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+
+			// Reconciling this PVC should fail, because of the bad annotations
+			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
 			reconciler, err := newReconciler()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(reconciler).NotTo(BeNil())
