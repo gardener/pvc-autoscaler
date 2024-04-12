@@ -161,7 +161,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
 		})
 
-		It("should skip reconcile if pvc is resizing", func() {
+		It("should skip reconcile if pvc resize has been started", func() {
 			ctx := context.Background()
 			pvc, err := createPvc(ctx, "pvc-is-resizing", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
@@ -200,6 +200,48 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("resize has been started"))
+			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
+		})
+
+		It("should skip reconcile if filesystem resize is pending", func() {
+			ctx := context.Background()
+			pvc, err := createPvc(ctx, "pvc-fs-resize-is-pending", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "100Gi",
+			}
+			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+
+			// Add the status conditions
+			patch := client.MergeFrom(pvc.DeepCopy())
+			pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+				{
+					Type:   corev1.PersistentVolumeClaimFileSystemResizePending,
+					Status: corev1.ConditionTrue,
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+
+			// We should see this PVC being skipped because the filesystem resize is pending
+			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
+			reconciler, err := newReconciler()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			result, err := reconciler.Reconcile(newCtx, req)
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(buf.String()).To(ContainSubstring("filesystem resize is pending"))
 			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
 		})
 	})
