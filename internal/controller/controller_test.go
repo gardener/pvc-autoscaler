@@ -85,6 +85,20 @@ func annotatePvc(ctx context.Context, pvc *corev1.PersistentVolumeClaim, annotat
 }
 
 var _ = Describe("PersistentVolumeClaim Controller", func() {
+	Context("SetupWithManager", func() {
+		It("should register with manager successfully", func() {
+			reconciler, err := newReconciler()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler).NotTo(BeNil())
+
+			mgr, err := ctrl.NewManager(cfg, ctrl.Options{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(mgr).NotTo(BeNil())
+
+			Expect(reconciler.SetupWithManager(mgr)).To(Succeed())
+		})
+	})
+
 	Context("Create reconciler instance", func() {
 		It("should fail without event channel", func() {
 			_, err := controller.New(
