@@ -15,12 +15,11 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/annotation"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/controller"
+	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -37,51 +36,6 @@ func newReconciler() (*controller.PersistentVolumeClaimReconciler, error) {
 	)
 
 	return reconciler, err
-}
-
-// helper function to create a new test PVC object.
-func createPvc(ctx context.Context, name string, capacity string) (*corev1.PersistentVolumeClaim, error) {
-	pvc := &corev1.PersistentVolumeClaim{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      name,
-			Namespace: "default",
-		},
-		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: ptr.To(testStorageClassName),
-			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-			Resources: corev1.VolumeResourceRequirements{
-				Requests: corev1.ResourceList{
-					corev1.ResourceStorage: resource.MustParse(capacity),
-				},
-			},
-		},
-	}
-
-	if err := k8sClient.Create(ctx, pvc); err != nil {
-		return nil, err
-	}
-
-	// Bind the PVC and update the status resources in order to make it look
-	// a bit more like a "real" PVC.
-	patch := client.MergeFrom(pvc.DeepCopy())
-	pvc.Status = corev1.PersistentVolumeClaimStatus{
-		Phase: corev1.ClaimBound,
-		Capacity: corev1.ResourceList{
-			corev1.ResourceStorage: resource.MustParse(capacity),
-		},
-	}
-	if err := k8sClient.Status().Patch(ctx, pvc, patch); err != nil {
-		return nil, err
-	}
-
-	return pvc, nil
-}
-
-// helper function to annotate the PVC with the given annotations
-func annotatePvc(ctx context.Context, pvc *corev1.PersistentVolumeClaim, annotations map[string]string) error {
-	patch := client.MergeFrom(pvc.DeepCopy())
-	pvc.ObjectMeta.Annotations = annotations
-	return k8sClient.Patch(ctx, pvc, patch)
 }
 
 var _ = Describe("PersistentVolumeClaim Controller", func() {
@@ -143,7 +97,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 
 		It("should refuse to reconcile pvc with invalid annotations", func() {
 			ctx := context.Background()
-			pvc, err := createPvc(ctx, "pvc-with-invalid-annotations", "1Gi")
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-with-invalid-annotations", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -153,7 +107,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 				annotation.MaxCapacity: "100Gi",
 				annotation.IncreaseBy:  "bad-increase-by",
 			}
-			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
 			// Reconciling this PVC should fail, because of the bad annotations
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
@@ -176,7 +130,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 
 		It("should skip reconcile if pvc resize has been started", func() {
 			ctx := context.Background()
-			pvc, err := createPvc(ctx, "pvc-is-resizing", "1Gi")
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-is-resizing", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -184,7 +138,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 				annotation.IsEnabled:   "true",
 				annotation.MaxCapacity: "100Gi",
 			}
-			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
 			// Add the status conditions
 			patch := client.MergeFrom(pvc.DeepCopy())
@@ -217,7 +171,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 
 		It("should skip reconcile if filesystem resize is pending", func() {
 			ctx := context.Background()
-			pvc, err := createPvc(ctx, "pvc-fs-resize-is-pending", "1Gi")
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-fs-resize-is-pending", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -225,7 +179,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 				annotation.IsEnabled:   "true",
 				annotation.MaxCapacity: "100Gi",
 			}
-			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
 			// Add the status conditions
 			patch := client.MergeFrom(pvc.DeepCopy())
@@ -258,7 +212,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 
 		It("should skip reconcile if volume is being modified", func() {
 			ctx := context.Background()
-			pvc, err := createPvc(ctx, "pvc-vol-is-being-modified", "1Gi")
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-vol-is-being-modified", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -266,7 +220,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 				annotation.IsEnabled:   "true",
 				annotation.MaxCapacity: "100Gi",
 			}
-			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
 			// Add the status conditions
 			patch := client.MergeFrom(pvc.DeepCopy())
@@ -299,7 +253,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 
 		It("should error out on invalid prev-size annotation", func() {
 			ctx := context.Background()
-			pvc, err := createPvc(ctx, "pvc-invalid-prev-size", "1Gi")
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-invalid-prev-size", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -308,7 +262,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 				annotation.MaxCapacity: "100Gi",
 				annotation.PrevSize:    "invalid-prev-size",
 			}
-			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
 			reconciler, err := newReconciler()
@@ -323,7 +277,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 
 		It("should skip reconcile if pvc is still being resized", func() {
 			ctx := context.Background()
-			pvc, err := createPvc(ctx, "pvc-vol-is-still-being-resized", "1Gi")
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-vol-is-still-being-resized", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -332,7 +286,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 				annotation.MaxCapacity: "100Gi",
 				annotation.PrevSize:    "1Gi", // Prev size matches current size
 			}
-			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
 			// We should see this PVC being skipped because current
 			// and previous recorded size are the same, which means
@@ -358,7 +312,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 		It("should successfully resize the pvc", func() {
 			ctx := context.Background()
 			initialCapacity := "1Gi"
-			pvc, err := createPvc(ctx, "pvc-should-resize", initialCapacity)
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-should-resize", initialCapacity)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -366,7 +320,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 				annotation.IsEnabled:   "true",
 				annotation.MaxCapacity: "100Gi",
 			}
-			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
 			reconciler, err := newReconciler()
@@ -395,7 +349,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 		It("should not resize if max capacity has been reached", func() {
 			ctx := context.Background()
 			initialCapacity := "1Gi"
-			pvc, err := createPvc(ctx, "pvc-max-capacity-reached", initialCapacity)
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-max-capacity-reached", initialCapacity)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -403,7 +357,7 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 				annotation.IsEnabled:   "true",
 				annotation.MaxCapacity: "3Gi", // We can resize 2 times only using the default increase-by
 			}
-			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
 			reconciler, err := newReconciler()
