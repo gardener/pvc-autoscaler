@@ -54,6 +54,10 @@ var ErrStorageClassNotFound = errors.New("no storage class found")
 // annotated PVC uses a storage class that does not support volume expansion.
 var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not support expansion")
 
+// ErrNoClient is an error which is returned when the periodic [Runner] was
+// configured configured without a Kubernetes API client.
+var ErrNoClient = errors.New("no client provided")
+
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
 // enqueues PersistentVolumeClaims for reconciling on regular basis.
 type Runner struct {
@@ -86,6 +90,10 @@ func New(opts ...Option) (*Runner, error) {
 
 	if r.eventCh == nil {
 		return nil, common.ErrNoEventChannel
+	}
+
+	if r.client == nil {
+		return nil, ErrNoClient
 	}
 
 	return r, nil
