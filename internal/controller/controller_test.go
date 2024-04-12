@@ -158,7 +158,6 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("refusing to proceed with reconciling"))
-			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
 		})
 
 		It("should skip reconcile if pvc resize has been started", func() {
@@ -200,7 +199,6 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("resize has been started"))
-			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
 		})
 
 		It("should skip reconcile if filesystem resize is pending", func() {
@@ -242,7 +240,6 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("filesystem resize is pending"))
-			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
 		})
 
 		It("should skip reconcile if volume is being modified", func() {
@@ -284,7 +281,6 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("volume is being modified"))
-			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
 		})
 
 		It("should error out on invalid prev-size annotation", func() {
@@ -343,7 +339,43 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("persistent volume claim is still being resized"))
-			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
+		})
+
+		It("should successfully resize the pvc", func() {
+			ctx := context.Background()
+			initialCapacity := "1Gi"
+			pvc, err := createPvc(ctx, "pvc-should-resize", initialCapacity)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "100Gi",
+			}
+			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+
+			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
+			reconciler, err := newReconciler()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler).NotTo(BeNil())
+
+			// Inspect the log messages and confirm that we've resized the pvc
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			result, err := reconciler.Reconcile(newCtx, req)
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buf.String()).To(ContainSubstring("resizing persistent volume claim"))
+
+			// We should see a prev-size annotation and the new size
+			// should be increased
+			var resizedPvc corev1.PersistentVolumeClaim
+			increasedCapacity := resource.MustParse("2Gi") // New capacity should be 2Gi
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(increasedCapacity))
 		})
 	})
 })
