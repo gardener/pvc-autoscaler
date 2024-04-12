@@ -62,7 +62,8 @@ vet:  ## Run go vet against code.
 
 .PHONY: test
 test: manifests fmt vet envtest  ## Run tests.
-	go test -v -coverprofile cover.out $$(go list ./... | grep -v /e2e)
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+		go test -v -coverprofile cover.out $$(go list ./... | grep -v test/e2e)
 
 .PHONY: test-e2e  # Run the e2e tests against a minikube k8s instance that is spun up.
 test-e2e:
@@ -216,7 +217,7 @@ $(CONTROLLER_GEN): $(LOCALBIN) $(call gen-tool-version,$(CONTROLLER_GEN),$(CONTR
 
 .PHONY: envtest
 envtest: $(ENVTEST)  ## Download setup-envtest locally if necessary.
-$(ENVTEST): $(LOCALBIN)
+$(ENVTEST): $(LOCALBIN) $(call gen-tool-version,$(ENVTEST),$(ENVTEST_VERSION))
 	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
 
 .PHONY: golangci-lint
