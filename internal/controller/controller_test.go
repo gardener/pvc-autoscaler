@@ -47,7 +47,7 @@ func createPvc(ctx context.Context, name string, capacity string) (*corev1.Persi
 			Namespace: "default",
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: ptr.To("my-storage-class"),
+			StorageClassName: ptr.To(testStorageClassName),
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
