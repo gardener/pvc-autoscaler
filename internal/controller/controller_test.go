@@ -377,5 +377,76 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
 			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(increasedCapacity))
 		})
+
+		It("should not resize if max capacity has been reached", func() {
+			ctx := context.Background()
+			initialCapacity := "1Gi"
+			pvc, err := createPvc(ctx, "pvc-max-capacity-reached", initialCapacity)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "3Gi", // We can resize 2 times only using the default increase-by
+			}
+			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+
+			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
+			reconciler, err := newReconciler()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler).NotTo(BeNil())
+
+			// Inspect the log messages and confirm that we've resized the pvc
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			// First resize
+			result, err := reconciler.Reconcile(newCtx, req)
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).NotTo(HaveOccurred())
+
+			wantLog := `"resizing persistent volume claim","from":"1Gi","to":"2Gi"}`
+			Expect(buf.String()).To(ContainSubstring(wantLog))
+
+			// We should see a prev-size annotation and the new size
+			// should be increased
+			var resizedPvc corev1.PersistentVolumeClaim
+			firstIncreaseCap := resource.MustParse("2Gi") // New capacity should be 2Gi
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(firstIncreaseCap))
+
+			// Update status of the PVC, so that it seems like it
+			// actually resized
+			patch := client.MergeFrom(resizedPvc.DeepCopy())
+			resizedPvc.Status.Capacity[corev1.ResourceStorage] = firstIncreaseCap
+			Expect(k8sClient.Status().Patch(ctx, &resizedPvc, patch)).To(Succeed())
+
+			// Reconcile for the second time
+			result, err = reconciler.Reconcile(newCtx, req)
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).NotTo(HaveOccurred())
+
+			wantLog = `"resizing persistent volume claim","from":"2Gi","to":"3Gi"}`
+			Expect(buf.String()).To(ContainSubstring(wantLog))
+
+			secondIncreaseCap := resource.MustParse("3Gi") // New capacity should be 3Gi
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(secondIncreaseCap))
+
+			// Update status of the PVC again, so that it seems like it
+			// actually resized
+			patch = client.MergeFrom(resizedPvc.DeepCopy())
+			resizedPvc.Status.Capacity[corev1.ResourceStorage] = secondIncreaseCap
+			Expect(k8sClient.Status().Patch(ctx, &resizedPvc, patch)).To(Succeed())
+
+			// Trying to reconcile for the third time should result
+			// in max-capacity reached events
+			result, err = reconciler.Reconcile(newCtx, req)
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buf.String()).To(ContainSubstring("max capacity reached"))
+		})
 	})
 })
