@@ -286,5 +286,29 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(buf.String()).To(ContainSubstring("volume is being modified"))
 			Expect(k8sClient.Delete(newCtx, pvc)).To(Succeed())
 		})
+
+		It("should error out on invalid prev-size annotation", func() {
+			ctx := context.Background()
+			pvc, err := createPvc(ctx, "pvc-invalid-prev-size", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "100Gi",
+				annotation.PrevSize:    "invalid-prev-size",
+			}
+			Expect(annotatePvc(ctx, pvc, annotations)).To(Succeed())
+
+			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
+			reconciler, err := newReconciler()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler).NotTo(BeNil())
+
+			result, err := reconciler.Reconcile(ctx, req)
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot parse prev-size"))
+		})
 	})
 })
