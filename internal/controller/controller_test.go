@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -36,6 +37,44 @@ func newReconciler() (*controller.PersistentVolumeClaimReconciler, error) {
 	)
 
 	return reconciler, err
+}
+
+// helper function to create a new test PVC object.
+func createPvc(ctx context.Context, name string, capacity string) (*corev1.PersistentVolumeClaim, error) {
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{
+			StorageClassName: ptr.To("my-storage-class"),
+			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			Resources: corev1.VolumeResourceRequirements{
+				Requests: corev1.ResourceList{
+					corev1.ResourceStorage: resource.MustParse(capacity),
+				},
+			},
+		},
+	}
+
+	if err := k8sClient.Create(ctx, pvc); err != nil {
+		return nil, err
+	}
+
+	// Bind the PVC and update the status resources in order to make it look
+	// a bit more like a "real" PVC.
+	patch := client.MergeFrom(pvc.DeepCopy())
+	pvc.Status = corev1.PersistentVolumeClaimStatus{
+		Phase: corev1.ClaimBound,
+		Capacity: corev1.ResourceList{
+			corev1.ResourceStorage: resource.MustParse(capacity),
+		},
+	}
+	if err := k8sClient.Status().Patch(ctx, pvc, patch); err != nil {
+		return nil, err
+	}
+
+	return pvc, nil
 }
 
 var _ = Describe("PersistentVolumeClaim Controller", func() {
