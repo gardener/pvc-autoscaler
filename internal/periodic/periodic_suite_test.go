@@ -1,4 +1,4 @@
-package periodic_test
+package periodic
 
 import (
 	"context"
