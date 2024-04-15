@@ -10,12 +10,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/gardener/pvc-autoscaler/internal/index"
 	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -30,6 +32,9 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 var eventCh = make(chan event.GenericEvent)
 var eventRecorder = record.NewFakeRecorder(1024)
+var k8sCache cache.Cache
+var parentCtx context.Context
+var cancelFunc context.CancelFunc
 
 func TestPeriodic(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -52,6 +57,8 @@ var _ = BeforeSuite(func() {
 			fmt.Sprintf("1.29.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
 	}
 
+	parentCtx, cancelFunc = context.WithCancel(context.Background())
+
 	var err error
 	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
@@ -61,7 +68,27 @@ var _ = BeforeSuite(func() {
 	err = corev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
+	// Create cache and register our index
+	cacheOpts := cache.Options{
+		Scheme: scheme.Scheme,
+	}
+	k8sCache, err = cache.New(cfg, cacheOpts)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(k8sCache).NotTo(BeNil())
+	err = k8sCache.IndexField(parentCtx, &corev1.PersistentVolumeClaim{}, index.Key, index.IndexerFunc)
+	Expect(err).NotTo(HaveOccurred())
+
+	go func() {
+		Expect(k8sCache.Start(parentCtx)).NotTo(HaveOccurred())
+	}()
+
+	opts := client.Options{
+		Scheme: scheme.Scheme,
+		Cache: &client.CacheOptions{
+			Reader: k8sCache,
+		},
+	}
+	k8sClient, err = client.New(cfg, opts)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
 
@@ -71,6 +98,7 @@ var _ = BeforeSuite(func() {
 
 var _ = AfterSuite(func() {
 	By("tearing down the test environment")
+	cancelFunc()
 	err := testEnv.Stop()
 	Expect(err).NotTo(HaveOccurred())
 })
