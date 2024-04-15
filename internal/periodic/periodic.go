@@ -235,6 +235,10 @@ func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim
 		}
 	}
 
+	if obj.Annotations == nil {
+		obj.Annotations = make(map[string]string)
+	}
+
 	obj.Annotations[annotation.LastCheck] = strconv.FormatInt(now.Unix(), 10)
 	obj.Annotations[annotation.NextCheck] = strconv.FormatInt(nextCheck.Unix(), 10)
 	obj.Annotations[annotation.UsedSpacePercentage] = usedSpaceStr
