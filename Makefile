@@ -63,7 +63,7 @@ vet:  ## Run go vet against code.
 .PHONY: test
 test: manifests fmt vet envtest  ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
-		go test -v -coverprofile cover.out $$(go list ./... | grep -v test/e2e)
+		go test -v -coverprofile cover.out $$(go list ./... | grep -v -E 'test/e2e|test/utils|/cmd')
 
 .PHONY: test-e2e  # Run the e2e tests against a minikube k8s instance that is spun up.
 test-e2e:
