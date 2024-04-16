@@ -34,10 +34,6 @@ import (
 // space/inodes utilization is unknown.
 const UnknownUtilizationValue = "unknown"
 
-// ErrNoMetrics is an error which is returned when metrics about a PVC are
-// missing.
-var ErrNoMetrics = errors.New("no metrics found")
-
 // ErrNoMetricsSource is returned when the [Runner] is configured without a
 // metrics source.
 var ErrNoMetricsSource = errors.New("no metrics source provided")
@@ -263,7 +259,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 
 	// No metrics found, nothing to do for now
 	if volInfo == nil {
-		return false, ErrNoMetrics
+		return false, common.ErrNoMetrics
 	}
 
 	// Validate the user-specified annotations and return early, if they are
@@ -293,7 +289,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 	// didn't get any metrics for it.
 	freeSpace, err := volInfo.FreeSpacePercentage()
 	if err != nil {
-		return false, ErrNoMetrics
+		return false, common.ErrNoMetrics
 	}
 
 	// Even, if we don't have inode metrics we still want to proceed here.

@@ -22,6 +22,10 @@ var ErrNoEventRecorder = errors.New("no event recorder provided")
 // controller.
 var ErrNoEventChannel = errors.New("no event channel provided")
 
+// ErrNoMetrics is an error which is returned when metrics about a PVC are
+// missing.
+var ErrNoMetrics = errors.New("no metrics found")
+
 const (
 	// ControllerName is the name of the controller
 	ControllerName = "pvc_autoscaler"
