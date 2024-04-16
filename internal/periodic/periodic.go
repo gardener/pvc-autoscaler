@@ -173,6 +173,11 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		return err
 	}
 
+	// Nothing to do for now
+	if len(items.Items) == 0 {
+		return nil
+	}
+
 	metricsData, err := r.metricsSource.Get(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get metrics: %w", err)
