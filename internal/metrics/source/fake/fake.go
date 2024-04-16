@@ -9,10 +9,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gardener/pvc-autoscaler/internal/common"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 
 	"k8s.io/apimachinery/pkg/types"
 )
+
+// AlwaysFailing is a [metricssource.Source] implementation which always fails to get metrics.
+type AlwaysFailing struct{}
+
+// Get implements the [metricssource.Source] interface
+func (s *AlwaysFailing) Get(ctx context.Context) (metricssource.Metrics, error) {
+	return nil, common.ErrNoMetrics
+}
 
 // Item represents a fake item from the [Fake] registry.
 type Item struct {

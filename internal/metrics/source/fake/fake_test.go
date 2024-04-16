@@ -7,7 +7,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/fake"
+
 	"k8s.io/apimachinery/pkg/types"
 )
 
@@ -113,6 +115,16 @@ var _ = Describe("Fake", func() {
 
 			usedInodes, _ = result[key].UsedInodesPercentage()
 			Expect(usedInodes).To(Equal(100.0))
+		})
+	})
+
+	Context("Create a new AlwaysFailing metrics source", func() {
+		It("should always return an error", func() {
+			s := &fake.AlwaysFailing{}
+			ctx := context.Background()
+			result, err := s.Get(ctx)
+			Expect(err).To(MatchError(common.ErrNoMetrics))
+			Expect(result).To(BeNil())
 		})
 	})
 })
