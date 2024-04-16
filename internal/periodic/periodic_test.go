@@ -3,6 +3,8 @@ package periodic
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,9 +24,10 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
-
-// helper function to create a new fake metrics source
 
 // creates a new test periodic runner
 func newRunner() (*Runner, error) {
@@ -160,7 +163,7 @@ var _ = Describe("Periodic Runner", func() {
 	})
 
 	Context("shouldReconcilePVC predicate", func() {
-		It("should return ErrNoMetrics", func() {
+		It("should return common.ErrNoMetrics", func() {
 			ctx := context.Background()
 			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-without-volinfo", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
@@ -179,13 +182,13 @@ var _ = Describe("Periodic Runner", func() {
 			// No metrics at all
 			ok, err := runner.shouldReconcilePVC(ctx, pvc, nil)
 			Expect(ok).To(BeFalse())
-			Expect(err).To(MatchError(ErrNoMetrics))
+			Expect(err).To(MatchError(common.ErrNoMetrics))
 
 			// Provide an "empty" volume info, as if we got zero
 			// values for available and capacity space
 			ok, err = runner.shouldReconcilePVC(ctx, pvc, &metricssource.VolumeInfo{})
 			Expect(ok).To(BeFalse())
-			Expect(err).To(MatchError(ErrNoMetrics))
+			Expect(err).To(MatchError(common.ErrNoMetrics))
 		})
 
 		It("should return error because of invalid/missing annotations", func() {
@@ -490,6 +493,176 @@ var _ = Describe("Periodic Runner", func() {
 			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
 			Expect(ok).To(BeFalse())
 			Expect(err).To(BeNil())
+		})
+	})
+
+	Context("enqueueObjects", func() {
+		It("should not enqueue -- PVCs are not annotated", func() {
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// The test pvc
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "sample-pvc-1", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			// A fast space and inodes "consumer"
+			metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
+			fakeItem := &fake.Item{
+				NamespacedName:         client.ObjectKeyFromObject(pvc),
+				CapacityBytes:          10000,
+				AvailableBytes:         10000,
+				CapacityInodes:         10000,
+				AvailableInodes:        10000,
+				ConsumeBytesIncrement:  1000,
+				ConsumeInodesIncrement: 1000,
+			}
+			metricsSource.Register(fakeItem)
+
+			newCtx, cancelFunc := context.WithCancel(parentCtx)
+			go func() {
+				ch := time.After(500 * time.Millisecond)
+				<-ch
+				cancelFunc()
+			}()
+			metricsSource.Start(newCtx)
+
+			// Reconfigure the periodic runner, so that we always
+			// start with a clean state of events. Also, reconfigure
+			// the metrics source.
+			eventCh := make(chan event.GenericEvent, 128)
+			withEventChOpt := WithEventChannel(eventCh)
+			withMetricsSourceOpt := WithMetricsSource(metricsSource)
+			withEventChOpt(runner)
+			withMetricsSourceOpt(runner)
+
+			// We should not see any events for this PVC, even if it
+			// is already full, since we haven't annotated it
+			Expect(runner.enqueueObjects(parentCtx)).To(Succeed())
+			waitCh := time.After(500 * time.Millisecond)
+			select {
+			case obj := <-eventCh:
+				Expect(obj).To(BeNil())
+			case <-waitCh:
+				break
+			}
+		})
+
+		It("should not enqueue -- failed to get metrics", func() {
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// The test pvc
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "sample-pvc-2", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			// Reconfigure the periodic runner to use an always failing metrics source
+			metricsSource := &fake.AlwaysFailing{}
+			withMetricsSourceOpt := WithMetricsSource(metricsSource)
+			withMetricsSourceOpt(runner)
+
+			// We should not see any events for this PVC, since the
+			// metrics source is returning errors
+			Expect(runner.enqueueObjects(parentCtx)).NotTo(Succeed())
+		})
+
+		It("should enqueue -- threshold has been reached", func() {
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// The test pvc
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "sample-pvc-3", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "100Gi",
+			}
+			Expect(testutils.AnnotatePVC(parentCtx, k8sClient, pvc, annotations)).To(Succeed())
+
+			// A fast space and inodes "consumer"
+			metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
+			fakeItem := &fake.Item{
+				NamespacedName:         client.ObjectKeyFromObject(pvc),
+				CapacityBytes:          10000,
+				AvailableBytes:         10000,
+				CapacityInodes:         10000,
+				AvailableInodes:        10000,
+				ConsumeBytesIncrement:  1000,
+				ConsumeInodesIncrement: 1000,
+			}
+			metricsSource.Register(fakeItem)
+
+			newCtx, cancelFunc := context.WithCancel(parentCtx)
+			go func() {
+				ch := time.After(500 * time.Millisecond)
+				<-ch
+				cancelFunc()
+			}()
+			metricsSource.Start(newCtx)
+
+			// Reconfigure the periodic runner, so that we always
+			// start with a clean state of events. Also, reconfigure
+			// the metrics source.
+			eventCh := make(chan event.GenericEvent, 128)
+			withEventChOpt := WithEventChannel(eventCh)
+			withMetricsSourceOpt := WithMetricsSource(metricsSource)
+			withEventChOpt(runner)
+			withMetricsSourceOpt(runner)
+
+			// We should see an event that our test PVC needs to be reconciled
+			Expect(runner.enqueueObjects(parentCtx)).To(Succeed())
+			waitCh := time.After(500 * time.Millisecond)
+			select {
+			case obj := <-eventCh:
+				Expect(obj).NotTo(BeNil())
+			case <-waitCh:
+				break
+			}
+		})
+	})
+
+	Context("Start periodic runner", func() {
+		It("should fail to enqueue because of metrics source", func() {
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// The test pvc
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "sample-pvc-4", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "100Gi",
+			}
+			Expect(testutils.AnnotatePVC(parentCtx, k8sClient, pvc, annotations)).To(Succeed())
+
+			// Reconfigure the periodic runner to use our always
+			// failing metrics source. Also, change the schedule to
+			// run more frequently.
+			withMetricsSourceOpt := WithMetricsSource(&fake.AlwaysFailing{})
+			withMetricsSourceOpt(runner)
+			withIntervalOpt := WithInterval(100 * time.Millisecond)
+			withIntervalOpt(runner)
+
+			// Inspect the log messages, that it did actually failed
+			// to enqueue objects
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+
+			ctx1, cancelFunc := context.WithTimeout(parentCtx, time.Second)
+			defer cancelFunc()
+			ctx2 := log.IntoContext(ctx1, logger)
+			Expect(runner.Start(ctx2)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("failed to enqueue persistentvolumeclaims"))
 		})
 	})
 })
