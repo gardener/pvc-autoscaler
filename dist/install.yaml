@@ -266,7 +266,7 @@ spec:
         - --prometheus-address=http://prometheus-k8s.monitoring.svc.cluster.local:9090
         command:
         - /manager
-        image: europe-docker.pkg.dev/gardener-project/releases/pvc-autoscaler:ffebeff
+        image: europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler:latest
         livenessProbe:
           httpGet:
             path: /healthz

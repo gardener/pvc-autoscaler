@@ -1,6 +1,14 @@
 # Image URL to use all building/pushing image targets
-IMG ?= europe-docker.pkg.dev/gardener-project/releases/pvc-autoscaler
-IMAGE_TAG ?= $(shell git rev-parse --short HEAD)
+IMG ?= europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler
+
+VERSION := $(shell cat VERSION)
+EFFECTIVE_VERSION := $(VERSION)-$(shell git rev-parse --short HEAD)
+
+ifneq ($(strip $(shell git status --porcelain 2>/dev/null)),)
+	EFFECTIVE_VERSION := $(EFFECTIVE_VERSION)-dirty
+endif
+
+IMAGE_TAG ?= $(EFFECTIVE_VERSION)
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.29.0
@@ -143,7 +151,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 build-installer: manifests kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
 	echo "---" > dist/install.yaml  # Add a document separator before appending
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:${IMAGE_TAG}
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:latest
 	$(KUSTOMIZE) build config/default >> dist/install.yaml
 
 ##@ Deployment
