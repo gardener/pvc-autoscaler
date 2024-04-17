@@ -2,7 +2,7 @@
 IMG ?= europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler
 
 VERSION := $(shell cat VERSION)
-EFFECTIVE_VERSION := $(VERSION)-$(shell git rev-parse --short HEAD)
+EFFECTIVE_VERSION ?= $(VERSION)-$(shell git rev-parse --short HEAD)
 
 ifneq ($(strip $(shell git status --porcelain 2>/dev/null)),)
 	EFFECTIVE_VERSION := $(EFFECTIVE_VERSION)-dirty
