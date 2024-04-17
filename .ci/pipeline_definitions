@@ -1,0 +1,66 @@
+pvc-autoscaler:
+  base_definition:
+    traits:
+      version:
+        preprocess: 'inject-commit-hash'
+        inject_effective_version: true
+      component_descriptor:
+        ocm_repository: europe-docker.pkg.dev/gardener-project/snapshots
+      publish:
+        oci-builder: docker-buildx
+        platforms:
+          - linux/amd64
+          - linux/arm64
+        dockerimages:
+          pvc-autoscaler:
+            image: europe-docker.pkg.dev/gardener-project/snapshots/gardener/pvc-autoscaler
+            dockerfile: Dockerfile
+            resource_labels:
+              - name: 'gardener.cloud/cve-categorisation'
+                value:
+                  network_exposure: protected
+                  authentication_enforced: false
+                  user_interaction: gardener-operator
+                  confidentiality_requirement: high
+                  integrity_requirement: high
+                  availability_requirement: high
+  jobs:
+    head-update:
+      traits:
+        component_descriptor:
+          ocm_repository_mappings:
+            - repository: europe-docker.pkg.dev/gardener-project/releases
+          retention_policy: 'clean-snapshots'
+        draft_release: ~
+        options:
+          public_build_logs: true
+    pull-request:
+      traits:
+        pull-request: ~
+        component_descriptor:
+          ocm_repository_mappings:
+            - repository: europe-docker.pkg.dev/gardener-project/releases
+        options:
+          public_build_logs: true
+    release:
+      traits:
+        version:
+          preprocess: 'finalize'
+        release:
+          nextversion: 'bump_patch'
+          next_version_callback: '.ci/prepare_release'
+          release_callback: '.ci/prepare_release'
+        slack:
+          default_channel: internal_scp_workspace
+          channel_cfgs:
+            internal_scp_workspace:
+              channel_name: 'C017KSLTF4H'  #gardener-autoscaling
+              slack_cfg_name: 'ti_workspace'
+        component_descriptor:
+          ocm_repository: europe-docker.pkg.dev/gardener-project/releases
+        publish:
+          oci-builder: docker-buildx
+          dockerimages:
+            pvc-autoscaler:
+              image: europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler
+              tag_as_latest: true
