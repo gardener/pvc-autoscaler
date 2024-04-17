@@ -35,7 +35,10 @@ var StorageClass storagev1.StorageClass = storagev1.StorageClass{
 }
 
 // CreatePVC is a helper function used to create a test PVC
-func CreatePVC(ctx context.Context, k8sClient client.Client, name string, capacity string) (*corev1.PersistentVolumeClaim, error) {
+func CreatePVC(ctx context.Context,
+	k8sClient client.Client,
+	name string,
+	capacity string) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        name,
@@ -74,7 +77,10 @@ func CreatePVC(ctx context.Context, k8sClient client.Client, name string, capaci
 }
 
 // AnnotatePVC is a help function to annotate the PVC with the given annotations
-func AnnotatePVC(ctx context.Context, k8sClient client.Client, pvc *corev1.PersistentVolumeClaim, annotations map[string]string) error {
+func AnnotatePVC(ctx context.Context,
+	k8sClient client.Client,
+	pvc *corev1.PersistentVolumeClaim,
+	annotations map[string]string) error {
 	patch := client.MergeFrom(pvc.DeepCopy())
 	pvc.ObjectMeta.Annotations = annotations
 	return k8sClient.Patch(ctx, pvc, patch)

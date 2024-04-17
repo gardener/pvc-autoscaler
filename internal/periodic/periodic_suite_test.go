@@ -29,8 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-const testStorageClassName = "my-storage-class"
-
 var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
