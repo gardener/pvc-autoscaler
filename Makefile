@@ -88,7 +88,7 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
 .PHONY: minikube-start
-minikube-start: minikube  ## Start a local dev environment
+minikube-start: minikube yq  ## Start a local dev environment
 	env MINIKUBE_PROFILE=$(MINIKUBE_PROFILE) ./hack/minikube-start.sh
 
 .PHONY: minikube-stop
