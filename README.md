@@ -1,5 +1,7 @@
 # pvc-autoscaler
 
+[![REUSE status](https://api.reuse.software/badge/github.com/gardener/pvc-autoscaler)](https://api.reuse.software/info/github.com/gardener/pvc-autoscaler)
+
 `pvc-autoscaler` is a Kubernetes controller which periodically monitors
 [persistent volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) and
 resizes them, if the available space or number of inodes drops below a certain
@@ -168,6 +170,15 @@ In order to run the end-to-end tests we need a clean test environment.  The
 following command will create a new test environment, build and deploy the
 operator image, run the e2e tests against it and finally destroy the test
 environment.
+
+NOTE: Since the e2e tests are using `minikube` there are known issues with
+version v1.33.0 of minikube. For more details check the following issues.
+
+- https://github.com/kubernetes/minikube/issues/18705
+- https://github.com/kubernetes/minikube/pull/18737
+- https://github.com/kubernetes/minikube/issues/18732
+
+Please use minikube version v1.32.0 until above issues have been resolved.
 
 ``` shell
 make test-e2e
