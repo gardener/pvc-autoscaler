@@ -32,8 +32,7 @@ KUBE_PROMETHEUS_REPO=${KUBE_PROMETHEUS_REPO:-https://github.com/prometheus-opera
 KUBE_PROMETHEUS_BRANCH=${KUBE_PROMETHEUS_BRANCH:-main}
 
 # OpenEBS Operator
-OPENEBS_OPERATOR=${OPENEBS_OPERATOR:-https://openebs.github.io/charts/openebs-operator.yaml}
-OPENEBS_CSI_DRIVER=${OPENEBS_CSI_DRIVER:-https://openebs.github.io/charts/lvm-operator.yaml}
+OPENEBS_HELM_REPO=${OPENEBS_HELM_REPO:-https://openebs.github.io/openebs}
 
 # Start a new local minikube cluster
 function _minikube_start() {
@@ -74,16 +73,16 @@ function _install_kube_prometheus() {
     cd kube-prometheus && \
     git checkout -b "${_local_branch}" "origin/${KUBE_PROMETHEUS_BRANCH}"
 
-  kubectl apply --server-side -f manifests/setup
-  kubectl wait \
+  minikube kubectl -- apply --server-side -f manifests/setup
+  minikube kubectl -- wait \
           --for condition=Established \
           --all CustomResourceDefinition \
           --namespace=monitoring
 
-  kubectl apply -f manifests/
+  minikube kubectl -- apply -f manifests/
   _msg_info "Waiting for monitoring pods to become ready ..."
   sleep 15
-  kubectl wait \
+  minikube kubectl -- wait \
           --for condition=Ready \
           --all Pod \
           --namespace monitoring \
@@ -98,34 +97,21 @@ function _install_kube_prometheus() {
 # See https://openebs.io/docs/user-guides/installation
 function _install_openebs_operator() {
   _msg_info "Installing OpenEBS operator ..."
-  kubectl apply -f "${OPENEBS_OPERATOR}"
+  helm repo add openebs "${OPENEBS_HELM_REPO}"
+  helm repo update
+  helm install openebs \
+       --namespace openebs \
+       --create-namespace \
+       --set engines.local.zfs.enabled=false \
+       --set engines.replicated.mayastor.enabled=false \
+       openebs/openebs
 
   _msg_info "Waiting for OpenEBS pods to become ready ..."
   sleep 15
-  kubectl wait \
+  minikube kubectl -- wait \
           --for condition=Ready \
           --all Pod \
           --namespace openebs \
-          --timeout 10m
-}
-
-# Installs the OpenEBS LVM CSI driver
-#
-# See https://github.com/openebs/lvm-localpv
-function _install_openebs_lvm_driver() {
-  _msg_info "Installing OpenEBS LVM CSI driver ..."
-
-  kubectl apply -f "${OPENEBS_CSI_DRIVER}"
-  _msg_info "Waiting for OpenEBS LVM CSI driver pods to become ready ..."
-  sleep 15
-
-  # The OpenEBS LVM CSI driver installs daemonsets in the kube-system (sigh), so
-  # we wait for them there.
-  kubectl wait \
-          --for condition=Ready \
-          --all Pod \
-          --namespace kube-system \
-          --selector role=openebs-lvm \
           --timeout 10m
 
   _msg_info "Creating LVM PV and VG for OpenEBS driver ..."
@@ -139,14 +125,13 @@ function _install_openebs_lvm_driver() {
   minikube ssh -- sudo vgcreate vg0 "${_lo_dev}"
 
   _msg_info "Installing LVM-backed Storage Class ..."
-  kubectl apply -f "${_TEST_MANIFESTS_DIR}/storageclass.yaml"
+  minikube kubectl -- apply -f "${_TEST_MANIFESTS_DIR}/storageclass.yaml"
 }
 
 function _main() {
   _minikube_start
   _install_kube_prometheus
   _install_openebs_operator
-  _install_openebs_lvm_driver
 }
 
 _main $*

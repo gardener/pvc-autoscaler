@@ -185,6 +185,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 MINIKUBE ?= $(LOCALBIN)/minikube
 YQ ?= $(LOCALBIN)/yq
+HELM ?= $(LOCALBIN)/helm
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.4.1
@@ -193,6 +194,7 @@ ENVTEST_VERSION ?= release-0.17
 GOLANGCI_LINT_VERSION ?= v1.57.2
 MINIKUBE_VERSION ?= v1.32.0
 YQ_VERSION ?= v4.43.1
+HELM_VERSION ?= v3.14.4
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -212,6 +214,14 @@ gen-tool-version = $(LOCALBIN)/.version_$(subst $(LOCALBIN)/,,$(1))_$(2)
 kustomize: $(KUSTOMIZE)  ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN) $(call gen-tool-version,$(KUSTOMIZE),$(KUSTOMIZE_VERSION))
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
+
+.PHONY: helm
+helm: $(HELM)  ## Download helm locally if necessary.
+$(HELM): $(LOCALBIN) $(call gen-tool-version,$(HELM),$(HELM_VERSION))
+	curl -L -o - \
+		https://get.helm.sh/helm-$(HELM_VERSION)-$(GOOS)-$(GOARCH).tar.gz | \
+		tar zxvf - -C $(LOCALBIN) --strip-components=1 $(GOOS)-$(GOARCH)/helm
+	touch $(HELM) && chmod +x $(HELM)
 
 .PHONY: minikube
 minikube: $(MINIKUBE)  ## Download minikube locally if necessary.
