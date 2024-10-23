@@ -1,6 +1,6 @@
 module github.com/gardener/pvc-autoscaler
 
-go 1.23.2
+go 1.23
 
 require (
 	github.com/onsi/ginkgo/v2 v2.19.0
