@@ -188,20 +188,20 @@ YQ ?= $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v5.4.1
-CONTROLLER_TOOLS_VERSION ?= v0.14.0
-ENVTEST_VERSION ?= release-0.17
-GOLANGCI_LINT_VERSION ?= v1.57.2
-MINIKUBE_VERSION ?= v1.32.0
-YQ_VERSION ?= v4.43.1
-HELM_VERSION ?= v3.14.4
+KUSTOMIZE_VERSION ?= v5.5.0
+CONTROLLER_TOOLS_VERSION ?= v0.16.4
+ENVTEST_VERSION ?= release-0.19
+GOLANGCI_LINT_VERSION ?= v1.61.0
+MINIKUBE_VERSION ?= v1.34.0
+YQ_VERSION ?= v4.44.3
+HELM_VERSION ?= v3.16.2
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
 MINIKUBE_DRIVER ?= qemu
 
 # A target which is used to clean up previous versions of tools
-$(LOCALBIN)/.version_%:
+$(LOCALBIN)/.version_%: | $(LOCALBIN)
 	@file=$@; rm -f $${file%_*}*
 	@touch $@
 
@@ -211,41 +211,41 @@ $(LOCALBIN)/.version_%:
 gen-tool-version = $(LOCALBIN)/.version_$(subst $(LOCALBIN)/,,$(1))_$(2)
 
 .PHONY: kustomize
-kustomize: $(KUSTOMIZE)  ## Download kustomize locally if necessary.
-$(KUSTOMIZE): $(LOCALBIN) $(call gen-tool-version,$(KUSTOMIZE),$(KUSTOMIZE_VERSION))
+kustomize: $(KUSTOMIZE) | $(LOCALBIN)  ## Download kustomize locally if necessary.
+$(KUSTOMIZE): $(call gen-tool-version,$(KUSTOMIZE),$(KUSTOMIZE_VERSION))
 	$(call go-install-tool,$(KUSTOMIZE),sigs.k8s.io/kustomize/kustomize/v5,$(KUSTOMIZE_VERSION))
 
 .PHONY: helm
-helm: $(HELM)  ## Download helm locally if necessary.
-$(HELM): $(LOCALBIN) $(call gen-tool-version,$(HELM),$(HELM_VERSION))
+helm: $(HELM) | $(LOCALBIN)  ## Download helm locally if necessary.
+$(HELM): $(call gen-tool-version,$(HELM),$(HELM_VERSION))
 	curl -L -o - \
 		https://get.helm.sh/helm-$(HELM_VERSION)-$(GOOS)-$(GOARCH).tar.gz | \
 		tar zxvf - -C $(LOCALBIN) --strip-components=1 $(GOOS)-$(GOARCH)/helm
 	touch $(HELM) && chmod +x $(HELM)
 
 .PHONY: minikube
-minikube: $(MINIKUBE)  ## Download minikube locally if necessary.
-$(MINIKUBE): $(LOCALBIN) $(call gen-tool-version,$(MINIKUBE),$(MINIKUBE_VERSION))
+minikube: $(MINIKUBE) | $(LOCALBIN)  ## Download minikube locally if necessary.
+$(MINIKUBE): $(call gen-tool-version,$(MINIKUBE),$(MINIKUBE_VERSION))
 	$(call download-tool,minikube,https://github.com/kubernetes/minikube/releases/download/$(MINIKUBE_VERSION)/minikube-$(GOOS)-$(GOARCH))
 
 .PHONY: controller-gen
-controller-gen: $(CONTROLLER_GEN) ## Download controller-gen locally if necessary.
-$(CONTROLLER_GEN): $(LOCALBIN) $(call gen-tool-version,$(CONTROLLER_GEN),$(CONTROLLER_TOOLS_VERSION))
+controller-gen: $(CONTROLLER_GEN) | $(LOCALBIN)  ## Download controller-gen locally if necessary.
+$(CONTROLLER_GEN): $(call gen-tool-version,$(CONTROLLER_GEN),$(CONTROLLER_TOOLS_VERSION))
 	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
 
 .PHONY: envtest
-envtest: $(ENVTEST)  ## Download setup-envtest locally if necessary.
-$(ENVTEST): $(LOCALBIN) $(call gen-tool-version,$(ENVTEST),$(ENVTEST_VERSION))
+envtest: $(ENVTEST) | $(LOCALBIN) ## Download setup-envtest locally if necessary.
+$(ENVTEST): $(call gen-tool-version,$(ENVTEST),$(ENVTEST_VERSION))
 	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
 
 .PHONY: golangci-lint
-golangci-lint: $(GOLANGCI_LINT) ## Download golangci-lint locally if necessary.
-$(GOLANGCI_LINT): $(LOCALBIN) $(call gen-tool-version,$(GOLANGCI_LINT),$(GOLANGCI_LINT_VERSION))
+golangci-lint: $(GOLANGCI_LINT) | $(LOCALBIN)  ## Download golangci-lint locally if necessary.
+$(GOLANGCI_LINT): $(call gen-tool-version,$(GOLANGCI_LINT),$(GOLANGCI_LINT_VERSION))
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 .PHONY: yq
-yq: $(YQ)  ## Download yq locally if necessary.
-$(YQ): $(LOCALBIN) $(call gen-tool-version,$(YQ),$(YQ_VERSION))
+yq: $(YQ) | $(LOCALBIN)  ## Download yq locally if necessary.
+$(YQ): $(call gen-tool-version,$(YQ),$(YQ_VERSION))
 	$(call download-tool,yq,https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(GOOS)_$(GOARCH))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
