@@ -232,13 +232,11 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *PersistentVolumeClaimReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	src := &source.Channel{
-		Source: r.eventCh,
-	}
-	handler := &handler.EnqueueRequestForObject{}
+	h := &handler.EnqueueRequestForObject{}
+	src := source.Channel(r.eventCh, h)
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(common.ControllerName).
-		WatchesRawSource(src, handler).
+		WatchesRawSource(src).
 		Complete(r)
 }
