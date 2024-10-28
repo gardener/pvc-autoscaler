@@ -5,6 +5,7 @@
 domain: gardener.cloud
 layout:
 - go.kubebuilder.io/v4
+multigroup: true
 projectName: pvc-autoscaler
 repo: github.com/gardener/pvc-autoscaler
 resources:
