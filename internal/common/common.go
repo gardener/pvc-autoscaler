@@ -37,4 +37,8 @@ const (
 	// DefaultIncreaseByValue is the default increase-by value, if not
 	// specified for a PVC object.
 	DefaultIncreaseByValue = "10%"
+
+	// ScalingResolutionBytes is the smallest possible step. Any storage request set by the autoscaler is guaranteed
+	// to be divisible by that value. ScalingResolutionBytes is guaranteed to be an even number.
+	ScalingResolutionBytes = 1024 * 1024 * 1024
 )

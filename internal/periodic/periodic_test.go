@@ -346,7 +346,7 @@ var _ = Describe("Periodic Runner", func() {
 			// Sample volume info metrics
 			volInfo := &metricssource.VolumeInfo{
 				AvailableBytes:  1000,
-				CapacityBytes:   1000,
+				CapacityBytes:   1024 * 1024 * 1024,
 				AvailableInodes: 1000,
 				CapacityInodes:  1000,
 			}
@@ -380,7 +380,7 @@ var _ = Describe("Periodic Runner", func() {
 			// Sample volume info metrics
 			volInfo := &metricssource.VolumeInfo{
 				AvailableBytes:  1000,
-				CapacityBytes:   1000,
+				CapacityBytes:   1024 * 1024 * 1024,
 				AvailableInodes: 1000,
 				CapacityInodes:  1000,
 			}
@@ -408,8 +408,8 @@ var _ = Describe("Periodic Runner", func() {
 
 			// Sample volume info metrics with free space less < 10%
 			volInfo := &metricssource.VolumeInfo{
-				AvailableBytes:  90,
-				CapacityBytes:   1000,
+				AvailableBytes:  90 * 1024 * 1024,
+				CapacityBytes:   1000 * 1024 * 1024,
 				AvailableInodes: 1000,
 				CapacityInodes:  1000,
 			}
@@ -432,6 +432,45 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(event).To(Equal(wantEvent))
 		})
 
+		It("should return ErrPrometheusMetricOutdated", func() {
+			ctx := context.Background()
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-free-space-metrics-outdated", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:   "true",
+				annotation.MaxCapacity: "100Gi",
+			}
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
+
+			// Sample volume info metrics with free space less < 10%
+			volInfo := &metricssource.VolumeInfo{
+				AvailableBytes:  9 * 1024 * 1024,
+				CapacityBytes:   200 * 1024 * 1024,
+				AvailableInodes: 1000,
+				CapacityInodes:  1000,
+			}
+
+			// Use a new event recorder so that we capture only the
+			// relevant events
+			eventRecorder := record.NewFakeRecorder(128)
+			withEventRecorderOpt := WithEventRecorder(eventRecorder)
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+			withEventRecorderOpt(runner)
+
+			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
+			Expect(ok).To(BeFalse())
+			Expect(err).To(MatchError(ErrPrometheusMetricOutdated))
+			select {
+			case <-eventRecorder.Events:
+				Fail("pvc-autoscaler created an event upon ErrPrometheusMetricOutdated error")
+			default:
+			}
+		})
+
 		It("should reconcile - free inodes threshold reached", func() {
 			ctx := context.Background()
 			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-free-inodes-threshold-reached", "1Gi")
@@ -446,8 +485,8 @@ var _ = Describe("Periodic Runner", func() {
 
 			// Sample volume info metrics with free inodes less < 10%
 			volInfo := &metricssource.VolumeInfo{
-				AvailableBytes:  1000,
-				CapacityBytes:   1000,
+				AvailableBytes:  1024 * 1024 * 1024,
+				CapacityBytes:   1024 * 1024 * 1024,
 				AvailableInodes: 90,
 				CapacityInodes:  1000,
 			}
@@ -484,8 +523,8 @@ var _ = Describe("Periodic Runner", func() {
 
 			// Sample volume info metrics with free inodes less < 10%
 			volInfo := &metricssource.VolumeInfo{
-				AvailableBytes:  10000,
-				CapacityBytes:   10000,
+				AvailableBytes:  1024 * 1024 * 1024,
+				CapacityBytes:   1024 * 1024 * 1024,
 				AvailableInodes: 10000,
 				CapacityInodes:  10000,
 			}
