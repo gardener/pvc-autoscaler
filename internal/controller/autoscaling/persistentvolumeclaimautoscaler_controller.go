@@ -11,7 +11,6 @@ import (
 	"math"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -112,16 +111,6 @@ func WithEventRecorder(recorder record.EventRecorder) Option {
 	return opt
 }
 
-func (r *PersistentVolumeClaimAutoscalerReconciler) setCondition(ctx context.Context, obj *v1alpha1.PersistentVolumeClaimAutoscaler, condition metav1.Condition) error {
-	patch := client.MergeFrom(obj)
-	if obj.Status.Conditions == nil || len(obj.Status.Conditions) == 0 {
-		conditions := make([]metav1.Condition, 0)
-		obj.Status.Conditions = conditions
-	}
-	meta.SetStatusCondition(&obj.Status.Conditions, condition)
-	return r.client.Status().Patch(ctx, obj, patch)
-}
-
 // +kubebuilder:rbac:groups=autoscaling.gardener.cloud,resources=persistentvolumeclaimautoscalers,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=autoscaling.gardener.cloud,resources=persistentvolumeclaimautoscalers/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=autoscaling.gardener.cloud,resources=persistentvolumeclaimautoscalers/finalizers,verbs=update
@@ -149,35 +138,53 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	currSpecSize := pvcObj.Spec.Resources.Requests.Storage()
 	currStatusSize := pvcObj.Status.Capacity.Storage()
 
-	// Stop reconciling if new size is already reached
-	if pvca.Status.NewSize.Equal(*currStatusSize) {
-		return ctrl.Result{}, nil
-		// TODO: set status condition
-	}
-
 	// Make sure that the PVC is not being modified at the moment.  Note,
 	// that we are not treating the following status conditions as errors,
 	// as these are transient conditions.
 	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimResizing) {
 		logger.Info("resize has been started")
-		return ctrl.Result{Requeue: true}, nil // TODO: set status
+		condition := metav1.Condition{
+			Type:    utils.ConditionTypeHealthy,
+			Status:  metav1.ConditionFalse,
+			Reason:  "Reconciling",
+			Message: "Resize has been started",
+		}
+		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimFileSystemResizePending) {
 		logger.Info("filesystem resize is pending")
-		return ctrl.Result{Requeue: true}, nil // TODO: set status
+		condition := metav1.Condition{
+			Type:    utils.ConditionTypeHealthy,
+			Status:  metav1.ConditionFalse,
+			Reason:  "Reconciling",
+			Message: "File system resize is pending",
+		}
+		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimVolumeModifyingVolume) {
 		logger.Info("volume is being modified")
-		return ctrl.Result{Requeue: true}, nil // TODO: set status
+		condition := metav1.Condition{
+			Type:    utils.ConditionTypeHealthy,
+			Status:  metav1.ConditionFalse,
+			Reason:  "Reconciling",
+			Message: "Volume is being modified",
+		}
+		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
 	}
 
 	// If previously recorded size is equal to the current status it means
 	// we are still waiting for the resize to complete
 	if pvca.Status.PrevSize.Equal(*currStatusSize) {
-		logger.Info("persistent volume claim is still being resized") // TODO: set status
-		return ctrl.Result{Requeue: true}, nil
+		logger.Info("persistent volume claim is still being resized")
+		condition := metav1.Condition{
+			Type:    utils.ConditionTypeHealthy,
+			Status:  metav1.ConditionFalse,
+			Reason:  "Reconciling",
+			Message: "Persistent volume claim is still being resized",
+		}
+		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
 	}
 
 	// Calculate the new size
@@ -186,7 +193,14 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	}
 	increaseBy, err := utils.ParsePercentage(pvca.Spec.IncreaseBy)
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("cannot parse increase-by value: %w", err) // TODO: set status
+		eerr := fmt.Errorf("cannot parse increase-by value: %w", err)
+		condition := metav1.Condition{
+			Type:    utils.ConditionTypeHealthy,
+			Status:  metav1.ConditionUnknown,
+			Reason:  "Reconciling",
+			Message: eerr.Error(),
+		}
+		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
 	}
 
 	increment := float64(currSpecSize.Value()) * (increaseBy / 100.0)
@@ -199,10 +213,10 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	cmp := newSize.Cmp(*currSpecSize)
 	switch cmp {
 	case 0:
-		logger.Info("new and current size are the same") // TODO: set status
+		logger.Info("new and current size are the same")
 		return ctrl.Result{}, nil
 	case -1:
-		logger.Info("new size is less than current") // TODO: set status
+		logger.Info("new size is less than current")
 		return ctrl.Result{}, nil
 	}
 
@@ -217,12 +231,17 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		)
 		logger.Info("max capacity reached")
 		metrics.MaxCapacityReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
-		// TODO: Set degraded status
-		return ctrl.Result{}, nil
+		condition := metav1.Condition{
+			Type:    utils.ConditionTypeHealthy,
+			Status:  metav1.ConditionFalse,
+			Reason:  "Reconciling",
+			Message: "Max capacity reached",
+		}
+
+		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
 	}
 
 	// And finally we should be good to resize now
-	// TODO: set progressing status
 	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", newSize.String())
 	metrics.ResizedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
 	r.eventRecorder.Eventf(
@@ -234,6 +253,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		newSize.String(),
 	)
 
+	// Update PVC and PVCA resources
 	pvcPatch := client.MergeFrom(pvcObj.DeepCopy())
 	pvcObj.Spec.Resources.Requests[corev1.ResourceStorage] = *newSize
 	if err := r.client.Patch(ctx, pvcObj, pvcPatch); err != nil {
@@ -243,8 +263,18 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 	pvca.Status.PrevSize = *currStatusSize
 	pvca.Status.NewSize = *newSize
+	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
+		return ctrl.Result{}, err
+	}
 
-	return ctrl.Result{}, r.client.Patch(ctx, pvca, pvcaPatch)
+	condition := metav1.Condition{
+		Type:    utils.ConditionTypeHealthy,
+		Status:  metav1.ConditionFalse,
+		Reason:  "Reconciling",
+		Message: fmt.Sprintf("Resizing from %s to %s", currSpecSize.String(), newSize.String()),
+	}
+
+	return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
 }
 
 // SetupWithManager sets up the controller with the Manager.
