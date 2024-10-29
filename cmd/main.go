@@ -16,13 +16,12 @@ import (
 
 	_ "github.com/gardener/pvc-autoscaler/internal/metrics"
 
+	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
-	"github.com/gardener/pvc-autoscaler/internal/controller"
-	"github.com/gardener/pvc-autoscaler/internal/index"
+	controller "github.com/gardener/pvc-autoscaler/internal/controller/autoscaling"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/prometheus"
 	"github.com/gardener/pvc-autoscaler/internal/periodic"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -43,6 +42,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
+	utilruntime.Must(v1alpha1.AddToScheme(scheme))
 	//+kubebuilder:scaffold:scheme
 }
 
@@ -125,13 +125,6 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 	eventCh := make(chan event.GenericEvent)
-
-	// Create our index
-	err = mgr.GetFieldIndexer().IndexField(ctx, &corev1.PersistentVolumeClaim{}, index.Key, index.IndexerFunc)
-	if err != nil {
-		setupLog.Error(err, "unable to create index", "controller", common.ControllerName)
-		os.Exit(1)
-	}
 
 	// The source for metrics we use
 	metricsSource, err := prometheus.New(
