@@ -60,7 +60,7 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 	FreeInodesPercentage string `json:"freeInodesPercentage,omitempty"`
 
 	// PrevSize specifies the previous .status.capacity.storage value of the
-	// PVC, before it was resized.
+	// PVC, just before resizing it.
 	PrevSize resource.Quantity `json:"prevSize,omitempty"`
 
 	// NewSize specifies the new size to which the PVC will be resized.

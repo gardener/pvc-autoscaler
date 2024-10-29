@@ -5,12 +5,22 @@
 package utils
 
 import (
+	"context"
 	"errors"
 	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 )
+
+// ConditionTypeHealthy represents the type of the condition to represent
+// healthy state for the PVC Autoscaler.
+const ConditionTypeHealthy = "Healthy"
 
 // ErrBadPercentageValue is an error which is returned when attempting to parse
 // a bad percentage value.
@@ -52,4 +62,15 @@ func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolum
 	}
 
 	return false
+}
+
+// SetCondition sets the condition for the given
+// [v1alpha1.PersistentVolumeClaimAutoscaler] object.
+func SetCondition(ctx context.Context, klient client.Client, obj *v1alpha1.PersistentVolumeClaimAutoscaler, condition metav1.Condition) error {
+	if obj.Status.Conditions == nil || len(obj.Status.Conditions) == 0 {
+		conditions := make([]metav1.Condition, 0)
+		obj.Status.Conditions = conditions
+	}
+	meta.SetStatusCondition(&obj.Status.Conditions, condition)
+	return klient.Status().Update(ctx, obj)
 }
