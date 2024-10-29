@@ -199,11 +199,30 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 			metrics.SkippedTotal.WithLabelValues(item.Namespace, item.Name, err.Error()).Inc()
+			condition := metav1.Condition{
+				Type:    utils.ConditionTypeHealthy,
+				Status:  metav1.ConditionUnknown,
+				Reason:  "Reconciling",
+				Message: err.Error(),
+			}
+			if err := utils.SetCondition(ctx, r.client, &item, condition); err != nil {
+				logger.Info("failed to update status condition", "reason", err.Error())
+			}
 			continue
 		}
 
 		if ok {
 			toReconcile = append(toReconcile, item)
+		} else {
+			condition := metav1.Condition{
+				Type:    utils.ConditionTypeHealthy,
+				Status:  metav1.ConditionTrue,
+				Reason:  "Reconciling",
+				Message: "Successfully reconciled",
+			}
+			if err := utils.SetCondition(ctx, r.client, &item, condition); err != nil {
+				logger.Info("failed to update status condition", "reason", err.Error())
+			}
 		}
 	}
 
