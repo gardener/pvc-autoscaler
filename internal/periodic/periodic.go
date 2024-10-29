@@ -8,19 +8,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
-
-	"github.com/gardener/pvc-autoscaler/internal/annotation"
-	"github.com/gardener/pvc-autoscaler/internal/common"
-	"github.com/gardener/pvc-autoscaler/internal/index"
-	"github.com/gardener/pvc-autoscaler/internal/metrics"
-	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
-	"github.com/gardener/pvc-autoscaler/internal/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
-
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
@@ -28,6 +20,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+
+	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/metrics"
+	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
+	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
 
 // UnknownUtilizationValue is the value which will be used when the free
@@ -60,7 +58,8 @@ var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not 
 var ErrNoClient = errors.New("no client provided")
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
-// enqueues PersistentVolumeClaims for reconciling on regular basis.
+// enqueues [v1alpha1.PersistentVolumeClaimAutoscaler] items for reconciling on
+// regular basis.
 type Runner struct {
 	client        client.Client
 	interval      time.Duration
@@ -158,7 +157,7 @@ func (r *Runner) Start(ctx context.Context) error {
 		select {
 		case <-ticker.C:
 			if err := r.enqueueObjects(ctx); err != nil {
-				logger.Error(err, "failed to enqueue persistentvolumeclaims")
+				logger.Error(err, "failed to enqueue persistentvolumeclaimautoscalers")
 			}
 		case <-ctx.Done():
 			return nil
@@ -166,11 +165,11 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 }
 
-// enqueueObjects enqueues the PVCs which are properly annotated
+// enqueueObjects enqueues the [v1alpha1.PersitentVolumeClaimAutoscaler]
+// resources for reconciliation.
 func (r *Runner) enqueueObjects(ctx context.Context) error {
-	var items corev1.PersistentVolumeClaimList
-	opts := client.MatchingFields{index.Key: "true"}
-	if err := r.client.List(ctx, &items, opts); err != nil {
+	var items v1alpha1.PersistentVolumeClaimAutoscalerList
+	if err := r.client.List(ctx, &items); err != nil {
 		return err
 	}
 
@@ -184,10 +183,17 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		return fmt.Errorf("failed to get metrics: %w", err)
 	}
 
-	toReconcile := make([]corev1.PersistentVolumeClaim, 0)
+	toReconcile := make([]v1alpha1.PersistentVolumeClaimAutoscaler, 0)
 	for _, item := range items.Items {
-		volInfo := metricsData[client.ObjectKeyFromObject(&item)]
-		logger := log.FromContext(ctx, "controller", common.ControllerName, "namespace", item.Namespace, "name", item.Name)
+		pvcObjKey := client.ObjectKey{Namespace: item.Namespace, Name: item.Spec.ScaleTargetRef.Name}
+		volInfo := metricsData[pvcObjKey]
+		logger := log.FromContext(
+			ctx,
+			"controller", common.ControllerName,
+			"namespace", item.Namespace,
+			"name", item.Name,
+			"pvc", item.Spec.ScaleTargetRef.Name,
+		)
 
 		ok, err := r.shouldReconcilePVC(ctx, &item, volInfo)
 		if err != nil {
@@ -211,9 +217,10 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 	return nil
 }
 
-// stampPVC stamps the given persistent volume claim by updating the list of the
-// annotations, which record the last observed state for the PVC.
-func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *metricssource.VolumeInfo) error {
+// updatePVCAStatus updates the status of the
+// [v1alpha1.PersistentVolumeClaimAutoscaler] with the latest observed
+// information about the target [corev1.PersistentVolumeClaim].
+func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentVolumeClaimAutoscaler, volInfo *metricssource.VolumeInfo) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 	now := time.Now()
 	nextCheck := now.Add(r.interval)
@@ -241,24 +248,28 @@ func (r *Runner) stampPVC(ctx context.Context, obj *corev1.PersistentVolumeClaim
 		}
 	}
 
-	if obj.Annotations == nil {
-		obj.Annotations = make(map[string]string)
-	}
+	obj.Status.LastCheck = metav1.NewTime(now)
+	obj.Status.NextCheck = metav1.NewTime(nextCheck)
+	obj.Status.UsedSpacePercentage = usedSpaceStr
+	obj.Status.FreeSpacePercentage = freeSpaceStr
+	obj.Status.UsedInodesPercentage = usedInodesStr
+	obj.Status.FreeInodesPercentage = freeInodesStr
 
-	obj.Annotations[annotation.LastCheck] = strconv.FormatInt(now.Unix(), 10)
-	obj.Annotations[annotation.NextCheck] = strconv.FormatInt(nextCheck.Unix(), 10)
-	obj.Annotations[annotation.UsedSpacePercentage] = usedSpaceStr
-	obj.Annotations[annotation.FreeSpacePercentage] = freeSpaceStr
-	obj.Annotations[annotation.UsedInodesPercentage] = usedInodesStr
-	obj.Annotations[annotation.FreeInodesPercentage] = freeInodesStr
-
-	return r.client.Patch(ctx, obj, patch)
+	return r.client.Status().Patch(ctx, obj, patch)
 }
 
-// shouldReconcilePVC is a predicate which checks whether the given
-// PersistentVolumeClaim object should be considered for reconciliation.
-func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentVolumeClaim, volInfo *metricssource.VolumeInfo) (bool, error) {
-	if err := r.stampPVC(ctx, obj, volInfo); err != nil {
+// shouldReconcilePVC is a predicate which checks whether the
+// [corev1.PersistentVolumeClaim] object targetted by
+// [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
+// reconciliation.
+func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volInfo *metricssource.VolumeInfo) (bool, error) {
+	pvcObjKey := client.ObjectKey{Namespace: pvca.Namespace, Name: pvca.Spec.ScaleTargetRef.Name}
+	pvcObj := &corev1.PersistentVolumeClaim{}
+	if err := r.client.Get(ctx, pvcObjKey, pvcObj); err != nil {
+		return false, err
+	}
+
+	if err := r.updatePVCAStatus(ctx, pvca, volInfo); err != nil {
 		return false, err
 	}
 
@@ -267,14 +278,13 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 		return false, common.ErrNoMetrics
 	}
 
-	// Validate the user-specified annotations and return early, if they are
-	// invalid.
-	if err := utils.ValidatePersistentVolumeClaimAnnotations(obj); err != nil {
+	// Validate the spec
+	if err := utils.ValidatePersistentVolumeClaimAutoscaler(pvca); err != nil {
 		return false, err
 	}
 
 	// We need a StorageClass with expansion support
-	scName := ptr.Deref(obj.Spec.StorageClassName, "")
+	scName := ptr.Deref(pvcObj.Spec.StorageClassName, "")
 	if scName == "" {
 		return false, ErrStorageClassNotFound
 	}
@@ -313,24 +323,26 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 	}
 
 	// Even, if we don't have inode metrics we still want to proceed here.
-	freeInodes, _ := volInfo.FreeInodesPercentage()
+	freeInodes, err := volInfo.FreeInodesPercentage()
+	if err != nil {
+		return false, common.ErrNoMetrics
+	}
 
-	thresholdVal := utils.GetAnnotation(obj, annotation.Threshold, common.DefaultThresholdValue)
-	threshold, err := utils.ParsePercentage(thresholdVal)
+	threshold, err := utils.ParsePercentage(pvca.Spec.Threshold)
 	if err != nil {
 		return false, fmt.Errorf("cannot parse threshold: %w", err)
 	}
 
 	// VolumeMode should be Filesystem
-	if obj.Spec.VolumeMode == nil {
+	if pvcObj.Spec.VolumeMode == nil {
 		return false, nil
 	}
-	if *obj.Spec.VolumeMode != corev1.PersistentVolumeFilesystem {
+	if *pvcObj.Spec.VolumeMode != corev1.PersistentVolumeFilesystem {
 		return false, ErrVolumeModeIsNotFilesystem
 	}
 
 	// The PVC should be bound
-	if obj.Status.Phase != corev1.ClaimBound {
+	if pvcObj.Status.Phase != corev1.ClaimBound {
 		return false, nil
 	}
 
@@ -338,27 +350,27 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 	// Free space reached threshold
 	case freeSpace < threshold:
 		r.eventRecorder.Eventf(
-			obj,
+			pvcObj,
 			corev1.EventTypeWarning,
 			"FreeSpaceThresholdReached",
 			"free space (%.2f%%) is less than the configured threshold (%.2f%%)",
 			freeSpace,
 			threshold,
 		)
-		metrics.ThresholdReachedTotal.WithLabelValues(obj.Namespace, obj.Name, "space").Inc()
+		metrics.ThresholdReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name, "space").Inc()
 		return true, nil
 
 	// Free inodes reached threshold
 	case volInfo.CapacityInodes > 0.0 && (freeInodes < threshold):
 		r.eventRecorder.Eventf(
-			obj,
+			pvcObj,
 			corev1.EventTypeWarning,
 			"FreeInodesThresholdReached",
 			"free inodes (%.2f%%) are less than the configured threshold (%.2f%%)",
 			freeInodes,
 			threshold,
 		)
-		metrics.ThresholdReachedTotal.WithLabelValues(obj.Namespace, obj.Name, "inodes").Inc()
+		metrics.ThresholdReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name, "inodes").Inc()
 		return true, nil
 
 	// No need to reconcile the PVC for now
