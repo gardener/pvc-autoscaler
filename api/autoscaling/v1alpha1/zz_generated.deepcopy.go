@@ -95,6 +95,7 @@ func (in *PersistentVolumeClaimAutoscalerStatus) DeepCopyInto(out *PersistentVol
 	in.LastCheck.DeepCopyInto(&out.LastCheck)
 	in.NextCheck.DeepCopyInto(&out.NextCheck)
 	out.PrevSize = in.PrevSize.DeepCopy()
+	out.NewSize = in.NewSize.DeepCopy()
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]v1.Condition, len(*in))
