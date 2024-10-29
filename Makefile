@@ -11,7 +11,7 @@ endif
 IMAGE_TAG ?= $(EFFECTIVE_VERSION)
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.29.0
+ENVTEST_K8S_VERSION = 1.31.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -57,8 +57,12 @@ help: ## Display this help.
 ##@ Development
 
 .PHONY: manifests
-manifests: controller-gen  ## Generate ClusterRole objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role paths="./..."
+manifests: controller-gen  ## Generate WebhookConfiguration, ClusterRole and CRD objects.
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+
+.PHONY: generate
+generate: controller-gen ## Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 
 .PHONY: fmt
 fmt:  ## Run go fmt against code.
@@ -69,7 +73,7 @@ vet:  ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests fmt vet envtest  ## Run tests.
+test: manifests generate fmt vet envtest  ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 		go test -v -coverprofile cover.out $$(go list ./... | grep -v -E 'test/e2e|test/utils|/cmd')
 
@@ -112,11 +116,11 @@ e2e-env-teardown: minikube  ## Teardown the e2e test environment.
 ##@ Build
 
 .PHONY: build
-build: manifests fmt vet ## Build manager binary.
+build: manifests generate fmt vet ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 .PHONY: run
-run: manifests fmt vet ## Run a controller from your host.
+run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
@@ -141,14 +145,14 @@ PLATFORMS ?= linux/arm64,linux/amd64,linux/s390x,linux/ppc64le
 docker-buildx: ## Build and push docker image for the manager for cross-platform support
 	# copy existing Dockerfile and insert --platform=${BUILDPLATFORM} into Dockerfile.cross, and preserve the original Dockerfile
 	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile > Dockerfile.cross
-	- $(CONTAINER_TOOL) buildx create --name project-v3-builder
-	$(CONTAINER_TOOL) buildx use project-v3-builder
+	- $(CONTAINER_TOOL) buildx create --name pvc-autoscaler-builder
+	$(CONTAINER_TOOL) buildx use pvc-autoscaler-builder
 	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG}:${IMAGE_TAG} -f Dockerfile.cross .
-	- $(CONTAINER_TOOL) buildx rm project-v3-builder
+	- $(CONTAINER_TOOL) buildx rm pvc-autoscaler-builder
 	rm Dockerfile.cross
 
 .PHONY: build-installer
-build-installer: manifests kustomize ## Generate a consolidated YAML with CRDs and deployment.
+build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
 	echo "---" > dist/install.yaml  # Add a document separator before appending
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:latest
@@ -159,6 +163,14 @@ build-installer: manifests kustomize ## Generate a consolidated YAML with CRDs a
 ifndef ignore-not-found
   ignore-not-found = false
 endif
+
+.PHONY: install
+install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
+
+.PHONY: uninstall
+uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
+	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
 deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
