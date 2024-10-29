@@ -10,11 +10,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/gardener/pvc-autoscaler/internal/annotation"
-	"github.com/gardener/pvc-autoscaler/internal/common"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/gardener/pvc-autoscaler/internal/common"
 )
 
 // ErrBadPercentageValue is an error which is returned when attempting to parse
@@ -41,17 +40,6 @@ func ParsePercentage(s string) (float64, error) {
 	return val, nil
 }
 
-// GetAnnotation returns the annotation with the given name from the object, if
-// it exists, otherwise it returns a default value.
-func GetAnnotation(obj client.Object, name, defaultVal string) string {
-	val, ok := obj.GetAnnotations()[name]
-	if !ok {
-		return defaultVal
-	}
-
-	return val
-}
-
 // IsPersistentVolumeClaimConditionTrue is a predicate which tests whether the
 // given PersistentVolumeClaim object's status condition is set to [corev1.ConditionTrue].
 func IsPersistentVolumeClaimConditionTrue(obj *corev1.PersistentVolumeClaim, conditionType corev1.PersistentVolumeClaimConditionType) bool {
@@ -70,12 +58,14 @@ func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolum
 	return false
 }
 
-// ValidatePersistentVolumeClaimAnnotations sanity checks the custom annotations
-// in order to ensure they contain valid values. Returns nil if all
-// user-specified annotations are valid, otherwise it returns a non-nil error.
-func ValidatePersistentVolumeClaimAnnotations(obj *corev1.PersistentVolumeClaim) error {
-	thresholdVal := GetAnnotation(obj, annotation.Threshold, common.DefaultThresholdValue)
-	threshold, err := ParsePercentage(thresholdVal)
+// ValidatePersistentVolumeClaimAutoscaler sanity checks the spec in order to
+// ensure it contains valid values. Returns nil if the spec is valid, and
+// non-nil error otherwise.
+func ValidatePersistentVolumeClaimAutoscaler(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
+	if obj.Spec.Threshold == "" {
+		obj.Spec.Threshold = common.DefaultThresholdValue
+	}
+	threshold, err := ParsePercentage(obj.Spec.Threshold)
 	if err != nil {
 		return fmt.Errorf("cannot parse threshold: %w", err)
 	}
@@ -83,26 +73,14 @@ func ValidatePersistentVolumeClaimAnnotations(obj *corev1.PersistentVolumeClaim)
 		return fmt.Errorf("invalid threshold: %w", common.ErrZeroPercentage)
 	}
 
-	maxCapacityVal := GetAnnotation(obj, annotation.MaxCapacity, "0Gi")
-	maxCapacity, err := resource.ParseQuantity(maxCapacityVal)
-	if err != nil {
-		return fmt.Errorf("cannot parse max capacity: %w", err)
-	}
-	if maxCapacity.IsZero() {
+	if obj.Spec.MaxCapacity.IsZero() {
 		return fmt.Errorf("invalid max capacity: %w", common.ErrNoMaxCapacity)
 	}
 
-	currStatusSize := obj.Status.Capacity.Storage()
-	if currStatusSize.IsZero() {
-		return fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
+	if obj.Spec.IncreaseBy == "" {
+		obj.Spec.IncreaseBy = common.DefaultIncreaseByValue
 	}
-
-	if maxCapacity.Value() < currStatusSize.Value() {
-		return fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", maxCapacity.String(), currStatusSize.String())
-	}
-
-	increaseByVal := GetAnnotation(obj, annotation.IncreaseBy, common.DefaultIncreaseByValue)
-	increaseBy, err := ParsePercentage(increaseByVal)
+	increaseBy, err := ParsePercentage(obj.Spec.IncreaseBy)
 	if err != nil {
 		return fmt.Errorf("cannot parse increase-by value: %w", err)
 	}
