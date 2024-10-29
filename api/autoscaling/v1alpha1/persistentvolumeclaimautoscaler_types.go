@@ -63,12 +63,16 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 	// PVC, before it was resized.
 	PrevSize resource.Quantity `json:"prevSize,omitempty"`
 
+	// NewSize specifies the new size to which the PVC will be resized.
+	NewSize resource.Quantity `json:"newSize,omitempty"`
+
 	// Conditions specifies the status conditions.
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=pvca
 
 // PersistentVolumeClaimAutoscaler is the Schema for the
 // persistentvolumeclaimautoscalers API
