@@ -40,11 +40,6 @@ var ErrNoMetricsSource = errors.New("no metrics source provided")
 // for resizing is not using the Filesystem VolumeMode.
 var ErrVolumeModeIsNotFilesystem = errors.New("volume mode is not filesystem")
 
-// ErrPrometheusMetricOutdated is an error which is returned when the Prometheus metrics for a target PVC are not
-// up-to-date with the latest state of the PVC. Such error is inherently intermittent and resolves as Prometheus scrapes
-// fresh metrics.
-var ErrPrometheusMetricOutdated = errors.New("prometheus data not up to date")
-
 // ErrStorageClassNotFound is an error which is returned when the storage class
 // for a PVC is not found.
 var ErrStorageClassNotFound = errors.New("no storage class found")
@@ -308,6 +303,20 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
 	}
 
+	// Detect whether the metrics source is reporting stale data.  Stale
+	// metrics data would be when the volume info metrics reported by the
+	// metrics source are deviate from the current PVC size indicated by
+	// `.status.capacity.storage'
+	if statusSize, ok := currStatusSize.AsInt64(); ok {
+		delta := statusSize - int64(volInfo.CapacityBytes)
+		if delta < 0 {
+			delta = -delta
+		}
+		if delta > common.ScalingResolutionBytes/2 {
+			return false, common.ErrStaleMetrics
+		}
+	}
+
 	if pvca.Spec.MaxCapacity.Value() < currStatusSize.Value() {
 		return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", pvca.Spec.MaxCapacity.String(), currStatusSize.String())
 	}
@@ -334,21 +343,6 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	freeSpace, err := volInfo.FreeSpacePercentage()
 	if err != nil {
 		return false, common.ErrNoMetrics
-	}
-
-	// Detect stale Prometheus metrics. If the metrics report capacity that doesn't match the PVC's actual capacity,
-	// then we should not reconcile. However, the Prometheus metric generally does not exactly match the PVC's storage
-	// request, because the metric accounts for overhead. So we'll do a fuzzy comparison, and allow for some deviation.
-	if obj.Spec.Resources.Requests != nil && obj.Spec.Resources.Requests.Storage() != nil {
-		if storageRequest, ok := obj.Spec.Resources.Requests.Storage().AsInt64(); ok {
-			metricToRequestDelta := storageRequest - int64(volInfo.CapacityBytes)
-			if metricToRequestDelta < 0 {
-				metricToRequestDelta = -metricToRequestDelta
-			}
-			if metricToRequestDelta > common.ScalingResolutionBytes/2 {
-				return false, ErrPrometheusMetricOutdated
-			}
-		}
 	}
 
 	// Even, if we don't have inode metrics we still want to proceed here.
