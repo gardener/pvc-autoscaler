@@ -13,6 +13,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/gardener/pvc-autoscaler/internal/common"
 )
 
 const (
@@ -41,9 +44,8 @@ func CreatePVC(ctx context.Context,
 	capacity string) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        name,
-			Namespace:   "default",
-			Annotations: make(map[string]string),
+			Name:      name,
+			Namespace: "default",
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
 			StorageClassName: ptr.To(StorageClassName),
@@ -76,12 +78,31 @@ func CreatePVC(ctx context.Context,
 	return pvc, nil
 }
 
-// AnnotatePVC is a help function to annotate the PVC with the given annotations
-func AnnotatePVC(ctx context.Context,
+// CreatePersistentVolumeClaimAutoscaler is a helper function used to create a
+// test PVC Autoscaler resource.
+func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 	k8sClient client.Client,
-	pvc *corev1.PersistentVolumeClaim,
-	annotations map[string]string) error {
-	patch := client.MergeFrom(pvc.DeepCopy())
-	pvc.ObjectMeta.Annotations = annotations
-	return k8sClient.Patch(ctx, pvc, patch)
+	name string,
+	scaleTargetRef string,
+	maxCapacity string) (*v1alpha1.PersistentVolumeClaimAutoscaler, error) {
+	obj := &v1alpha1.PersistentVolumeClaimAutoscaler{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+		},
+		Spec: v1alpha1.PersistentVolumeClaimAutoscalerSpec{
+			IncreaseBy:  common.DefaultIncreaseByValue,
+			Threshold:   common.DefaultThresholdValue,
+			MaxCapacity: resource.MustParse(maxCapacity),
+			ScaleTargetRef: corev1.LocalObjectReference{
+				Name: scaleTargetRef,
+			},
+		},
+	}
+
+	if err := k8sClient.Create(ctx, obj); err != nil {
+		return nil, err
+	}
+
+	return obj, nil
 }
