@@ -1,0 +1,13 @@
+apiVersion: autoscaling.gardener.cloud/v1alpha1
+kind: PersistentVolumeClaimAutoscaler
+metadata:
+  labels:
+    app.kubernetes.io/name: pvc-autoscaler
+    app.kubernetes.io/managed-by: kustomize
+  name: persistentvolumeclaimautoscaler-sample
+spec:
+  increaseBy: "10%"
+  threshold: "20%"
+  maxCapacity: 5Gi
+  scaleTargetRef:
+    name: test-pvc-1

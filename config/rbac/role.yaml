@@ -28,6 +28,32 @@ rules:
   verbs:
   - get
 - apiGroups:
+  - autoscaling.gardener.cloud
+  resources:
+  - persistentvolumeclaimautoscalers
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - autoscaling.gardener.cloud
+  resources:
+  - persistentvolumeclaimautoscalers/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - autoscaling.gardener.cloud
+  resources:
+  - persistentvolumeclaimautoscalers/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
   - storage.k8s.io
   resources:
   - storageclasses
