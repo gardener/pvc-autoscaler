@@ -26,6 +26,11 @@ var ErrNoEventChannel = errors.New("no event channel provided")
 // missing.
 var ErrNoMetrics = errors.New("no metrics found")
 
+// ErrStaleMetrics is an error which is returned when metrics source returns
+// data which appear to be stale. In such cases reconciliation should be
+// skipped.
+var ErrStaleMetrics = errors.New("stale metrics data")
+
 const (
 	// ControllerName is the name of the controller
 	ControllerName = "pvc_autoscaler"
@@ -38,7 +43,8 @@ const (
 	// specified for a PVC object.
 	DefaultIncreaseByValue = "10%"
 
-	// ScalingResolutionBytes is the smallest possible step. Any storage request set by the autoscaler is guaranteed
-	// to be divisible by that value. ScalingResolutionBytes is guaranteed to be an even number.
+	// ScalingResolutionBytes is the smallest possible step. Any storage
+	// request set by the autoscaler is guaranteed to be divisible by that
+	// value. ScalingResolutionBytes is guaranteed to be an even number.
 	ScalingResolutionBytes = 1024 * 1024 * 1024
 )
