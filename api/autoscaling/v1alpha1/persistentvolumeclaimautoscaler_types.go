@@ -73,6 +73,10 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pvca
+// +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.scaleTargetRef.name`
+// +kubebuilder:printcolumn:name="Increase By",type=string,JSONPath=`.spec.increaseBy`
+// +kubebuilder:printcolumn:name="Threshold",type=string,JSONPath=`.spec.threshold`
+// +kubebuilder:printcolumn:name="Max Capacity",type=string,JSONPath=`.spec.maxCapacity`
 
 // PersistentVolumeClaimAutoscaler is the Schema for the
 // persistentvolumeclaimautoscalers API
