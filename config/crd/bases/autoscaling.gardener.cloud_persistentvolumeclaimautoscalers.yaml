@@ -16,7 +16,20 @@ spec:
     singular: persistentvolumeclaimautoscaler
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.scaleTargetRef.name
+      name: Target
+      type: string
+    - jsonPath: .spec.increaseBy
+      name: Increase By
+      type: string
+    - jsonPath: .spec.threshold
+      name: Threshold
+      type: string
+    - jsonPath: .spec.maxCapacity
+      name: Max Capacity
+      type: string
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: |-
@@ -181,7 +194,7 @@ spec:
                 - type: string
                 description: |-
                   PrevSize specifies the previous .status.capacity.storage value of the
-                  PVC, before it was resized.
+                  PVC, just before resizing it.
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
               usedInodesPercentage:
