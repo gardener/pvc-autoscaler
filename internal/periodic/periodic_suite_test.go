@@ -14,9 +14,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/gardener/pvc-autoscaler/internal/index"
-	testutils "github.com/gardener/pvc-autoscaler/test/utils"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -27,6 +24,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 )
 
 var cfg *rest.Config
@@ -48,7 +48,8 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		ErrorIfCRDPathMissing: false,
+		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
+		ErrorIfCRDPathMissing: true,
 
 		// The BinaryAssetsDirectory is only required if you want to run the tests directly
 		// without call the makefile target test. If not informed it will look for the
@@ -56,7 +57,7 @@ var _ = BeforeSuite(func() {
 		// Note that you must have the required binaries setup under the bin directory to perform
 		// the tests directly. When we run make test it will be setup and used automatically.
 		BinaryAssetsDirectory: filepath.Join("..", "..", "bin", "k8s",
-			fmt.Sprintf("1.29.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
+			fmt.Sprintf("1.31.0-%s-%s", runtime.GOOS, runtime.GOARCH)),
 	}
 
 	parentCtx, cancelFunc = context.WithCancel(context.Background())
@@ -70,26 +71,10 @@ var _ = BeforeSuite(func() {
 	err = corev1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Create cache and register our index
-	cacheOpts := cache.Options{
-		Scheme: scheme.Scheme,
-	}
-	k8sCache, err = cache.New(cfg, cacheOpts)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(k8sCache).NotTo(BeNil())
-	err = k8sCache.IndexField(parentCtx, &corev1.PersistentVolumeClaim{}, index.Key, index.IndexerFunc)
+	err = v1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	go func() {
-		Expect(k8sCache.Start(parentCtx)).NotTo(HaveOccurred())
-	}()
-
-	opts := client.Options{
-		Scheme: scheme.Scheme,
-		Cache: &client.CacheOptions{
-			Reader: k8sCache,
-		},
-	}
+	opts := client.Options{Scheme: scheme.Scheme}
 	k8sClient, err = client.New(cfg, opts)
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
