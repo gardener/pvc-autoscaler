@@ -149,7 +149,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: "Resize has been started",
 		}
-		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
+		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimFileSystemResizePending) {
@@ -160,7 +160,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: "File system resize is pending",
 		}
-		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
+		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimVolumeModifyingVolume) {
@@ -171,7 +171,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: "Volume is being modified",
 		}
-		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
+		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	// If previously recorded size is equal to the current status it means
@@ -184,13 +184,10 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: "Persistent volume claim is still being resized",
 		}
-		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
+		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	// Calculate the new size
-	if pvca.Spec.IncreaseBy == "" {
-		pvca.Spec.IncreaseBy = common.DefaultIncreaseByValue
-	}
 	increaseBy, err := utils.ParsePercentage(pvca.Spec.IncreaseBy)
 	if err != nil {
 		eerr := fmt.Errorf("cannot parse increase-by value: %w", err)
@@ -200,7 +197,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: eerr.Error(),
 		}
-		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
+		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	increment := float64(currSpecSize.Value()) * (increaseBy / 100.0)
@@ -238,7 +235,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Message: "Max capacity reached",
 		}
 
-		return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
+		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	// And finally we should be good to resize now
@@ -274,7 +271,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		Message: fmt.Sprintf("Resizing from %s to %s", currSpecSize.String(), newSize.String()),
 	}
 
-	return ctrl.Result{}, utils.SetCondition(ctx, r.client, pvca, condition)
+	return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 }
 
 // SetupWithManager sets up the controller with the Manager.

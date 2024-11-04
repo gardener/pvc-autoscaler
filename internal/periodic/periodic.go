@@ -200,7 +200,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 				Reason:  "Reconciling",
 				Message: err.Error(),
 			}
-			if err := utils.SetCondition(ctx, r.client, &item, condition); err != nil {
+			if err := item.SetCondition(ctx, r.client, condition); err != nil {
 				logger.Info("failed to update status condition", "reason", err.Error())
 			}
 			continue
@@ -215,7 +215,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 				Reason:  "Reconciling",
 				Message: "Successfully reconciled",
 			}
-			if err := utils.SetCondition(ctx, r.client, &item, condition); err != nil {
+			if err := item.SetCondition(ctx, r.client, condition); err != nil {
 				logger.Info("failed to update status condition", "reason", err.Error())
 			}
 		}
@@ -405,9 +405,6 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 // validatePVCA sanity checks the spec in order to ensure it contains valid
 // values. Returns nil if the spec is valid, and non-nil error otherwise.
 func (r *Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
-	if obj.Spec.Threshold == "" {
-		obj.Spec.Threshold = common.DefaultThresholdValue
-	}
 	threshold, err := utils.ParsePercentage(obj.Spec.Threshold)
 	if err != nil {
 		return fmt.Errorf("cannot parse threshold: %w", err)
@@ -420,9 +417,6 @@ func (r *Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) err
 		return fmt.Errorf("invalid max capacity: %w", common.ErrNoMaxCapacity)
 	}
 
-	if obj.Spec.IncreaseBy == "" {
-		obj.Spec.IncreaseBy = common.DefaultIncreaseByValue
-	}
 	increaseBy, err := utils.ParsePercentage(obj.Spec.IncreaseBy)
 	if err != nil {
 		return fmt.Errorf("cannot parse increase-by value: %w", err)

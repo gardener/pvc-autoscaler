@@ -5,9 +5,13 @@
 package v1alpha1
 
 import (
+	"context"
+
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // PersistentVolumeClaimAutoscalerSpec defines the desired state of
@@ -86,6 +90,18 @@ type PersistentVolumeClaimAutoscaler struct {
 
 	Spec   PersistentVolumeClaimAutoscalerSpec   `json:"spec,omitempty"`
 	Status PersistentVolumeClaimAutoscalerStatus `json:"status,omitempty"`
+}
+
+// SetCondition sets the given [metav1.Condition] for the object.
+func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, klient client.Client, condition metav1.Condition) error {
+	patch := client.MergeFrom(obj.DeepCopy())
+	conditions := obj.Status.Conditions
+	if conditions == nil || len(conditions) == 0 {
+		conditions = make([]metav1.Condition, 0)
+	}
+	meta.SetStatusCondition(&conditions, condition)
+	obj.Status.Conditions = conditions
+	return klient.Status().Patch(ctx, obj, patch)
 }
 
 // +kubebuilder:object:root=true
