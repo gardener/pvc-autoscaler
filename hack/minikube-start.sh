@@ -128,10 +128,35 @@ function _install_openebs_operator() {
   minikube kubectl -- apply -f "${_TEST_MANIFESTS_DIR}/storageclass.yaml"
 }
 
+# Installs cert-manager [1] in the local cluster.
+#
+# [1]: https://github.com/cert-manager/cert-manager
+function _install_cert_manager() {
+  _msg_info "Installing cert-manager ..."
+  helm repo add jetstack https://charts.jetstack.io
+  helm repo update
+
+  helm install \
+       cert-manager jetstack/cert-manager \
+       --namespace cert-manager \
+       --create-namespace \
+       --version v1.16.1 \
+       --set crds.enabled=true
+
+  _msg_info "Waiting for cert-manager pods to become ready ..."
+  sleep 15
+  minikube kubectl -- wait \
+          --for condition=Ready \
+          --all Pod \
+          --namespace cert-manager \
+          --timeout 10m
+}
+
 function _main() {
   _minikube_start
   _install_kube_prometheus
   _install_openebs_operator
+  _install_cert_manager
 }
 
 _main $*
