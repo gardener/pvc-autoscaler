@@ -14,23 +14,21 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/gardener/pvc-autoscaler/internal/annotation"
-	"github.com/gardener/pvc-autoscaler/internal/common"
-	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
-	"github.com/gardener/pvc-autoscaler/internal/metrics/source/fake"
-	testutils "github.com/gardener/pvc-autoscaler/test/utils"
-
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/gardener/pvc-autoscaler/internal/common"
+	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
+	"github.com/gardener/pvc-autoscaler/internal/metrics/source/fake"
+	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 )
 
 // creates a new test periodic runner
@@ -113,34 +111,44 @@ var _ = Describe("Periodic Runner", func() {
 		})
 	})
 
-	Context("stamping a pvc", func() {
-		It("should stamp the pvc with unknown values", func() {
+	Context("update PersistentVolumeClaimAutoscaler resource", func() {
+		It("should update the pvca with unknown values", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
 
-			ctx := context.Background()
-			obj, err := testutils.CreatePVC(ctx, k8sClient, "pvc-stamp-1", "1Gi")
+			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-1",
+				"pvc-1",
+				"5Gi",
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).NotTo(BeNil())
 
 			// No volume info provided, we should see default "unknown" values
-			Expect(runner.stampPVC(ctx, obj, nil)).To(Succeed())
-			Expect(obj.Annotations[annotation.LastCheck]).NotTo(BeEmpty())
-			Expect(obj.Annotations[annotation.NextCheck]).NotTo(BeEmpty())
-			Expect(obj.Annotations[annotation.UsedSpacePercentage]).To(Equal(UnknownUtilizationValue))
-			Expect(obj.Annotations[annotation.FreeSpacePercentage]).To(Equal(UnknownUtilizationValue))
-			Expect(obj.Annotations[annotation.UsedInodesPercentage]).To(Equal(UnknownUtilizationValue))
-			Expect(obj.Annotations[annotation.FreeInodesPercentage]).To(Equal(UnknownUtilizationValue))
+			Expect(runner.updatePVCAStatus(parentCtx, obj, nil)).To(Succeed())
+			Expect(obj.Status.LastCheck).NotTo(Equal(metav1.Time{}))
+			Expect(obj.Status.NextCheck).NotTo(Equal(metav1.Time{}))
+			Expect(obj.Status.UsedSpacePercentage).To(Equal(UnknownUtilizationValue))
+			Expect(obj.Status.FreeSpacePercentage).To(Equal(UnknownUtilizationValue))
+			Expect(obj.Status.UsedInodesPercentage).To(Equal(UnknownUtilizationValue))
+			Expect(obj.Status.FreeInodesPercentage).To(Equal(UnknownUtilizationValue))
 		})
 
-		It("should stamp the pvc with valid percentage values", func() {
+		It("should update the pvca with valid percentage values", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
 
-			ctx := context.Background()
-			obj, err := testutils.CreatePVC(ctx, k8sClient, "pvc-stamp-2", "1Gi")
+			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-2",
+				"pvc-2",
+				"5Gi",
+			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).NotTo(BeNil())
 
@@ -155,76 +163,73 @@ var _ = Describe("Periodic Runner", func() {
 			freeInodes, _ := volInfo.FreeInodesPercentage()
 			usedInodes, _ := volInfo.UsedInodesPercentage()
 
-			// No volume info provided, we should see default "unknown" values
-			Expect(runner.stampPVC(ctx, obj, volInfo)).To(Succeed())
-			Expect(obj.Annotations[annotation.LastCheck]).NotTo(BeEmpty())
-			Expect(obj.Annotations[annotation.NextCheck]).NotTo(BeEmpty())
-			Expect(obj.Annotations[annotation.UsedSpacePercentage]).To(Equal(fmt.Sprintf("%.2f%%", usedSpace)))
-			Expect(obj.Annotations[annotation.FreeSpacePercentage]).To(Equal(fmt.Sprintf("%.2f%%", freeSpace)))
-			Expect(obj.Annotations[annotation.UsedInodesPercentage]).To(Equal(fmt.Sprintf("%.2f%%", usedInodes)))
-			Expect(obj.Annotations[annotation.FreeInodesPercentage]).To(Equal(fmt.Sprintf("%.2f%%", freeInodes)))
+			// We should see the computed free and used space percentages
+			Expect(runner.updatePVCAStatus(parentCtx, obj, volInfo)).To(Succeed())
+			Expect(obj.Status.LastCheck).NotTo(Equal(metav1.Time{}))
+			Expect(obj.Status.NextCheck).NotTo(Equal(metav1.Time{}))
+			Expect(obj.Status.UsedSpacePercentage).To(Equal(fmt.Sprintf("%.2f%%", usedSpace)))
+			Expect(obj.Status.FreeSpacePercentage).To(Equal(fmt.Sprintf("%.2f%%", freeSpace)))
+			Expect(obj.Status.UsedInodesPercentage).To(Equal(fmt.Sprintf("%.2f%%", usedInodes)))
+			Expect(obj.Status.FreeInodesPercentage).To(Equal(fmt.Sprintf("%.2f%%", freeInodes)))
 		})
 	})
 
 	Context("shouldReconcilePVC predicate", func() {
-		It("should return common.ErrNoMetrics", func() {
-			ctx := context.Background()
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-without-volinfo", "1Gi")
+		It("should return error - PVC is not found", func() {
+			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-missing-pvc",
+				"pvc-missing-pvc",
+				"5Gi",
+			)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(pvc).NotTo(BeNil())
-
-			annotations := map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
-			}
-			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
+			Expect(obj).NotTo(BeNil())
 
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
 
 			// No metrics at all
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, nil)
+			ok, err := runner.shouldReconcilePVC(parentCtx, obj, nil)
 			Expect(ok).To(BeFalse())
-			Expect(err).To(MatchError(common.ErrNoMetrics))
-
-			// Provide an "empty" volume info, as if we got zero
-			// values for available and capacity space
-			ok, err = runner.shouldReconcilePVC(ctx, pvc, &metricssource.VolumeInfo{})
-			Expect(ok).To(BeFalse())
-			Expect(err).To(MatchError(common.ErrNoMetrics))
+			Expect(err).NotTo(BeNil())
 		})
 
-		It("should return error because of invalid/missing annotations", func() {
-			ctx := context.Background()
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-without-annotations", "1Gi")
+		It("should return common.ErrNoMetrics", func() {
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-without-volinfo", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
+
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-without-volinfo",
+				"pvc-without-volinfo",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
 
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, &metricssource.VolumeInfo{})
+			// No metrics at all
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, nil)
 			Expect(ok).To(BeFalse())
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(common.ErrNoMetrics))
 		})
 
 		It("should return ErrStorageClassNotFound", func() {
-			ctx := context.Background()
-
 			// This PVC does not define a storageclass
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvc-without-storageclass",
 					Namespace: "default",
-					Annotations: map[string]string{
-						annotation.IsEnabled:   "true",
-						annotation.MaxCapacity: "100Gi",
-					},
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
-					// StorageClassName is not specified
+					// StorageClassName is not specified here
 					AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
 					Resources: corev1.VolumeResourceRequirements{
 						Requests: corev1.ResourceList{
@@ -233,7 +238,7 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, pvc)).To(Succeed())
+			Expect(k8sClient.Create(parentCtx, pvc)).To(Succeed())
 
 			// Update status of the pvc
 			patch := client.MergeFrom(pvc.DeepCopy())
@@ -243,19 +248,28 @@ var _ = Describe("Periodic Runner", func() {
 					corev1.ResourceStorage: resource.MustParse("1Gi"),
 				},
 			}
-			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
+
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-without-storageclass",
+				"pvc-without-storageclass",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, &metricssource.VolumeInfo{})
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, &metricssource.VolumeInfo{})
 			Expect(ok).To(BeFalse())
 			Expect(err).To(MatchError(ErrStorageClassNotFound))
 		})
 
 		It("should return ErrStorageClassDoesNotSupportExpansion", func() {
-			ctx := context.Background()
-
 			// This storage class does not support volume expansion
 			scName := "storageclass-without-expasion"
 			sc := &storagev1.StorageClass{
@@ -267,17 +281,13 @@ var _ = Describe("Periodic Runner", func() {
 				AllowVolumeExpansion: ptr.To(false),
 				ReclaimPolicy:        ptr.To(corev1.PersistentVolumeReclaimDelete),
 			}
-			Expect(k8sClient.Create(ctx, sc)).To(Succeed())
+			Expect(k8sClient.Create(parentCtx, sc)).To(Succeed())
 
 			// Create a test PVC using the storageclass we've created above
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvc-sc-no-expansion",
 					Namespace: "default",
-					Annotations: map[string]string{
-						annotation.IsEnabled:   "true",
-						annotation.MaxCapacity: "100Gi",
-					},
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
 					StorageClassName: ptr.To(scName),
@@ -289,7 +299,7 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				},
 			}
-			Expect(k8sClient.Create(ctx, pvc)).To(Succeed())
+			Expect(k8sClient.Create(parentCtx, pvc)).To(Succeed())
 
 			// Update status of the pvc
 			patch := client.MergeFrom(pvc.DeepCopy())
@@ -299,26 +309,32 @@ var _ = Describe("Periodic Runner", func() {
 					corev1.ResourceStorage: resource.MustParse("1Gi"),
 				},
 			}
-			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
+
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-sc-no-expansion",
+				"pvc-sc-no-expansion",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, &metricssource.VolumeInfo{})
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, &metricssource.VolumeInfo{})
 			Expect(ok).To(BeFalse())
 			Expect(err).To(MatchError(ErrStorageClassDoesNotSupportExpansion))
 		})
 
 		It("should return ErrVolumeModeIsNotFilesystem", func() {
-			ctx := context.Background()
 			pvc := &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvc-block-mode",
 					Namespace: "default",
-					Annotations: map[string]string{
-						annotation.IsEnabled:   "true",
-						annotation.MaxCapacity: "100Gi",
-					},
 				},
 				Spec: corev1.PersistentVolumeClaimSpec{
 					StorageClassName: ptr.To(testutils.StorageClassName),
@@ -331,7 +347,7 @@ var _ = Describe("Periodic Runner", func() {
 					VolumeMode: ptr.To(corev1.PersistentVolumeBlock),
 				},
 			}
-			Expect(k8sClient.Create(ctx, pvc)).To(Succeed())
+			Expect(k8sClient.Create(parentCtx, pvc)).To(Succeed())
 
 			// Update status of the pvc to make it a bit more "real"
 			patch := client.MergeFrom(pvc.DeepCopy())
@@ -341,7 +357,18 @@ var _ = Describe("Periodic Runner", func() {
 					corev1.ResourceStorage: resource.MustParse("1Gi"),
 				},
 			}
-			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
+
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-block-mode",
+				"pvc-block-mode",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// Sample volume info metrics
 			volInfo := &metricssource.VolumeInfo{
@@ -350,32 +377,39 @@ var _ = Describe("Periodic Runner", func() {
 				AvailableInodes: 1000,
 				CapacityInodes:  1000,
 			}
+
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeFalse())
 			Expect(err).To(MatchError(ErrVolumeModeIsNotFilesystem))
 		})
 
-		It("shoult not reconcile - pvc is not bound", func() {
-			ctx := context.Background()
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-lost", "1Gi")
+		It("should not reconcile - lost pvc claim", func() {
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-lost-claim", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
 			patch := client.MergeFrom(pvc.DeepCopy())
-			pvc.ObjectMeta.Annotations = map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
-			}
 			pvc.Status = corev1.PersistentVolumeClaimStatus{
 				Phase: corev1.ClaimLost,
 				Capacity: corev1.ResourceList{
 					corev1.ResourceStorage: resource.MustParse("1Gi"),
 				},
 			}
-			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
+
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-lost-claim",
+				"pvc-lost-claim",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// Sample volume info metrics
 			volInfo := &metricssource.VolumeInfo{
@@ -389,22 +423,26 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
 
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeFalse())
 			Expect(err).To(BeNil())
 		})
 
 		It("should reconcile - free space threshold reached", func() {
-			ctx := context.Background()
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-free-space-threshold-reached", "1Gi")
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-free-space-threshold-reached", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			annotations := map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
-			}
-			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-free-space-threshold-reached",
+				"pvc-free-space-threshold-reached",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// Sample volume info metrics with free space less < 10%
 			volInfo := &metricssource.VolumeInfo{
@@ -423,7 +461,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(runner).NotTo(BeNil())
 			withEventRecorderOpt(runner)
 
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeTrue())
 			Expect(err).To(BeNil())
 
@@ -432,17 +470,21 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(event).To(Equal(wantEvent))
 		})
 
-		It("should return ErrPrometheusMetricOutdated", func() {
-			ctx := context.Background()
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-free-space-metrics-outdated", "1Gi")
+		It("should return ErrStaleMetrics", func() {
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-stale-metrics", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			annotations := map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
-			}
-			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-stale-metrics",
+				"pvc-stale-metrics",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// Sample volume info metrics with free space less < 10%
 			volInfo := &metricssource.VolumeInfo{
@@ -452,36 +494,30 @@ var _ = Describe("Periodic Runner", func() {
 				CapacityInodes:  1000,
 			}
 
-			// Use a new event recorder so that we capture only the
-			// relevant events
-			eventRecorder := record.NewFakeRecorder(128)
-			withEventRecorderOpt := WithEventRecorder(eventRecorder)
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
-			withEventRecorderOpt(runner)
 
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeFalse())
-			Expect(err).To(MatchError(ErrPrometheusMetricOutdated))
-			select {
-			case <-eventRecorder.Events:
-				Fail("pvc-autoscaler created an event upon ErrPrometheusMetricOutdated error")
-			default:
-			}
+			Expect(err).To(MatchError(common.ErrStaleMetrics))
 		})
 
 		It("should reconcile - free inodes threshold reached", func() {
-			ctx := context.Background()
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-free-inodes-threshold-reached", "1Gi")
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-free-inodes-threshold-reached", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			annotations := map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
-			}
-			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-free-inodes-threshold-reached",
+				"pvc-free-inodes-threshold-reached",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// Sample volume info metrics with free inodes less < 10%
 			volInfo := &metricssource.VolumeInfo{
@@ -500,7 +536,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(runner).NotTo(BeNil())
 			withEventRecorderOpt(runner)
 
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeTrue())
 			Expect(err).To(BeNil())
 
@@ -510,16 +546,20 @@ var _ = Describe("Periodic Runner", func() {
 		})
 
 		It("should not reconcile - free space and inodes threshold was not reached", func() {
-			ctx := context.Background()
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-plenty-of-space-and-inodes", "1Gi")
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-plenty-of-space-and-inodes", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			annotations := map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
-			}
-			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-plenty-of-space-and-inodes",
+				"pvc-plenty-of-space-and-inodes",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// Sample volume info metrics with free inodes less < 10%
 			volInfo := &metricssource.VolumeInfo{
@@ -533,14 +573,14 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
 
-			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeFalse())
 			Expect(err).To(BeNil())
 		})
 	})
 
 	Context("enqueueObjects", func() {
-		It("should not enqueue -- PVCs are not annotated", func() {
+		It("should not enqueue -- no autoscaler for PVCs", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
@@ -549,6 +589,17 @@ var _ = Describe("Periodic Runner", func() {
 			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "sample-pvc-1", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
+
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-no-pvc-for-it",
+				"pvc-no-pvc-for-it",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// A fast space and inodes "consumer"
 			metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
@@ -602,6 +653,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"sample-pvca-2",
+				"sample-pvc-2",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
 			// Reconfigure the periodic runner to use an always failing metrics source
 			metricsSource := &fake.AlwaysFailing{}
 			withMetricsSourceOpt := WithMetricsSource(metricsSource)
@@ -622,11 +684,16 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			annotations := map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
-			}
-			Expect(testutils.AnnotatePVC(parentCtx, k8sClient, pvc, annotations)).To(Succeed())
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"sample-pvca-3",
+				"sample-pvc-3",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// A fast space and inodes "consumer"
 			metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
@@ -681,11 +748,16 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			annotations := map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
-			}
-			Expect(testutils.AnnotatePVC(parentCtx, k8sClient, pvc, annotations)).To(Succeed())
+			// The PVC Autoscaler targetting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"sample-pvca-4",
+				"sample-pvc-4",
+				"5Gi",
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
 
 			// Reconfigure the periodic runner to use our always
 			// failing metrics source. Also, change the schedule to
@@ -705,7 +777,7 @@ var _ = Describe("Periodic Runner", func() {
 			defer cancelFunc()
 			ctx2 := log.IntoContext(ctx1, logger)
 			Expect(runner.Start(ctx2)).To(Succeed())
-			Expect(buf.String()).To(ContainSubstring("failed to enqueue persistentvolumeclaims"))
+			Expect(buf.String()).To(ContainSubstring("failed to enqueue persistentvolumeclaimautoscalers"))
 		})
 	})
 })
