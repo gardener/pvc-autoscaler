@@ -66,12 +66,33 @@ Note, that specifying a max capacity is required.
 The following annotations can be configured by an operator in order to control
 the behaviour of `pvc-autoscaler`.
 
-| Annotation                                    | Description                                          | Default |
-|:----------------------------------------------|:-----------------------------------------------------|:-------:|
-| `pvc.autoscaling.gardener.cloud/is-enabled`   | Enable autoscaling when set to `true`                | N/A     |
-| `pvc.autoscaling.gardener.cloud/increase-by`  | Specifies how much to increase the PVC in percentage | `10%`   |
-| `pvc.autoscaling.gardener.cloud/threshold`    | Specify the threshold in percentage                  | `10%`   |
-| `pvc.autoscaling.gardener.cloud/max-capacity` | Max capacity up to which a PVC can be resized        | N/A     |
+| Annotation                                       | Description                                            | Default |
+|:-------------------------------------------------|:-------------------------------------------------------|:-------:|
+| `pvc.autoscaling.gardener.cloud/is-enabled`      | Enable autoscaling when set to `true`                  |   N/A   |
+| `pvc.autoscaling.gardener.cloud/increase-by`     | Specifies how much to increase the PVC in percentage   |  `10%`  |
+| `pvc.autoscaling.gardener.cloud/threshold`       | Specify the threshold in percentage                    |  `10%`  |
+| `pvc.autoscaling.gardener.cloud/min-threshold`   | Specify the minimum threshold in bytes <sup>[1]</sup>  |   N/A   |
+| `pvc.autoscaling.gardener.cloud/max-capacity`    | Max capacity up to which a PVC can be resized          |   N/A   |
+
+**Notes:**
+
+[1]:
+If both `threshold` and `min-threshold` are specified, a resize is
+initiated if any of the thresholds is reached.
+  
+When scaling is initiated based on `min-threshold`, the increment
+(see `increase-by`) is calculated by a different formula:
+```
+Increment = (IncreaseBy / Threshold) * MinThreshold
+```
+With this formula, a scaling event based on `min-threshold` actually
+results in the same increment, as would be suggested by the pair of
+relative `threshold` and `increase-by` parameters, at the capacity point
+where the absolute value derived from `threshold` would equal
+`min-threshold`.
+  
+In contrast to `threshold`, `min-threshold` only applies to free
+space, not to inodes.
 
 The following additional annotations are populated by the controller, which
 provide information about the latest observed state for a PVC.

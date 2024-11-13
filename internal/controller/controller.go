@@ -174,9 +174,18 @@ func (r *PersistentVolumeClaimReconciler) Reconcile(ctx context.Context, req ctr
 		return ctrl.Result{}, fmt.Errorf("cannot parse increase-by value: %w", err)
 	}
 
+	minIncrementBytes, err := getMinIncrementBytes(&obj)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("cannot calculate minimum increment: %w", err)
+	}
 	increment := float64(currSpecSize.Value()) * (increaseBy / 100.0)
-	newSizeBytes := int64(math.Ceil((float64(currSpecSize.Value())+increment)/1073741824)) * 1073741824
-	newSize := resource.NewQuantity(newSizeBytes, resource.BinarySI)
+	if increment < minIncrementBytes {
+		increment = minIncrementBytes
+	}
+
+	newSizeBytesUnaligned := float64(currSpecSize.Value()) + increment
+	newSizeBytesAligned := int64(math.Ceil(newSizeBytesUnaligned/common.ScalingResolutionBytes)) * common.ScalingResolutionBytes
+	newSize := resource.NewQuantity(newSizeBytesAligned, resource.BinarySI)
 
 	// Check that we've got a valid new size. If we end up in any of these
 	// cases below, it pretty much means the logic is broken, so we don't
@@ -239,4 +248,38 @@ func (r *PersistentVolumeClaimReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Named(common.ControllerName).
 		WatchesRawSource(src).
 		Complete(r)
+}
+
+// getMinIncrementBytes derives a minimum value for the increment, based on [annotation.MinThreshold].
+// If [annotation.MinThreshold] is not defined, it returns 0.
+func getMinIncrementBytes(pvc *corev1.PersistentVolumeClaim) (float64, error) {
+	minThresholdQuantity, err := utils.ParseMinThreshold(pvc)
+	if err != nil {
+		return 0, err
+	}
+	if minThresholdQuantity == nil || minThresholdQuantity.Value() <= 0 {
+		return 0, nil
+	}
+	minThresholdBytes := minThresholdQuantity.Value()
+
+	relativeThreshold, err := utils.ParsePercentage(
+		utils.GetAnnotation(pvc, annotation.Threshold, common.DefaultThresholdValue))
+	if err != nil {
+		return 0, fmt.Errorf("cannot parse threshold value: %w", err)
+	}
+	relativeThreshold /= 100
+
+	relativeIncrement, err := utils.ParsePercentage(
+		utils.GetAnnotation(pvc, annotation.IncreaseBy, common.DefaultIncreaseByValue))
+	if err != nil {
+		return 0, fmt.Errorf("cannot parse increase-by value: %w", err)
+	}
+	relativeIncrement /= 100
+
+	incrementToThresholdRatio := relativeIncrement / relativeThreshold
+	// Don't fly off the handle upon excessively small threshold
+	if relativeThreshold < 0.05 && incrementToThresholdRatio > 40 {
+		incrementToThresholdRatio = relativeIncrement / 0.05
+	}
+	return incrementToThresholdRatio * float64(minThresholdBytes), nil
 }

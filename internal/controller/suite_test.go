@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package controller_test
+package controller
 
 import (
 	"context"

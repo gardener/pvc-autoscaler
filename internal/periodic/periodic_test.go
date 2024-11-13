@@ -516,8 +516,9 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(pvc).NotTo(BeNil())
 
 			annotations := map[string]string{
-				annotation.IsEnabled:   "true",
-				annotation.MaxCapacity: "100Gi",
+				annotation.IsEnabled:    "true",
+				annotation.MaxCapacity:  "100Gi",
+				annotation.MinThreshold: "10Mi",
 			}
 			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
 
@@ -536,6 +537,45 @@ var _ = Describe("Periodic Runner", func() {
 			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
 			Expect(ok).To(BeFalse())
 			Expect(err).To(BeNil())
+		})
+
+		It("should reconcile - free space minimum threshold reached", func() {
+			ctx := context.Background()
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-free-space-min-threshold-reached", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:    "true",
+				annotation.MaxCapacity:  "100Gi",
+				annotation.MinThreshold: "300Mi",
+			}
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
+
+			// Sample volume info metrics with free space >10%, but <MinThreshold
+			volInfo := &metricssource.VolumeInfo{
+				AvailableBytes:  200 * 1024 * 1024,
+				CapacityBytes:   1000 * 1024 * 1024,
+				AvailableInodes: 1000,
+				CapacityInodes:  1000,
+			}
+
+			// Use a new event recorder so that we capture only the
+			// relevant events
+			eventRecorder := record.NewFakeRecorder(128)
+			withEventRecorderOpt := WithEventRecorder(eventRecorder)
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+			withEventRecorderOpt(runner)
+
+			ok, err := runner.shouldReconcilePVC(ctx, pvc, volInfo)
+			Expect(ok).To(BeTrue())
+			Expect(err).To(BeNil())
+
+			event := <-eventRecorder.Events
+			wantEvent := `Warning FreeSpaceThresholdReached free space (209715200 bytes) is less than the configured threshold (300Mi = 314572800 bytes)`
+			Expect(event).To(Equal(wantEvent))
 		})
 	})
 
