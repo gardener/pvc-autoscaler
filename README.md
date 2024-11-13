@@ -32,6 +32,11 @@ Or you can install it this way instead.
 kubectl apply -f https://raw.githubusercontent.com/gardener/pvc-autoscaler/master/dist/install.yaml
 ```
 
+Note, that the provided install bundle uses
+[cert-manager](https://cert-manager.io/) for issuing TLS certificates for the
+admission webhook server. If you intend on using another approach for issuing
+TLS certificates, make sure to adjust the `default` kustomization instead.
+
 In addition to that you could also install `pvc-autoscaler` using the default
 [kustomization](https://kubectl.docs.kubernetes.io/references/kustomize/glossary/#kustomization)
 located in [config/default](./config/default). Note that the `default`
@@ -54,37 +59,36 @@ you configure the `--prometheus-address` option for the
 
 In order to start monitoring and automatically resize a persistent volume, when
 the available space or inodes drop below a certain threshold you need to
-annotate the respective PVCs, e.g.
+create a new `PersistentVolumeClaimAutoscaler` resource, e.g.
 
-``` shell
-kubectl annotate pvc my-pvc pvc.autoscaling.gardener.cloud/is-enabled=true
-kubectl annotate pvc my-pvc pvc.autoscaling.gardener.cloud/max-capacity=100Gi
+``` yaml
+---
+apiVersion: autoscaling.gardener.cloud/v1alpha1
+kind: PersistentVolumeClaimAutoscaler
+metadata:
+  name: my-pvca
+spec:
+  increaseBy: "10%"
+  threshold: "20%"
+  maxCapacity: 10Gi
+  scaleTargetRef:
+    name: my-pvc
 ```
 
-Note, that specifying a max capacity is required.
+The following properties must be specified when creating a new
+`PersistentVolumeClaimAutoscaler` resource.
 
-The following annotations can be configured by an operator in order to control
-the behaviour of `pvc-autoscaler`.
+| Property                    | Description                                                                 | Default |
+|:----------------------------|:----------------------------------------------------------------------------|:-------:|
+| `.spec.increaseBy`          | Specifies how much to increase the PVC in percentage during resize          | `10%`   |
+| `.spec.threshold`           | Specify the threshold in percentage, which once reached will cause a resize | `10%`   |
+| `.spec.maxCapacity`         | Max capacity up to which a PVC can be resized                               | N/A     |
+| `.spec.scaleTargetRef.name` | Name of the PVC to monitor and autoscale                                    | N/A     |
 
-| Annotation                                    | Description                                          | Default |
-|:----------------------------------------------|:-----------------------------------------------------|:-------:|
-| `pvc.autoscaling.gardener.cloud/is-enabled`   | Enable autoscaling when set to `true`                | N/A     |
-| `pvc.autoscaling.gardener.cloud/increase-by`  | Specifies how much to increase the PVC in percentage | `10%`   |
-| `pvc.autoscaling.gardener.cloud/threshold`    | Specify the threshold in percentage                  | `10%`   |
-| `pvc.autoscaling.gardener.cloud/max-capacity` | Max capacity up to which a PVC can be resized        | N/A     |
-
-The following additional annotations are populated by the controller, which
-provide information about the latest observed state for a PVC.
-
-| Annotation                                   | Description                               |
-|:---------------------------------------------|:------------------------------------------|
-| `pvc.autoscaling.gardener.cloud/free-space`  | Latest observed free space as percentage  |
-| `pvc.autoscaling.gardener.cloud/used-space`  | Latest observed used space as percentage  |
-| `pvc.autoscaling.gardener.cloud/free-inodes` | Latest observed free inodes as percentage |
-| `pvc.autoscaling.gardener.cloud/used-inodes` | Latest observed used inodes as percentage |
-| `pvc.autoscaling.gardener.cloud/last-check`  | Last periodic check in Unix time          |
-| `pvc.autoscaling.gardener.cloud/next-check`  | Next scheduled check in Unix time         |
-| `pvc.autoscaling.gardener.cliud/prev-size`   | Previous known capacity before resize     |
+In order to watch the status of the autoscaler you can `kubectl describe` your
+`PersistentVolumeClaimAutoscaler` resource, where you will find information
+about the latest observed state, last and next scheduled check, status
+conditions, etc.
 
 # Local development
 
@@ -170,15 +174,6 @@ In order to run the end-to-end tests we need a clean test environment.  The
 following command will create a new test environment, build and deploy the
 operator image, run the e2e tests against it and finally destroy the test
 environment.
-
-NOTE: Since the e2e tests are using `minikube` there are known issues with
-version v1.33.0 of minikube. For more details check the following issues.
-
-- https://github.com/kubernetes/minikube/issues/18705
-- https://github.com/kubernetes/minikube/pull/18737
-- https://github.com/kubernetes/minikube/issues/18732
-
-Please use minikube version v1.32.0 until above issues have been resolved.
 
 ``` shell
 make test-e2e
