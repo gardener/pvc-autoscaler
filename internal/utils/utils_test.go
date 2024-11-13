@@ -7,6 +7,7 @@ package utils_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/utils/ptr"
 
 	"github.com/gardener/pvc-autoscaler/internal/annotation"
 	"github.com/gardener/pvc-autoscaler/internal/common"
@@ -37,6 +38,43 @@ var _ = Describe("Utils", func() {
 			for _, val := range values {
 				_, err := utils.ParsePercentage(val)
 				Expect(err).To(MatchError(utils.ErrBadPercentageValue))
+			}
+		})
+	})
+
+	Context("# ParseMinThreshold", func() {
+		var (
+			makePVC = func(minThreshold string) *corev1.PersistentVolumeClaim {
+				return &corev1.PersistentVolumeClaim{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{annotation.MinThreshold: minThreshold},
+					},
+				}
+			}
+		)
+
+		It("should succeed", func() {
+			tests := []struct {
+				val  *corev1.PersistentVolumeClaim
+				want *resource.Quantity
+			}{
+				{val: makePVC("5"), want: ptr.To(resource.MustParse("5"))},
+				{val: makePVC("20Gi"), want: ptr.To(resource.MustParse("20Gi"))},
+				{val: makePVC("0"), want: ptr.To(resource.MustParse("0"))},
+				{val: makePVC(""), want: nil},
+			}
+			for _, test := range tests {
+				actual, err := utils.ParseMinThreshold(test.val)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(actual).To(Equal(test.want))
+			}
+		})
+
+		It("should fail", func() {
+			values := []string{"20%", "-5", " foobar", "-1Gi"}
+			for _, val := range values {
+				_, err := utils.ParseMinThreshold(makePVC(val))
+				Expect(err).To(MatchError(ContainSubstring("minimum threshold")))
 			}
 		})
 	})
@@ -284,6 +322,28 @@ var _ = Describe("Utils", func() {
 				},
 			}
 			Expect(utils.ValidatePersistentVolumeClaimAnnotations(pvc)).ShouldNot(Succeed())
+		})
+
+		It("should fail with negative min-threshold annotation", func() {
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "sample-pvc",
+					Namespace: "default",
+					Annotations: map[string]string{
+						annotation.IsEnabled:    "true",
+						annotation.IncreaseBy:   "10%",
+						annotation.MaxCapacity:  "100Gi",
+						annotation.MinThreshold: "-1Gi",
+					},
+				},
+				Status: corev1.PersistentVolumeClaimStatus{
+					Capacity: corev1.ResourceList{
+						corev1.ResourceStorage: resource.MustParse("100Gi"),
+					},
+				},
+			}
+			Expect(utils.ValidatePersistentVolumeClaimAnnotations(pvc)).
+				To(MatchError(ContainSubstring("minimum threshold")))
 		})
 
 	})

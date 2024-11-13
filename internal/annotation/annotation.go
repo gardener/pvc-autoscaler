@@ -22,7 +22,35 @@ const (
 	// capacity (free space) for the PVC reaches or drops below the
 	// specified threshold this will trigger a resize operation by the
 	// controller.
+	//
+	// If Threshold and MinThreshold are both specified, a resize is
+	// initiated when any of the thresholds is reached.
 	Threshold = Prefix + "threshold"
+
+	// MinThreshold is an annotation which is applied to a PVC, and
+	// specifies the scaling trigger threshold for the PVC's free space in
+	// absolute terms (e.g. 1Gi, 600Mi, etc.).
+	// Once the available capacity (free space) for the PVC drops below the
+	// level specified by the annotation, the controller will respond by
+	// resizing the PVC.
+	//
+	// If both Threshold and MinThreshold are specified, a resize is
+	// initiated if any of the thresholds is reached.
+	//
+	// When scaling is initiated based on MinThreshold, the increment
+	// (see IncreaseBy) is calculated by a different formula:
+	//
+	// Increment = (IncreaseBy / Threshold) * MinThreshold
+	//
+	// With this formula, a scaling event based on MinThreshold actually
+	// results in the same increment, as would be suggested by the pair of
+	// relative Threshold and IncreaseBy parameters, at the capacity point
+	// where the absolute value derived from Threshold would equal
+	// MinThreshold.
+	//
+	// Note: In contrast to Threshold, MinThreshold only applies to free
+	// space, not to inodes.
+	MinThreshold = Prefix + "min-threshold"
 
 	// MaxCapacity is an annotation which specifies the maximum capacity up
 	// to which a PVC is allowed to be extended. The max capacity is

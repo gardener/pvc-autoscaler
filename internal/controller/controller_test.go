@@ -2,11 +2,12 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package controller_test
+package controller
 
 import (
 	"context"
 	"io"
+	"math"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -14,11 +15,11 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/internal/annotation"
 	"github.com/gardener/pvc-autoscaler/internal/common"
-	"github.com/gardener/pvc-autoscaler/internal/controller"
 	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,12 +28,12 @@ import (
 )
 
 // creates a new reconciler instance
-func newReconciler() (*controller.PersistentVolumeClaimReconciler, error) {
-	reconciler, err := controller.New(
-		controller.WithClient(k8sClient),
-		controller.WithScheme(k8sClient.Scheme()),
-		controller.WithEventChannel(eventCh),
-		controller.WithEventRecorder(eventRecorder),
+func newReconciler() (*PersistentVolumeClaimReconciler, error) {
+	reconciler, err := New(
+		WithClient(k8sClient),
+		WithScheme(k8sClient.Scheme()),
+		WithEventChannel(eventCh),
+		WithEventRecorder(eventRecorder),
 	)
 
 	return reconciler, err
@@ -55,19 +56,19 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 
 	Context("Create reconciler instance", func() {
 		It("should fail without event channel", func() {
-			_, err := controller.New(
-				controller.WithClient(k8sClient),
-				controller.WithScheme(k8sClient.Scheme()),
-				controller.WithEventRecorder(eventRecorder),
+			_, err := New(
+				WithClient(k8sClient),
+				WithScheme(k8sClient.Scheme()),
+				WithEventRecorder(eventRecorder),
 			)
 			Expect(err).To(MatchError(common.ErrNoEventChannel))
 		})
 
 		It("should fail without event recorder", func() {
-			_, err := controller.New(
-				controller.WithClient(k8sClient),
-				controller.WithScheme(k8sClient.Scheme()),
-				controller.WithEventChannel(eventCh),
+			_, err := New(
+				WithClient(k8sClient),
+				WithScheme(k8sClient.Scheme()),
+				WithEventChannel(eventCh),
 			)
 			Expect(err).To(MatchError(common.ErrNoEventRecorder))
 		})
@@ -78,6 +79,86 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			Expect(reconciler).NotTo(BeNil())
 		})
 
+	})
+
+	Context("getMinIncrementBytes", func() {
+		It("should return the correct value when increment > threshold", func() {
+			result, err := getMinIncrementBytes(&corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotation.IncreaseBy:   "30%",
+						annotation.Threshold:    "20%",
+						annotation.MinThreshold: "1Gi",
+					},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(math.Round(result*1000) / 1000).To(Equal(math.Round(float64(1024*1024*1024) * 30 / 20)))
+		})
+
+		It("should return the correct value when increment < threshold", func() {
+			result, err := getMinIncrementBytes(&corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotation.IncreaseBy:   "10%",
+						annotation.Threshold:    "20%",
+						annotation.MinThreshold: "1Gi",
+					},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(math.Round(result*1000) / 1000).To(Equal(math.Round(float64(1024*1024*1024) * 10 / 20)))
+		})
+
+		It("should return the correct value when using defaults", func() {
+			result, err := getMinIncrementBytes(&corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotation.MinThreshold: "1Gi",
+					},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(math.Round(result*1000) / 1000).To(Equal(float64(1024 * 1024 * 1024)))
+		})
+
+		It("should return zero when minimum threshold is not configured", func() {
+			result, err := getMinIncrementBytes(&corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result).To(Equal(float64(0)))
+		})
+
+		It("should allow for reasonably large increment/threshold ratio", func() {
+			result, err := getMinIncrementBytes(&corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotation.IncreaseBy:   "100%",
+						annotation.Threshold:    "5%",
+						annotation.MinThreshold: "1Gi",
+					},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(math.Round(result*1000) / 1000).To(Equal(float64(20 * 1024 * 1024 * 1024)))
+		})
+
+		It("should moderate its response to an extreme increment/threshold ratio", func() {
+			result, err := getMinIncrementBytes(&corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{
+					Annotations: map[string]string{
+						annotation.IncreaseBy:   "100%",
+						annotation.Threshold:    "1%",
+						annotation.MinThreshold: "1Gi",
+					},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(math.Round(result*1000) / 1000).To(Equal(float64(20 * 1024 * 1024 * 1024)))
+		})
 	})
 
 	Context("When reconciling a resource", func() {
@@ -342,6 +423,46 @@ var _ = Describe("PersistentVolumeClaim Controller", func() {
 			// should be increased
 			var resizedPvc corev1.PersistentVolumeClaim
 			increasedCapacity := resource.MustParse("2Gi") // New capacity should be 2Gi
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(increasedCapacity))
+		})
+
+		It("should account for min-threshold when resizing the pvc", func() {
+			ctx := context.Background()
+			initialCapacity := "10Gi"
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-should-resize-on-min-threshold", initialCapacity)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			annotations := map[string]string{
+				annotation.IsEnabled:    "true",
+				annotation.MaxCapacity:  "100Gi",
+				annotation.IncreaseBy:   "30%",
+				annotation.Threshold:    "20%",
+				annotation.MinThreshold: "2Gi",
+			}
+			Expect(testutils.AnnotatePVC(ctx, k8sClient, pvc, annotations)).To(Succeed())
+
+			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvc)}
+			reconciler, err := newReconciler()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(reconciler).NotTo(BeNil())
+
+			// Inspect the log messages and confirm that we've resized the pvc
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			result, err := reconciler.Reconcile(newCtx, req)
+			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(buf.String()).To(ContainSubstring("resizing persistent volume claim"))
+
+			// We should see a prev-size annotation and the new size
+			// should be increased
+			var resizedPvc corev1.PersistentVolumeClaim
+			increasedCapacity := resource.MustParse("13Gi") // New capacity should be 13Gi
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
 			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(increasedCapacity))
 		})

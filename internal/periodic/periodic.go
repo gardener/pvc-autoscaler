@@ -320,6 +320,10 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 	if err != nil {
 		return false, fmt.Errorf("cannot parse threshold: %w", err)
 	}
+	minThresholdQuantity, err := utils.ParseMinThreshold(obj)
+	if err != nil {
+		return false, err
+	}
 
 	// VolumeMode should be Filesystem
 	if obj.Spec.VolumeMode == nil {
@@ -336,14 +340,27 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, obj *corev1.PersistentV
 
 	switch {
 	// Free space reached threshold
-	case freeSpace < threshold:
+	case freeSpace < threshold ||
+		minThresholdQuantity != nil && int64(volInfo.AvailableBytes) < minThresholdQuantity.Value():
+
+		var availableAsString string
+		var thresholdAsString string
+		if freeSpace < threshold {
+			availableAsString = fmt.Sprintf("%.2f%%", freeSpace)
+			thresholdAsString = fmt.Sprintf("%.2f%%", threshold)
+		} else {
+			availableAsString = fmt.Sprintf("%d bytes", volInfo.AvailableBytes)
+			thresholdAsString = fmt.Sprintf(
+				"%s = %d bytes", minThresholdQuantity.String(), minThresholdQuantity.Value())
+		}
+
 		r.eventRecorder.Eventf(
 			obj,
 			corev1.EventTypeWarning,
 			"FreeSpaceThresholdReached",
-			"free space (%.2f%%) is less than the configured threshold (%.2f%%)",
-			freeSpace,
-			threshold,
+			"free space (%s) is less than the configured threshold (%s)",
+			availableAsString,
+			thresholdAsString,
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(obj.Namespace, obj.Name, "space").Inc()
 		return true, nil

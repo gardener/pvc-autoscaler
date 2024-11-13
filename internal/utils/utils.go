@@ -70,6 +70,26 @@ func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolum
 	return false
 }
 
+// ParseMinThreshold returns the value of the absolute scaling trigger threshold, specified in the PVC.
+// If minimum threshold is not specified, or an error occurs, a nil value is returned.
+func ParseMinThreshold(pvc *corev1.PersistentVolumeClaim) (asQuantity *resource.Quantity, err error) {
+	minThresholdVal := GetAnnotation(pvc, annotation.MinThreshold, "")
+	if minThresholdVal == "" {
+		return nil, nil
+	}
+
+	q, err := resource.ParseQuantity(minThresholdVal)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse minimum threshold: %w", err)
+	}
+
+	if q.Sign() < 0 {
+		return nil, fmt.Errorf("invalid minimum threshold `%s`: negative values are not accepted", minThresholdVal)
+	}
+
+	return &q, nil
+}
+
 // ValidatePersistentVolumeClaimAnnotations sanity checks the custom annotations
 // in order to ensure they contain valid values. Returns nil if all
 // user-specified annotations are valid, otherwise it returns a non-nil error.
@@ -81,6 +101,10 @@ func ValidatePersistentVolumeClaimAnnotations(obj *corev1.PersistentVolumeClaim)
 	}
 	if threshold == 0.0 {
 		return fmt.Errorf("invalid threshold: %w", common.ErrZeroPercentage)
+	}
+
+	if _, err := ParseMinThreshold(obj); err != nil {
+		return err
 	}
 
 	maxCapacityVal := GetAnnotation(obj, annotation.MaxCapacity, "0Gi")
