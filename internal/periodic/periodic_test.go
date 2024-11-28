@@ -250,7 +250,7 @@ var _ = Describe("Periodic Runner", func() {
 			}
 			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -311,7 +311,7 @@ var _ = Describe("Periodic Runner", func() {
 			}
 			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -359,7 +359,7 @@ var _ = Describe("Periodic Runner", func() {
 			}
 			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -400,7 +400,7 @@ var _ = Describe("Periodic Runner", func() {
 			}
 			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -433,7 +433,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -475,7 +475,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -508,7 +508,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -550,7 +550,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -590,7 +590,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -653,7 +653,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -684,7 +684,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
@@ -748,7 +748,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler targetting our test PVC
+			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,

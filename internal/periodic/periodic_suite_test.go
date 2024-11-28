@@ -18,7 +18,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -34,7 +33,6 @@ var k8sClient client.Client
 var testEnv *envtest.Environment
 var eventCh = make(chan event.GenericEvent)
 var eventRecorder = record.NewFakeRecorder(1024)
-var k8sCache cache.Cache
 var parentCtx context.Context
 var cancelFunc context.CancelFunc
 
