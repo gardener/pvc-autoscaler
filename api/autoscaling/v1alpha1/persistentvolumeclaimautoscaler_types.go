@@ -96,7 +96,7 @@ type PersistentVolumeClaimAutoscaler struct {
 func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, klient client.Client, condition metav1.Condition) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 	conditions := obj.Status.Conditions
-	if conditions == nil || len(conditions) == 0 {
+	if len(conditions) == 0 {
 		conditions = make([]metav1.Condition, 0)
 	}
 	meta.SetStatusCondition(&conditions, condition)

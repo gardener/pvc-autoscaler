@@ -273,7 +273,7 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 }
 
 // shouldReconcilePVC is a predicate which checks whether the
-// [corev1.PersistentVolumeClaim] object targetted by
+// [corev1.PersistentVolumeClaim] object targeted by
 // [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
 // reconciliation.
 func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volInfo *metricssource.VolumeInfo) (bool, error) {

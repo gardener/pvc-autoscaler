@@ -124,7 +124,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
 
-			// The PVC Autoscaler resource targetting our test PVC
+			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
@@ -178,7 +178,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
 
-			// The PVC Autoscaler resource targetting our test PVC
+			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
@@ -232,7 +232,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
 
-			// The PVC Autoscaler resource targetting our test PVC
+			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
@@ -276,7 +276,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler resource targetting our test PVC
+			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
@@ -327,7 +327,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler resource targetting our test PVC
+			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
@@ -376,7 +376,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
-			// The PVC Autoscaler resource targetting our test PVC
+			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
