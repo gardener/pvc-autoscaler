@@ -104,6 +104,8 @@ function _install_openebs_operator() {
        --create-namespace \
        --set engines.local.zfs.enabled=false \
        --set engines.replicated.mayastor.enabled=false \
+       --set alloy.enabled=false \
+       --set loki.enabled=false \
        openebs/openebs
 
   _msg_info "Waiting for OpenEBS pods to become ready ..."
