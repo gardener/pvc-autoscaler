@@ -2,7 +2,7 @@ pvc-autoscaler:
   base_definition:
     steps:
       verify:
-        image: 'golang:1.23.2'
+        image: 'golang:1.24.5'
     traits:
       version:
         preprocess: 'inject-commit-hash'
