@@ -7,11 +7,10 @@ package utils_test
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/gardener/pvc-autoscaler/internal/utils"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
 
 var _ = Describe("Utils", func() {

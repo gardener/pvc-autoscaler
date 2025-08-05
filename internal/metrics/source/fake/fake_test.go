@@ -10,11 +10,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/fake"
-
-	"k8s.io/apimachinery/pkg/types"
 )
 
 var _ = Describe("Fake", func() {

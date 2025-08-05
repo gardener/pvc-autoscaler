@@ -85,8 +85,8 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 // PersistentVolumeClaimAutoscaler is the Schema for the
 // persistentvolumeclaimautoscalers API
 type PersistentVolumeClaimAutoscaler struct {
-	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta   `json:",inline"`            // nolint:revive
+	metav1.ObjectMeta `json:"metadata,omitempty"` // nolint:revive
 
 	Spec   PersistentVolumeClaimAutoscalerSpec   `json:"spec,omitempty"`
 	Status PersistentVolumeClaimAutoscalerStatus `json:"status,omitempty"`
@@ -101,6 +101,7 @@ func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, kl
 	}
 	meta.SetStatusCondition(&conditions, condition)
 	obj.Status.Conditions = conditions
+
 	return klient.Status().Patch(ctx, obj, patch)
 }
 
@@ -108,7 +109,7 @@ func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, kl
 
 // PersistentVolumeClaimAutoscalerList contains a list of PersistentVolumeClaimAutoscaler
 type PersistentVolumeClaimAutoscalerList struct {
-	metav1.TypeMeta `json:",inline"`
+	metav1.TypeMeta `json:",inline"` // nolint:revive
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []PersistentVolumeClaimAutoscaler `json:"items"`
 }

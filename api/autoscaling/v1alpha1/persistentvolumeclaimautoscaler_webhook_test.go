@@ -7,7 +7,6 @@ package v1alpha1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -134,7 +133,6 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 
 			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
 			Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
-
 		})
 
 		It("Should deny if zero percentage values are specified", func() {
