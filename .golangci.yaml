@@ -1,0 +1,75 @@
+---
+version: "2"
+run:
+  concurrency: 4
+  go: "1.24"
+  timeout: 10m
+
+linters:
+  enable:
+    - gocritic
+    - gosec
+    - nlreturn
+    - revive
+    - errcheck
+    - copyloopvar
+    - goconst
+    - gocyclo
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - prealloc
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+
+  settings:
+    revive:
+      enable-all-rules: true
+      rules:
+        - name: add-constant
+          disabled: true
+        - name: cognitive-complexity
+          disabled: true
+        - name: cyclomatic
+          disabled: true
+        - name: dot-imports
+          disabled: true
+        - name: function-length
+          disabled: true
+        - name: line-length-limit
+          disabled: true
+        - name: package-comments
+          disabled: true
+        - name: use-errors-new
+          disabled: true
+        - name: max-public-structs
+          disabled: true
+        - name: var-naming
+          arguments:
+            - []
+            - []
+            - - skip-package-name-checks: true
+        - name: unhandled-error
+          disabled: false
+          exclude: [""]
+          arguments:
+            - fmt.Print
+            - fmt.Printf
+            - fmt.Println
+            - fmt.Fprint
+            - fmt.Fprintf
+            - fmt.Fprintln
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - localmodule
