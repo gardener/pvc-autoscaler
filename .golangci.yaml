@@ -47,6 +47,14 @@ linters:
           disabled: true
         - name: max-public-structs
           disabled: true
+        - name: comment-spacings
+          disabled: true
+        - name: unused-parameter
+          disabled: true
+        - name: unused-receiver
+          disabled: true
+        - name: enforce-switch-style
+          disabled: true
         - name: var-naming
           arguments:
             - []

@@ -5,9 +5,10 @@
 package source_test
 
 import (
-	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 )
 
 var _ = Describe("Source", func() {

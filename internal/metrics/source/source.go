@@ -20,7 +20,7 @@ const (
 	// capacity in bytes of the volumes
 	KubeletVolumeStatsCapacityBytes = "kubelet_volume_stats_capacity_bytes"
 
-	// KubeletVolumeStatusInodesFree is a metric which returns the number of
+	// KubeletVolumeStatsInodesFree is a metric which returns the number of
 	// free inodes in the volumes
 	KubeletVolumeStatsInodesFree = "kubelet_volume_stats_inodes_free"
 
@@ -57,6 +57,7 @@ func (vi *VolumeInfo) FreeSpacePercentage() (float64, error) {
 	}
 
 	val := float64(vi.AvailableBytes) / float64(vi.CapacityBytes) * 100.0
+
 	return val, nil
 }
 

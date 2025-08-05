@@ -10,28 +10,25 @@ import (
 	"os"
 	"time"
 
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
-	_ "github.com/gardener/pvc-autoscaler/internal/metrics"
-
-	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
-	"github.com/gardener/pvc-autoscaler/internal/common"
-	controller "github.com/gardener/pvc-autoscaler/internal/controller/autoscaling"
-	"github.com/gardener/pvc-autoscaler/internal/metrics/source/prometheus"
-	"github.com/gardener/pvc-autoscaler/internal/periodic"
-
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+	// to ensure that exec-entrypoint and run can make use of them.
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	//+kubebuilder:scaffold:imports
+
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/gardener/pvc-autoscaler/internal/common"
+	controller "github.com/gardener/pvc-autoscaler/internal/controller/autoscaling"
+	_ "github.com/gardener/pvc-autoscaler/internal/metrics"
+	"github.com/gardener/pvc-autoscaler/internal/metrics/source/prometheus"
+	"github.com/gardener/pvc-autoscaler/internal/periodic"
 )
 
 var (

@@ -21,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
@@ -203,6 +203,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 			if err := item.SetCondition(ctx, r.client, condition); err != nil {
 				logger.Info("failed to update status condition", "reason", err.Error())
 			}
+
 			continue
 		}
 
@@ -222,10 +223,10 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 	}
 
 	for _, item := range toReconcile {
-		event := event.GenericEvent{
+		e := event.GenericEvent{
 			Object: &item,
 		}
-		r.eventCh <- event
+		r.eventCh <- e
 	}
 
 	return nil
@@ -381,6 +382,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 			threshold,
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name, "space").Inc()
+
 		return true, nil
 
 	// Free inodes reached threshold
@@ -394,6 +396,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 			threshold,
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name, "inodes").Inc()
+
 		return true, nil
 
 	// No need to reconcile the PVC for now
@@ -404,7 +407,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 
 // validatePVCA sanity checks the spec in order to ensure it contains valid
 // values. Returns nil if the spec is valid, and non-nil error otherwise.
-func (r *Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
+func (*Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
 	threshold, err := utils.ParsePercentage(obj.Spec.Threshold)
 	if err != nil {
 		return fmt.Errorf("cannot parse threshold: %w", err)
