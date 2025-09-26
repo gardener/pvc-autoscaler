@@ -25,8 +25,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					// No increaseBy and threshold specified
-					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						// No increaseBy and threshold specified
+						MaxCapacity: resource.MustParse("5Gi"),
+					},
 					ScaleTargetRef: corev1.LocalObjectReference{
 						Name: "pvc-1",
 					},
@@ -36,8 +38,8 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
 			pvca := &PersistentVolumeClaimAutoscaler{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), pvca)).To(Succeed())
-			Expect(pvca.Spec.IncreaseBy).To(Equal(common.DefaultIncreaseByValue))
-			Expect(pvca.Spec.Threshold).To(Equal(common.DefaultThresholdValue))
+			Expect(pvca.Spec.ScaleUp.IncreaseBy).To(Equal(common.DefaultIncreaseByValue))
+			Expect(pvca.Spec.ScaleUp.Threshold).To(Equal(common.DefaultThresholdValue))
 		})
 	})
 
@@ -49,9 +51,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					// MaxCapacity is not set
-					IncreaseBy: common.DefaultIncreaseByValue,
-					Threshold:  common.DefaultThresholdValue,
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						// MaxCapacity is not set
+						IncreaseBy: common.DefaultIncreaseByValue,
+						Threshold:  common.DefaultThresholdValue,
+					},
 					ScaleTargetRef: corev1.LocalObjectReference{
 						Name: "pvc-2",
 					},
@@ -69,9 +73,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					IncreaseBy:  "bad-increase-by",
-					Threshold:   common.DefaultThresholdValue,
-					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						IncreaseBy:  "bad-increase-by",
+						Threshold:   common.DefaultThresholdValue,
+						MaxCapacity: resource.MustParse("5Gi"),
+					},
 					ScaleTargetRef: corev1.LocalObjectReference{
 						Name: "pvc-3",
 					},
@@ -87,9 +93,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					IncreaseBy:  common.DefaultIncreaseByValue,
-					Threshold:   "bad-threshold",
-					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						IncreaseBy:  common.DefaultIncreaseByValue,
+						Threshold:   "bad-threshold",
+						MaxCapacity: resource.MustParse("5Gi"),
+					},
 					ScaleTargetRef: corev1.LocalObjectReference{
 						Name: "pvc-4",
 					},
@@ -107,9 +115,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					IncreaseBy:  common.DefaultIncreaseByValue,
-					Threshold:   common.DefaultThresholdValue,
-					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						IncreaseBy:  common.DefaultIncreaseByValue,
+						Threshold:   common.DefaultThresholdValue,
+						MaxCapacity: resource.MustParse("5Gi"),
+					},
 				},
 			}
 
@@ -123,9 +133,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					IncreaseBy:  common.DefaultIncreaseByValue,
-					Threshold:   common.DefaultThresholdValue,
-					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						IncreaseBy:  common.DefaultIncreaseByValue,
+						Threshold:   common.DefaultThresholdValue,
+						MaxCapacity: resource.MustParse("5Gi"),
+					},
 					ScaleTargetRef: corev1.LocalObjectReference{
 						Name: "pvc-6",
 					},
@@ -144,9 +156,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					IncreaseBy:  "0%",
-					Threshold:   common.DefaultThresholdValue,
-					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						IncreaseBy:  "0%",
+						Threshold:   common.DefaultThresholdValue,
+						MaxCapacity: resource.MustParse("5Gi"),
+					},
 					ScaleTargetRef: corev1.LocalObjectReference{
 						Name: "pvc-7",
 					},
@@ -161,9 +175,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					IncreaseBy:  common.DefaultIncreaseByValue,
-					Threshold:   "0%",
-					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						IncreaseBy:  common.DefaultIncreaseByValue,
+						Threshold:   "0%",
+						MaxCapacity: resource.MustParse("5Gi"),
+					},
 					ScaleTargetRef: corev1.LocalObjectReference{
 						Name: "pvc-8",
 					},
@@ -180,9 +196,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
-					IncreaseBy:  common.DefaultIncreaseByValue,
-					Threshold:   common.DefaultThresholdValue,
-					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: PersistentVolumeClaimAutoscalerScaleUp{
+						IncreaseBy:  common.DefaultIncreaseByValue,
+						Threshold:   common.DefaultThresholdValue,
+						MaxCapacity: resource.MustParse("5Gi"),
+					},
 					ScaleTargetRef: corev1.LocalObjectReference{
 						Name: "pvc-9",
 					},
@@ -194,7 +212,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			pvca := &PersistentVolumeClaimAutoscaler{}
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), pvca)).To(Succeed())
 
-			pvca.Spec.Threshold = "invalid-threshold"
+			pvca.Spec.ScaleUp.Threshold = "invalid-threshold"
 			Expect(k8sClient.Update(ctx, pvca)).NotTo(Succeed())
 		})
 	})
