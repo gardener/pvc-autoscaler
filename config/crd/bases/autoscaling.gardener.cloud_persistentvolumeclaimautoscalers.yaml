@@ -58,21 +58,6 @@ spec:
               PersistentVolumeClaimAutoscalerSpec defines the desired state of
               PersistentVolumeClaimAutoscaler
             properties:
-              increaseBy:
-                description: |-
-                  IncreaseBy specifies an increase by percentage value (e.g. 10%, 20%,
-                  etc.) by which the Persistent Volume Claim storage will be resized.
-                type: string
-              maxCapacity:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  MaxCapacity specifies the maximum capacity up to which a PVC is
-                  allowed to be extended. The max capacity is specified as a
-                  [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               scaleTargetRef:
                 description: |-
                   ScaleTargetRef specifies the reference to the PVC which will be
@@ -89,13 +74,34 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              threshold:
+              scaleUp:
                 description: |-
-                  Threshold specifies the threshold value in percentage (e.g. 10%, 20%,
-                  etc.) for the PVC. Once the available capacity (free space) for the
-                  PVC reaches or drops below the specified threshold this will trigger
-                  a resize operation by the controller.
-                type: string
+                  ScaleUp specifies the values and limits needed for an increase in
+                  capacity of the PVC.
+                properties:
+                  increaseBy:
+                    description: |-
+                      IncreaseBy specifies an increase by percentage value (e.g. 10%, 20%,
+                      etc.) by which the Persistent Volume Claim storage will be resized.
+                    type: string
+                  maxCapacity:
+                    anyOf:
+                    - type: integer
+                    - type: string
+                    description: |-
+                      MaxCapacity specifies the maximum capacity up to which a PVC is
+                      allowed to be extended. The max capacity is specified as a
+                      [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
+                    pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                    x-kubernetes-int-or-string: true
+                  threshold:
+                    description: |-
+                      Threshold specifies the threshold value in percentage (e.g. 10%, 20%,
+                      etc.) for the PVC. Once the available capacity (free space) for the
+                      PVC reaches or drops below the specified threshold this will trigger
+                      a resize operation by the controller.
+                    type: string
+                type: object
             type: object
           status:
             description: |-
