@@ -1,0 +1,15 @@
+# See the OWNERS docs at https://go.k8s.io/owners
+
+aliases:
+  pvc-autoscaler-reviewers:
+  - dnaeon
+  - Kostov6
+  - nickytd
+  - plkokanov
+  - RadaBDimitrova
+  pvc-autoscaler-approvers:
+  - dnaeon
+  - Kostov6
+  - nickytd
+  - plkokanov
+  - RadaBDimitrova
