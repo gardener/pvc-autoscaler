@@ -4,12 +4,10 @@ aliases:
   pvc-autoscaler-reviewers:
   - dnaeon
   - Kostov6
-  - nickytd
   - plkokanov
   - RadaBDimitrova
   pvc-autoscaler-approvers:
   - dnaeon
   - Kostov6
-  - nickytd
   - plkokanov
   - RadaBDimitrova
