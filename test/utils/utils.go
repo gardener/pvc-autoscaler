@@ -91,9 +91,11 @@ func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 			Namespace: "default",
 		},
 		Spec: v1alpha1.PersistentVolumeClaimAutoscalerSpec{
-			IncreaseBy:  common.DefaultIncreaseByValue,
-			Threshold:   common.DefaultThresholdValue,
-			MaxCapacity: resource.MustParse(maxCapacity),
+			ScaleUp: v1alpha1.PersistentVolumeClaimAutoscalerScaleUp{
+				IncreaseBy:  common.DefaultIncreaseByValue,
+				Threshold:   common.DefaultThresholdValue,
+				MaxCapacity: resource.MustParse(maxCapacity),
+			},
 			ScaleTargetRef: corev1.LocalObjectReference{
 				Name: scaleTargetRef,
 			},

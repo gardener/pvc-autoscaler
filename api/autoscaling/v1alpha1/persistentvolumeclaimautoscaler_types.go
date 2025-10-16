@@ -14,9 +14,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// PersistentVolumeClaimAutoscalerSpec defines the desired state of
+// PersistentVolumeClaimAutoscalerScaleUp defines the values used for a scale-up by the
 // PersistentVolumeClaimAutoscaler
-type PersistentVolumeClaimAutoscalerSpec struct {
+type PersistentVolumeClaimAutoscalerScaleUp struct {
 	// IncreaseBy specifies an increase by percentage value (e.g. 10%, 20%,
 	// etc.) by which the Persistent Volume Claim storage will be resized.
 	IncreaseBy string `json:"increaseBy,omitempty"`
@@ -31,6 +31,14 @@ type PersistentVolumeClaimAutoscalerSpec struct {
 	// allowed to be extended. The max capacity is specified as a
 	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
 	MaxCapacity resource.Quantity `json:"maxCapacity,omitempty"`
+}
+
+// PersistentVolumeClaimAutoscalerSpec defines the desired state of
+// PersistentVolumeClaimAutoscaler
+type PersistentVolumeClaimAutoscalerSpec struct {
+	// ScaleUp specifies the values and limits needed for an increase in
+	// capacity of the PVC.
+	ScaleUp PersistentVolumeClaimAutoscalerScaleUp `json:"scaleUp,omitempty"`
 
 	// ScaleTargetRef specifies the reference to the PVC which will be
 	// managed by the controller.

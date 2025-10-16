@@ -188,7 +188,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	}
 
 	// Calculate the new size
-	increaseBy, err := utils.ParsePercentage(pvca.Spec.IncreaseBy)
+	increaseBy, err := utils.ParsePercentage(pvca.Spec.ScaleUp.IncreaseBy)
 	if err != nil {
 		eerr := fmt.Errorf("cannot parse increase-by value: %w", err)
 		condition := metav1.Condition{
@@ -218,13 +218,13 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	}
 
 	// We don't want to exceed the max capacity
-	if newSize.Value() > pvca.Spec.MaxCapacity.Value() {
+	if newSize.Value() > pvca.Spec.ScaleUp.MaxCapacity.Value() {
 		r.eventRecorder.Eventf(
 			pvcObj,
 			corev1.EventTypeWarning,
 			"MaxCapacityReached",
 			"max capacity (%s) has been reached, will not resize",
-			pvca.Spec.MaxCapacity.String(),
+			pvca.Spec.ScaleUp.MaxCapacity.String(),
 		)
 		logger.Info("max capacity reached")
 		metrics.MaxCapacityReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()

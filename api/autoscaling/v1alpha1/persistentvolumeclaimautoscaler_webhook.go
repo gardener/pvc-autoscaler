@@ -39,12 +39,12 @@ func (r *PersistentVolumeClaimAutoscaler) Default(ctx context.Context, obj runti
 		return fmt.Errorf("expected PersistentVolumeClaimAutoscaler resource, but got %T", obj)
 	}
 
-	if pvca.Spec.IncreaseBy == "" {
-		pvca.Spec.IncreaseBy = common.DefaultIncreaseByValue
+	if pvca.Spec.ScaleUp.IncreaseBy == "" {
+		pvca.Spec.ScaleUp.IncreaseBy = common.DefaultIncreaseByValue
 	}
 
-	if pvca.Spec.Threshold == "" {
-		pvca.Spec.Threshold = common.DefaultThresholdValue
+	if pvca.Spec.ScaleUp.Threshold == "" {
+		pvca.Spec.ScaleUp.Threshold = common.DefaultThresholdValue
 	}
 
 	return nil
@@ -81,29 +81,29 @@ func validateResourceSpec(obj runtime.Object) error {
 	}
 
 	allErrs := make(field.ErrorList, 0)
-	increaseBy, err := utils.ParsePercentage(pvca.Spec.IncreaseBy)
+	increaseBy, err := utils.ParsePercentage(pvca.Spec.ScaleUp.IncreaseBy)
 	if err != nil {
-		e := field.Invalid(field.NewPath("spec.increaseBy"), pvca.Spec.IncreaseBy, err.Error())
+		e := field.Invalid(field.NewPath("spec.scaleUp.increaseBy"), pvca.Spec.ScaleUp.IncreaseBy, err.Error())
 		allErrs = append(allErrs, e)
 	}
 
 	if err == nil && increaseBy == 0.0 {
-		e := field.Invalid(field.NewPath("spec.increaseBy"), pvca.Spec.IncreaseBy, common.ErrZeroPercentage.Error())
+		e := field.Invalid(field.NewPath("spec.scaleUp.increaseBy"), pvca.Spec.ScaleUp.IncreaseBy, common.ErrZeroPercentage.Error())
 		allErrs = append(allErrs, e)
 	}
 
-	threshold, err := utils.ParsePercentage(pvca.Spec.Threshold)
+	threshold, err := utils.ParsePercentage(pvca.Spec.ScaleUp.Threshold)
 	if err != nil {
-		e := field.Invalid(field.NewPath("spec.threshold"), pvca.Spec.Threshold, err.Error())
+		e := field.Invalid(field.NewPath("spec.scaleUp.threshold"), pvca.Spec.ScaleUp.Threshold, err.Error())
 		allErrs = append(allErrs, e)
 	}
 	if err == nil && threshold == 0.0 {
-		e := field.Invalid(field.NewPath("spec.threshold"), pvca.Spec.Threshold, common.ErrZeroPercentage.Error())
+		e := field.Invalid(field.NewPath("spec.scaleUp.threshold"), pvca.Spec.ScaleUp.Threshold, common.ErrZeroPercentage.Error())
 		allErrs = append(allErrs, e)
 	}
 
-	if pvca.Spec.MaxCapacity.IsZero() {
-		e := field.Invalid(field.NewPath("spec.maxCapacity"), pvca.Spec.MaxCapacity, "zero max capacity")
+	if pvca.Spec.ScaleUp.MaxCapacity.IsZero() {
+		e := field.Invalid(field.NewPath("spec.scaleUp.maxCapacity"), pvca.Spec.ScaleUp.MaxCapacity, "zero max capacity")
 		allErrs = append(allErrs, e)
 	}
 

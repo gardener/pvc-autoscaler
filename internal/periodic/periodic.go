@@ -303,8 +303,8 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
 	}
 
-	if pvca.Spec.MaxCapacity.Value() < currStatusSize.Value() {
-		return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", pvca.Spec.MaxCapacity.String(), currStatusSize.String())
+	if pvca.Spec.ScaleUp.MaxCapacity.Value() < currStatusSize.Value() {
+		return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", pvca.Spec.ScaleUp.MaxCapacity.String(), currStatusSize.String())
 	}
 
 	// We need a StorageClass with expansion support
@@ -351,7 +351,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, common.ErrNoMetrics
 	}
 
-	threshold, err := utils.ParsePercentage(pvca.Spec.Threshold)
+	threshold, err := utils.ParsePercentage(pvca.Spec.ScaleUp.Threshold)
 	if err != nil {
 		return false, fmt.Errorf("cannot parse threshold: %w", err)
 	}
@@ -405,7 +405,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 // validatePVCA sanity checks the spec in order to ensure it contains valid
 // values. Returns nil if the spec is valid, and non-nil error otherwise.
 func (r *Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
-	threshold, err := utils.ParsePercentage(obj.Spec.Threshold)
+	threshold, err := utils.ParsePercentage(obj.Spec.ScaleUp.Threshold)
 	if err != nil {
 		return fmt.Errorf("cannot parse threshold: %w", err)
 	}
@@ -413,11 +413,11 @@ func (r *Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) err
 		return fmt.Errorf("invalid threshold: %w", common.ErrZeroPercentage)
 	}
 
-	if obj.Spec.MaxCapacity.IsZero() {
+	if obj.Spec.ScaleUp.MaxCapacity.IsZero() {
 		return fmt.Errorf("invalid max capacity: %w", common.ErrNoMaxCapacity)
 	}
 
-	increaseBy, err := utils.ParsePercentage(obj.Spec.IncreaseBy)
+	increaseBy, err := utils.ParsePercentage(obj.Spec.ScaleUp.IncreaseBy)
 	if err != nil {
 		return fmt.Errorf("cannot parse increase-by value: %w", err)
 	}
