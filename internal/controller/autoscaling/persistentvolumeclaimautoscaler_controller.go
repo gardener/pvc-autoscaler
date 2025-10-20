@@ -23,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
@@ -149,6 +149,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: "Resize has been started",
 		}
+
 		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
@@ -160,6 +161,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: "File system resize is pending",
 		}
+
 		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
@@ -171,6 +173,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: "Volume is being modified",
 		}
+
 		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
@@ -184,6 +187,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: "Persistent volume claim is still being resized",
 		}
+
 		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
@@ -197,6 +201,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			Reason:  "Reconciling",
 			Message: eerr.Error(),
 		}
+
 		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
@@ -211,9 +216,11 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	switch cmp {
 	case 0:
 		logger.Info("new and current size are the same")
+
 		return ctrl.Result{}, nil
 	case -1:
 		logger.Info("new size is less than current")
+
 		return ctrl.Result{}, nil
 	}
 

@@ -11,13 +11,13 @@ import (
 	"net/http"
 	"time"
 
-	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
-
 	"github.com/prometheus/client_golang/api"
-	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	promv1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 )
 
 // ErrNoPrometheusAddress is an error, which is returned when no Prometheus
@@ -28,7 +28,7 @@ var ErrNoPrometheusAddress = errors.New("no address specified")
 // about persistent volume claims from a Prometheus instance.
 type Prometheus struct {
 	address              string
-	api                  v1.API
+	api                  promv1.API
 	httpClient           *http.Client
 	roundTripper         http.RoundTripper
 	availableBytesQuery  string
@@ -134,7 +134,7 @@ func New(opts ...Option) (*Prometheus, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.api = v1.NewAPI(client)
+	p.api = promv1.NewAPI(client)
 
 	// Set some sane defaults here.
 	//

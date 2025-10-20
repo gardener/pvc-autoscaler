@@ -13,7 +13,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -639,7 +638,7 @@ var _ = Describe("Periodic Runner", func() {
 			case obj := <-eventCh:
 				Expect(obj).To(BeNil())
 			case <-waitCh:
-				break
+				break // nolint:revive
 			}
 		})
 
@@ -732,7 +731,7 @@ var _ = Describe("Periodic Runner", func() {
 			case obj := <-eventCh:
 				Expect(obj).NotTo(BeNil())
 			case <-waitCh:
-				break
+				break // nolint:revive
 			}
 		})
 	})

@@ -11,7 +11,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -22,7 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	v1alpha1 "github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	controller "github.com/gardener/pvc-autoscaler/internal/controller/autoscaling"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
@@ -43,9 +42,9 @@ func newReconciler() (*controller.PersistentVolumeClaimAutoscalerReconciler, err
 
 // getHealthyCondition gets and returns the [utils.ConditionTypeHealthy] status
 // condition for the given PVC Autoscaler resource.
-func getHealthyCondition(ctx context.Context, client client.Client, key client.ObjectKey) (*metav1.Condition, error) {
+func getHealthyCondition(ctx context.Context, c client.Client, key client.ObjectKey) (*metav1.Condition, error) {
 	obj := &v1alpha1.PersistentVolumeClaimAutoscaler{}
-	if err := client.Get(ctx, key, obj); err != nil {
+	if err := c.Get(ctx, key, obj); err != nil {
 		return nil, err
 	}
 

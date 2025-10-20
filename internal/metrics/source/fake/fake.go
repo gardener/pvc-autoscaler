@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/apimachinery/pkg/types"
+
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
-
-	"k8s.io/apimachinery/pkg/types"
 )
 
 // AlwaysFailing is a [metricssource.Source] implementation which always fails to get metrics.
