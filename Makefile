@@ -91,6 +91,14 @@ lint: golangci-lint  ## Run golangci-lint linter & yamllint
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+.PHONY: kind-up
+kind-up: 
+	kind create cluster --name pvc-autoscaler
+
+.PHONY: kind-down
+kind-down: 
+	kind delete cluster --name pvc-autoscaler
+
 .PHONY: minikube-start
 minikube-start: minikube yq  ## Start a local dev environment
 	env MINIKUBE_PROFILE=$(MINIKUBE_PROFILE) ./hack/minikube-start.sh
