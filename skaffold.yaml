@@ -1,0 +1,77 @@
+apiVersion: skaffold/v4beta12
+kind: Config
+metadata:
+  name: pvc-autoscaler
+
+build:
+  artifacts:
+    - image: pvc-autoscaler-local
+      ko:
+        dependencies:
+          paths:
+            - cmd
+            - dist
+            - config
+            - config/webhook
+            - config/rbac
+            - config/network-policy
+            - config/crd
+            - config/crd/patches
+            - config/crd/bases
+            - config/default
+            - config/samples
+            - config/manager
+            - config/certmanager
+            - config/prometheus
+            - internal
+            - internal/metrics
+            - internal/metrics/source
+            - internal/metrics/source/prometheus
+            - internal/metrics/source/fake
+            - internal/periodic
+            - internal/utils
+            - internal/controller
+            - internal/controller/autoscaling
+            - internal/common
+            - hack
+            - api
+            - api/autoscaling
+            - api/autoscaling/v1alpha1
+        main: ./cmd
+
+manifests:
+  kustomize:
+    paths: 
+      - config/default
+
+deploy:
+  helm:
+    releases:
+      - name: cert-manager
+        repo: https://charts.jetstack.io
+        remoteChart: cert-manager
+        version: v1.16.1
+        namespace: cert-manager
+        createNamespace: true
+        setValues:
+          crds.enabled: "true"
+      - name: kind-prometheus
+        repo: https://prometheus-community.github.io/helm-charts
+        remoteChart: kube-prometheus-stack
+        namespace: monitoring
+        createNamespace: true
+        setValues:
+          prometheus.service.nodePort: "30000"
+          prometheus.service.type: "NodePort"
+          grafana.service.nodePort: "31000"
+          grafana.service.type: "NodePort"
+          alertmanager.service.nodePort: "32000"
+          alertmanager.service.type: "NodePort"
+          prometheus-node-exporter.service.nodePort: "32001"
+          prometheus-node-exporter.service.type: "NodePort"
+
+  kubectl:
+    flags:
+      apply:
+        - --server-side
+        - --force-conflicts
