@@ -4,6 +4,10 @@
 
 package main
 
+// for _ "k8s.io/client-go/plugin/pkg/client/auth":
+// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+// to ensure that exec-entrypoint and run can make use of them.
+
 import (
 	"crypto/tls"
 	"flag"
@@ -13,8 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -51,9 +53,19 @@ func main() {
 	var enableHTTP2 bool
 	var interval time.Duration
 	var prometheusAddress string
+	var metricsAvailableBytesQuery string
+	var metricsCapacityBytesQuery string
+	var metricsAvailableInodesQuery string
+	var metricsCapacityInodesQuery string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&prometheusAddress, "prometheus-address", "http://localhost:9090", "The Prometheus instance address")
+	flag.StringVar(&metricsAvailableBytesQuery, "metrics-available-bytes-query", "", "The Prometheus query for available bytes metric")
+	flag.StringVar(&metricsCapacityBytesQuery, "metrics-capacity-bytes-query", "", "The Prometheus query for capacity bytes metric")
+	flag.StringVar(&metricsAvailableInodesQuery, "metrics-available-inodes-query", "", "The Prometheus query for available inodes metric")
+	flag.StringVar(&metricsCapacityInodesQuery, "metrics-capacity-inodes-query", "", "The Prometheus query for capacity inodes metric")
+
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -61,8 +73,8 @@ func main() {
 		"If set the metrics endpoint is served securely")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+
 	flag.DurationVar(&interval, "interval", 5*time.Minute, "The interval at which to run the periodic check")
-	flag.StringVar(&prometheusAddress, "prometheus-address", "http://localhost:9090", "The Prometheus instance address")
 
 	opts := zap.Options{
 		Development: true,
@@ -123,10 +135,25 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 	eventCh := make(chan event.GenericEvent)
 
-	// The source for metrics we use
-	metricsSource, err := prometheus.New(
+	prometheusOpts := []prometheus.Option{
 		prometheus.WithAddress(prometheusAddress),
-	)
+	}
+
+	// Add configurable prometheus metric queries if provided
+	if metricsAvailableBytesQuery != "" {
+		prometheusOpts = append(prometheusOpts, prometheus.WithAvailableBytesQuery(metricsAvailableBytesQuery))
+	}
+	if metricsCapacityBytesQuery != "" {
+		prometheusOpts = append(prometheusOpts, prometheus.WithCapacityBytesQuery(metricsCapacityBytesQuery))
+	}
+	if metricsAvailableInodesQuery != "" {
+		prometheusOpts = append(prometheusOpts, prometheus.WithAvailableInodesQuery(metricsAvailableInodesQuery))
+	}
+	if metricsCapacityInodesQuery != "" {
+		prometheusOpts = append(prometheusOpts, prometheus.WithCapacityInodesQuery(metricsCapacityInodesQuery))
+	}
+
+	metricsSource, err := prometheus.New(prometheusOpts...)
 	if err != nil {
 		setupLog.Error(err, "unable to create metrics source", "controller", common.ControllerName)
 		os.Exit(1)
