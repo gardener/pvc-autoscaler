@@ -101,14 +101,14 @@ kind-up:
 kind-down: 
 	kind delete cluster --name pvc-autoscaler
 
-.PHONY: pvc-autoscaler-up
-pvc-autoscaler-up:
+.PHONY: kind-pvc-autoscaler-up
+kind-pvc-autoscaler-up:
 	./hack/pvc-autoscaler-up.sh \
 	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT)
 	skaffold run 
 
-.PHONY: pvc-autoscaler-dev
-pvc-autoscaler-dev:
+.PHONY: kind-pvc-autoscaler-dev
+kind-pvc-autoscaler-dev:
 	./hack/pvc-autoscaler-up.sh \
 	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT) 
 	skaffold dev
