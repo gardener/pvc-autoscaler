@@ -292,7 +292,7 @@ $(KIND): $(call gen-tool-version,$(KIND),$(KIND_VERSION))
 	$(call download-tool,kind,https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-$(GOOS)-$(GOARCH))
 
 .PHONY: skaffold
-skaffold: $(SKAFFOLD) | $(LOCALBIN)  ## Download kind locally if necessary.
+skaffold: $(SKAFFOLD) | $(LOCALBIN)  ## Download skaffold locally if necessary.
 $(SKAFFOLD): $(call gen-tool-version,$(SKAFFOLD),$(SKAFFOLD_VERSION))
 		$(call download-tool,skaffold,https://storage.googleapis.com/skaffold/releases/$(SKAFFOLD_VERSION)/skaffold-$(GOOS)-$(GOARCH))
 

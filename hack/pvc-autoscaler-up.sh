@@ -10,14 +10,6 @@ set -o pipefail
 
 WITH_LPP_RESIZE_SUPPORT=${WITH_LPP_RESIZE_SUPPORT:-false}
 
-# if [ ! -d "kube-prometheus" ]; then 
-#     echo "Cloning kube-prometheus..."; 
-#     git clone --depth 1 https://github.com/prometheus-operator/kube-prometheus.git;
-# else 
-#     echo "kube-prometheus already exists";
-# fi
-
-
 parse_flags() {
   while test $# -gt 0; do
     case "$1" in
