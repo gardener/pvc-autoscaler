@@ -94,24 +94,24 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
 .PHONY: kind-up
-kind-up: 
-	kind create cluster --name pvc-autoscaler
+kind-up: kind
+	$(KIND) create cluster --name pvc-autoscaler
 
 .PHONY: kind-down
-kind-down: 
-	kind delete cluster --name pvc-autoscaler
+kind-down: kind
+	$(KIND) delete cluster --name pvc-autoscaler
 
 .PHONY: kind-pvc-autoscaler-up
-kind-pvc-autoscaler-up:
+kind-pvc-autoscaler-up: kind skaffold
 	./hack/pvc-autoscaler-up.sh \
 	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT)
-	skaffold run 
+	$(SKAFFOLD) run 
 
 .PHONY: kind-pvc-autoscaler-dev
-kind-pvc-autoscaler-dev:
+kind-pvc-autoscaler-dev: kind skaffold
 	./hack/pvc-autoscaler-up.sh \
 	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT) 
-	skaffold dev
+	$(SKAFFOLD) dev
 
 .PHONY: minikube-start
 minikube-start: minikube yq  ## Start a local dev environment
@@ -220,6 +220,8 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 MINIKUBE ?= $(LOCALBIN)/minikube
 YQ ?= $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
+KIND ?= $(LOCALBIN)/kind
+SKAFFOLD ?= $(LOCALBIN)/skaffold
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
@@ -229,6 +231,8 @@ GOLANGCI_LINT_VERSION ?= v2.3.1
 MINIKUBE_VERSION ?= v1.34.0
 YQ_VERSION ?= v4.44.3
 HELM_VERSION ?= v3.16.2
+KIND_VERSION ?= v0.30.0
+SKAFFOLD_VERSION ?= v2.16.1
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -281,6 +285,16 @@ $(GOLANGCI_LINT): $(call gen-tool-version,$(GOLANGCI_LINT),$(GOLANGCI_LINT_VERSI
 yq: $(YQ) | $(LOCALBIN)  ## Download yq locally if necessary.
 $(YQ): $(call gen-tool-version,$(YQ),$(YQ_VERSION))
 	$(call download-tool,yq,https://github.com/mikefarah/yq/releases/download/$(YQ_VERSION)/yq_$(GOOS)_$(GOARCH))
+
+.PHONY: kind
+kind: $(KIND) | $(LOCALBIN)  ## Download kind locally if necessary.
+$(KIND): $(call gen-tool-version,$(KIND),$(KIND_VERSION))
+	$(call download-tool,kind,https://kind.sigs.k8s.io/dl/$(KIND_VERSION)/kind-$(GOOS)-$(GOARCH))
+
+.PHONY: skaffold
+skaffold: $(SKAFFOLD) | $(LOCALBIN)  ## Download kind locally if necessary.
+$(SKAFFOLD): $(call gen-tool-version,$(SKAFFOLD),$(SKAFFOLD_VERSION))
+		$(call download-tool,skaffold,https://storage.googleapis.com/skaffold/releases/$(SKAFFOLD_VERSION)/skaffold-$(GOOS)-$(GOARCH))
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 #
