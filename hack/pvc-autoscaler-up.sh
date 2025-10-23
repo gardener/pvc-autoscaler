@@ -8,7 +8,7 @@ set -o nounset
 set -o pipefail
 
 
-WITH_LPP_RESIZE_SUPPORT=${WITH_LPP_RESIZE_SUPPORT:-false}
+WITH_LPP_RESIZE_SUPPORT=${WITH_LPP_RESIZE_SUPPORT:-true}
 
 parse_flags() {
   while test $# -gt 0; do
@@ -99,7 +99,7 @@ setup_kind_sc_default_volume_type() {
 # [1]: https://github.com/rancher/local-path-provisioner
 # [2]: https://github.com/rancher/local-path-provisioner/pull/350
 #
-# TODO(dnaeon): remove this once we have [2] merged into upstream
+# TODO(RadaBDimitrova): remove this once we have [2] merged into upstream
 setup_kind_with_lpp_resize_support() {
   if [ "${WITH_LPP_RESIZE_SUPPORT}" != "true" ]; then
     return

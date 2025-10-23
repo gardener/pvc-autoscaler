@@ -34,7 +34,7 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
-DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= false
+DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
 
 .PHONY: all
 all: build
