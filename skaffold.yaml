@@ -9,34 +9,10 @@ build:
       ko:
         dependencies:
           paths:
-            - cmd
-            - dist
-            - config
-            - config/webhook
-            - config/rbac
-            - config/network-policy
-            - config/crd
-            - config/crd/patches
-            - config/crd/bases
-            - config/default
-            - config/samples
-            - config/manager
-            - config/certmanager
-            - config/prometheus
-            - internal
-            - internal/metrics
-            - internal/metrics/source
-            - internal/metrics/source/prometheus
-            - internal/metrics/source/fake
-            - internal/periodic
-            - internal/utils
-            - internal/controller
-            - internal/controller/autoscaling
-            - internal/common
-            - hack
-            - api
-            - api/autoscaling
-            - api/autoscaling/v1alpha1
+            - "**/*.go"           # All Go source files
+            - go.mod              # Go module definition
+            - go.sum              # Go module checksums
+            - config/**           # Kustomize configurations
         main: ./cmd
 
 manifests:
