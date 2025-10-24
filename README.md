@@ -162,6 +162,30 @@ executing this command.
 make help
 ```
 
+The local setup also supports Kind Kubernetes clusters. For convenience you can create a dev Kind cluster by using the following command.
+
+```shell
+make kind-up
+```
+
+You can also deploy the `pvc-autoscaler` in the kind cluster via this command.
+
+```shell
+make kind-pvc-autoscaler-up
+```
+
+If you want automatic deploy on change in code, you can use this command.
+
+```shell
+make kind-pvc-autoscaler-dev
+```
+
+When you're done with development, you can safely run the following command.
+
+```shell
+make kind-down
+```
+
 # Tests
 
 Run the unit tests.

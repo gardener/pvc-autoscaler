@@ -1,0 +1,40 @@
+apiVersion: skaffold/v4beta12
+kind: Config
+metadata:
+  name: pvc-autoscaler
+build:
+  artifacts:
+    - image: pvc-autoscaler-local
+      ko:
+        dependencies:
+          paths:
+            - "**/*.go"           # All Go source files
+            - go.mod              # Go module definition
+            - go.sum              # Go module checksums
+            - config/**           # Kustomize configurations
+        main: ./cmd
+manifests:
+  kustomize:
+    paths: 
+      - config/default
+deploy:
+  helm:
+    releases:
+      - name: cert-manager
+        repo: https://charts.jetstack.io
+        remoteChart: cert-manager
+        version: v1.16.1
+        namespace: cert-manager
+        createNamespace: true
+        setValues:
+          crds.enabled: "true"
+      - name: kind-prometheus
+        repo: https://prometheus-community.github.io/helm-charts
+        remoteChart: kube-prometheus-stack
+        namespace: monitoring
+        createNamespace: true
+  kubectl:
+    flags:
+      apply:
+        - --server-side
+        - --force-conflicts
