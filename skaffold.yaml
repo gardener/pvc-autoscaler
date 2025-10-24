@@ -2,7 +2,6 @@ apiVersion: skaffold/v4beta12
 kind: Config
 metadata:
   name: pvc-autoscaler
-
 build:
   artifacts:
     - image: pvc-autoscaler-local
@@ -14,12 +13,10 @@ build:
             - go.sum              # Go module checksums
             - config/**           # Kustomize configurations
         main: ./cmd
-
 manifests:
   kustomize:
     paths: 
       - config/default
-
 deploy:
   helm:
     releases:
@@ -36,7 +33,6 @@ deploy:
         remoteChart: kube-prometheus-stack
         namespace: monitoring
         createNamespace: true
-
   kubectl:
     flags:
       apply:

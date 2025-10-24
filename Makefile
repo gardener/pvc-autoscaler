@@ -34,7 +34,12 @@ CONTAINER_TOOL ?= docker
 SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
+REPO_ROOT                         := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+KIND_KUBECONFIG                   := $(REPO_ROOT)/example/kind/local/kubeconfig
 DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
+
+## Rules
+kind-up kind-down pvc-autoscaler-up pvc-autoscaler-dev: export KUBECONFIG = $(KIND_KUBECONFIG)
 
 .PHONY: all
 all: build
@@ -94,23 +99,20 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
 .PHONY: kind-up
-kind-up: kind
-	$(KIND) create cluster --name pvc-autoscaler
+kind-up: kind skaffold kustomize kubectl
+	./hack/kind-up.sh \
+	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT) \
 
 .PHONY: kind-down
-kind-down: kind
+kind-down: kind skaffold kustomize kubectl
 	$(KIND) delete cluster --name pvc-autoscaler
 
-.PHONY: kind-pvc-autoscaler-up
-kind-pvc-autoscaler-up: kind skaffold
-	./hack/pvc-autoscaler-up.sh \
-	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT)
+.PHONY: pvc-autoscaler-up
+pvc-autoscaler-up: kind skaffold kustomize kubectl
 	$(SKAFFOLD) run 
 
-.PHONY: kind-pvc-autoscaler-dev
-kind-pvc-autoscaler-dev: kind skaffold
-	./hack/pvc-autoscaler-up.sh \
-	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT) 
+.PHONY: pvc-autoscaler-dev
+pvc-autoscaler-dev: kind skaffold kustomize kubectl
 	$(SKAFFOLD) dev
 
 .PHONY: minikube-start
@@ -212,7 +214,6 @@ $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
 
 ## Tool Binaries
-KUBECTL ?= kubectl
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
@@ -222,6 +223,7 @@ YQ ?= $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
 KIND ?= $(LOCALBIN)/kind
 SKAFFOLD ?= $(LOCALBIN)/skaffold
+KUBECTL ?= $(LOCALBIN)/kubectl
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
@@ -233,6 +235,7 @@ YQ_VERSION ?= v4.44.3
 HELM_VERSION ?= v3.16.2
 KIND_VERSION ?= v0.30.0
 SKAFFOLD_VERSION ?= v2.16.1
+KUBECTL_VERSION ?= v1.33.4
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -295,6 +298,11 @@ $(KIND): $(call gen-tool-version,$(KIND),$(KIND_VERSION))
 skaffold: $(SKAFFOLD) | $(LOCALBIN)  ## Download skaffold locally if necessary.
 $(SKAFFOLD): $(call gen-tool-version,$(SKAFFOLD),$(SKAFFOLD_VERSION))
 		$(call download-tool,skaffold,https://storage.googleapis.com/skaffold/releases/$(SKAFFOLD_VERSION)/skaffold-$(GOOS)-$(GOARCH))
+
+.PHONY: kubectl
+kubectl: $(KUBECTL) | $(LOCALBIN)  ## Download kubectl locally if necessary.
+$(KUBECTL): $(call gen-tool-version,$(KUBECTL),$(KUBECTL_VERSION))
+		$(call download-tool,kubectl,https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/$(GOOS)/$(GOARCH)/kubectl)
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 #

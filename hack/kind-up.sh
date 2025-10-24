@@ -23,47 +23,6 @@ parse_flags() {
   done
 }
 
-kubectl patch storageclass standard -p '{"allowVolumeExpansion": true}'
-
-nodes=$(kubectl get nodes -o jsonpath='{.items[*].metadata.name}')
-
-# setup_containerd_registry_mirrors sets up all containerd registry mirrors.
-# Resources:
-# - https://github.com/containerd/containerd/blob/main/docs/hosts.md
-# - https://kind.sigs.k8s.io/docs/user/local-registry/
-setup_containerd_registry_mirrors() {
-  NODES=("$@")
-  REGISTRY_HOSTNAME="garden.local.gardener.cloud"
-
-  for NODE in "${NODES[@]}"; do
-    setup_containerd_registry_mirror $NODE "gcr.io" "https://gcr.io" "http://${REGISTRY_HOSTNAME}:5003"
-    setup_containerd_registry_mirror $NODE "registry.k8s.io" "https://registry.k8s.io" "http://${REGISTRY_HOSTNAME}:5006"
-    setup_containerd_registry_mirror $NODE "quay.io" "https://quay.io" "http://${REGISTRY_HOSTNAME}:5007"
-    setup_containerd_registry_mirror $NODE "europe-docker.pkg.dev" "https://europe-docker.pkg.dev" "http://${REGISTRY_HOSTNAME}:5008"
-    setup_containerd_registry_mirror $NODE "garden.local.gardener.cloud:5001" "http://garden.local.gardener.cloud:5001" "http://${REGISTRY_HOSTNAME}:5001"
-  done
-}
-
-# setup_containerd_registry_mirror sets up a given contained registry mirror.
-setup_containerd_registry_mirror() {
-  NODE=$1
-  UPSTREAM_HOST=$2
-  UPSTREAM_SERVER=$3
-  MIRROR_HOST=$4
-
-  echo "[${NODE}] Setting up containerd registry mirror for host ${UPSTREAM_HOST}.";
-  REGISTRY_DIR="/etc/containerd/certs.d/${UPSTREAM_HOST}"
-  docker exec "${NODE}" mkdir -p "${REGISTRY_DIR}"
-  cat <<EOF | docker exec -i "${NODE}" cp /dev/stdin "${REGISTRY_DIR}/hosts.toml"
-server = "${UPSTREAM_SERVER}"
-
-[host."${MIRROR_HOST}"]
-  capabilities = ["pull", "resolve"]
-EOF
-}
-
-setup_containerd_registry_mirrors $nodes
-
 # The default StorageClass which comes with `kind' is configured to use
 # rancher.io/local-path (see [1]) provisioner, which defaults to `hostPath'
 # volume (see [2]).  However, `hostPath' does not expose any metrics via
@@ -125,5 +84,6 @@ setup_kind_with_lpp_resize_support() {
   kubectl delete --ignore-not-found=true storageclass local-path
 }
 
+kind create cluster --name pvc-autoscaler
 setup_kind_sc_default_volume_type
 setup_kind_with_lpp_resize_support
