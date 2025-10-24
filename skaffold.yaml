@@ -36,15 +36,6 @@ deploy:
         remoteChart: kube-prometheus-stack
         namespace: monitoring
         createNamespace: true
-        setValues:
-          prometheus.service.nodePort: "30000"
-          prometheus.service.type: "NodePort"
-          grafana.service.nodePort: "31000"
-          grafana.service.type: "NodePort"
-          alertmanager.service.nodePort: "32000"
-          alertmanager.service.type: "NodePort"
-          prometheus-node-exporter.service.nodePort: "32001"
-          prometheus-node-exporter.service.type: "NodePort"
 
   kubectl:
     flags:
