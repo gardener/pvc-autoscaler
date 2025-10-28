@@ -4,10 +4,6 @@
 
 package main
 
-// for _ "k8s.io/client-go/plugin/pkg/client/auth":
-// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
-// to ensure that exec-entrypoint and run can make use of them.
-
 import (
 	"crypto/tls"
 	"flag"
@@ -29,6 +25,7 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	controller "github.com/gardener/pvc-autoscaler/internal/controller/autoscaling"
 	_ "github.com/gardener/pvc-autoscaler/internal/metrics"
+	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/prometheus"
 	"github.com/gardener/pvc-autoscaler/internal/periodic"
 )
@@ -61,10 +58,10 @@ func main() {
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&prometheusAddress, "prometheus-address", "http://localhost:9090", "The Prometheus instance address")
-	flag.StringVar(&metricsAvailableBytesQuery, "metrics-available-bytes-query", "", "The Prometheus query for available bytes metric")
-	flag.StringVar(&metricsCapacityBytesQuery, "metrics-capacity-bytes-query", "", "The Prometheus query for capacity bytes metric")
-	flag.StringVar(&metricsAvailableInodesQuery, "metrics-available-inodes-query", "", "The Prometheus query for available inodes metric")
-	flag.StringVar(&metricsCapacityInodesQuery, "metrics-capacity-inodes-query", "", "The Prometheus query for capacity inodes metric")
+	flag.StringVar(&metricsAvailableBytesQuery, "metrics-available-bytes-query", source.KubeletVolumeStatsAvailableBytes, "The Prometheus query for available bytes metric")
+	flag.StringVar(&metricsCapacityBytesQuery, "metrics-capacity-bytes-query", source.KubeletVolumeStatsCapacityBytes, "The Prometheus query for capacity bytes metric")
+	flag.StringVar(&metricsAvailableInodesQuery, "metrics-available-inodes-query", source.KubeletVolumeStatsInodesFree, "The Prometheus query for available inodes metric")
+	flag.StringVar(&metricsCapacityInodesQuery, "metrics-capacity-inodes-query", source.KubeletVolumeStatsInodes, "The Prometheus query for capacity inodes metric")
 
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
@@ -137,20 +134,10 @@ func main() {
 
 	prometheusOpts := []prometheus.Option{
 		prometheus.WithAddress(prometheusAddress),
-	}
-
-	// Add configurable prometheus metric queries if provided
-	if metricsAvailableBytesQuery != "" {
-		prometheusOpts = append(prometheusOpts, prometheus.WithAvailableBytesQuery(metricsAvailableBytesQuery))
-	}
-	if metricsCapacityBytesQuery != "" {
-		prometheusOpts = append(prometheusOpts, prometheus.WithCapacityBytesQuery(metricsCapacityBytesQuery))
-	}
-	if metricsAvailableInodesQuery != "" {
-		prometheusOpts = append(prometheusOpts, prometheus.WithAvailableInodesQuery(metricsAvailableInodesQuery))
-	}
-	if metricsCapacityInodesQuery != "" {
-		prometheusOpts = append(prometheusOpts, prometheus.WithCapacityInodesQuery(metricsCapacityInodesQuery))
+		prometheus.WithAvailableBytesQuery(metricsAvailableBytesQuery),
+		prometheus.WithCapacityBytesQuery(metricsCapacityBytesQuery),
+		prometheus.WithAvailableInodesQuery(metricsAvailableInodesQuery),
+		prometheus.WithCapacityInodesQuery(metricsCapacityInodesQuery),
 	}
 
 	metricsSource, err := prometheus.New(prometheusOpts...)
