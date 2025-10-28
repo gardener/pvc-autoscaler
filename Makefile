@@ -99,20 +99,20 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
 .PHONY: kind-up
-kind-up: kind skaffold kustomize kubectl
+kind-up: kind kustomize kubectl
 	./hack/kind-up.sh \
 	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT) \
 
 .PHONY: kind-down
-kind-down: kind skaffold kustomize kubectl
+kind-down: kind
 	$(KIND) delete cluster --name pvc-autoscaler
 
 .PHONY: pvc-autoscaler-up
-pvc-autoscaler-up: kind skaffold kustomize kubectl
+pvc-autoscaler-up: skaffold kustomize kubectl
 	$(SKAFFOLD) run 
 
 .PHONY: pvc-autoscaler-dev
-pvc-autoscaler-dev: kind skaffold kustomize kubectl
+pvc-autoscaler-dev: skaffold kustomize kubectl
 	$(SKAFFOLD) dev
 
 .PHONY: minikube-start
