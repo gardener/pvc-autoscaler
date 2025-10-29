@@ -1,0 +1,63 @@
+---
+# Example PersistentVolumeClaim
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vali-vali-0
+  namespace: pvc-autoscaler-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+# Example Pod that uses the PVC
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dummy-pod
+  namespace: pvc-autoscaler-system
+  labels:
+    app: dummy-app
+spec:
+  containers:
+  - name: dummy-container
+    image: busybox:1.35
+    command:
+    - sleep
+    - "3600"
+    volumeMounts:
+    - name: data-volume
+      mountPath: /data
+    resources:
+      requests:
+        memory: "64Mi"
+        cpu: "250m"
+      limits:
+        memory: "128Mi"
+        cpu: "500m"
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: vali-vali-0
+  restartPolicy: Always
+
+---
+# Example PersistentVolumeClaimAutoscaler for the PVC
+apiVersion: autoscaling.gardener.cloud/v1alpha1
+kind: PersistentVolumeClaimAutoscaler
+metadata:
+  name: dummy-storage-pvca
+  namespace: pvc-autoscaler-system
+  labels:
+    app: dummy-app
+    pvc: dummy-storage
+spec:
+  scaleTargetRef:
+    name: vali-vali-0
+  threshold: "20%"      # Trigger scaling when free space < 20%
+  increaseBy: "10%"     # Increase capacity by 10%
+  maxCapacity: 200Gi      # Maximum allowed size

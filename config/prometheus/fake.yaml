@@ -1,0 +1,106 @@
+# Minimal nginx-based fake metrics server for testing PVC autoscaler
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minimal-fake-metrics-server
+  namespace: monitoring
+  labels:
+    app: minimal-fake-metrics-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minimal-fake-metrics-server
+  template:
+    metadata:
+      labels:
+        app: minimal-fake-metrics-server
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 8080
+          name: metrics
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        - name: config
+          mountPath: /etc/nginx/metrics.txt
+          subPath: metrics.txt
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "10m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+      volumes:
+      - name: config
+        configMap:
+          name: minimal-fake-metrics-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minimal-fake-metrics-server
+  namespace: monitoring
+  annotations:
+    networking.resources.monitoringer.cloud/from-all-seed-scrape-targets-allowed-ports: '[{"protocol":"TCP","port":8080}]'
+  labels:
+    app: minimal-fake-metrics-server
+spec:
+  selector:
+    app: minimal-fake-metrics-server
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: metrics
+  type: ClusterIP
+
+---
+# ServiceMonitor for minimal fake nginx metrics server
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: minimal-fake-metrics-server
+  namespace: monitoring
+  labels:
+    release: kind-prometheus
+    app: minimal-fake-metrics-server
+spec:
+  selector:
+    matchLabels:
+      app: minimal-fake-metrics-server
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 30s
+    honorLabels: false
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: kubelet_volume_stats_.*
+      action: keep
+    - sourceLabels: [type]
+      regex: fake
+      action: keep
+    relabelings:
+    - targetLabel: instance
+      replacement: fake-metrics-server
+    - targetLabel: job
+      replacement: fake-kubelet-metrics
