@@ -1,0 +1,23 @@
+# HELP kubelet_volume_stats_available_bytes Fake available bytes in volumes
+# TYPE kubelet_volume_stats_available_bytes gauge
+kubelet_volume_stats_available_bytes{namespace="monitoring",persistentvolumeclaim="vali-vali-0",type="fake"} 1073741824
+kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="vali-vali-0-test-sts-0",type="fake"} 1073741824
+kubelet_volume_stats_available_bytes{namespace="default",persistentvolumeclaim="test-pvc-2",type="fake"} 4294967296
+
+# HELP kubelet_volume_stats_capacity_bytes Fake capacity bytes of volumes
+# TYPE kubelet_volume_stats_capacity_bytes gauge
+kubelet_volume_stats_capacity_bytes{namespace="monitoring",persistentvolumeclaim="vali-vali-0",type="fake"} 107374182400
+kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="vali-vali-0-test-sts-0",type="fake"} 107374182400
+kubelet_volume_stats_capacity_bytes{namespace="default",persistentvolumeclaim="test-pvc-2",type="fake"} 53687091200
+
+# HELP kubelet_volume_stats_inodes_free Fake free inodes in volumes
+# TYPE kubelet_volume_stats_inodes_free gauge
+kubelet_volume_stats_inodes_free{namespace="monitoring",persistentvolumeclaim="vali-vali-0",type="fake"} 65536
+kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="vali-vali-0-test-sts-0",type="fake"} 65536
+kubelet_volume_stats_inodes_free{namespace="default",persistentvolumeclaim="test-pvc-2",type="fake"} 262144
+
+# HELP kubelet_volume_stats_inodes Fake total inodes in volumes
+# TYPE kubelet_volume_stats_inodes gauge
+kubelet_volume_stats_inodes{namespace="monitoring",persistentvolumeclaim="vali-vali-0",type="fake"} 655360
+kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="vali-vali-0-test-sts-0",type="fake"} 655360
+kubelet_volume_stats_inodes{namespace="default",persistentvolumeclaim="test-pvc-2",type="fake"} 327680
