@@ -9,6 +9,7 @@ set -o pipefail
 
 
 WITH_LPP_RESIZE_SUPPORT=${WITH_LPP_RESIZE_SUPPORT:-true}
+KUBERNETES_VERSION=${KUBERNETES_VERSION:-v1.33.4}
 
 parse_flags() {
   while test $# -gt 0; do
@@ -17,8 +18,11 @@ parse_flags() {
       shift
       WITH_LPP_RESIZE_SUPPORT="${1}"
       ;;
+    --version)
+      shift
+      KUBERNETES_VERSION="${1}"
+      ;;
     esac
-
     shift
   done
 }
@@ -84,6 +88,7 @@ setup_kind_with_lpp_resize_support() {
   kubectl delete --ignore-not-found=true storageclass local-path
 }
 
-kind create cluster --name pvc-autoscaler
+kind create cluster --name pvc-autoscaler --image "kindest/node:${KUBERNETES_VERSION}"
 setup_kind_sc_default_volume_type
 setup_kind_with_lpp_resize_support
+

@@ -16,6 +16,45 @@ spec:
       labels:
         app: minimal-fake-metrics-server
     spec:
+      initContainers:
+      - name: metrics-verifier
+        image: europe-docker.pkg.dev/sap-se-gcp-k8s-delivery/releases-public/europe-docker_pkg_dev/gardener-project/releases/gardener/ops-toolbelt:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for metrics-test-pod..."
+          kubectl wait --for=condition=Ready --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod
+
+          sleep 60 # wait for metrics
+          echo "Starting kubelet_volume_stats_* metrics validation..."
+          node_name=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          metrics_path="/api/v1/nodes/${node_name}/proxy/metrics"
+          
+          output=$(kubectl get --raw "${metrics_path}")
+          exit_status=$?
+          
+          if [ $exit_status -eq 0 ]; then
+            echo "Successfully accessed kubelet metrics endpoint"
+            if echo "${output}" | grep -q "kubelet_volume_stats_"; then
+              echo "kubelet_volume_stats_* metrics found:"
+              echo "${output}" | grep "kubelet_volume_stats_"
+            else
+              echo "kubelet_volume_stats_* metrics NOT found"
+              exit 1 # analogy to no lines found in grep
+            fi
+          else
+            echo "Cannot access kubelet metrics endpoint"
+            exit $exit_status
+          fi
+          echo "kubelet_volume_stats_* metrics validation completed"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
       containers:
       - name: nginx
         image: nginx:alpine
@@ -52,6 +91,7 @@ spec:
       - name: config
         configMap:
           name: minimal-fake-metrics-config
+      serviceAccountName: minimal-fake-metrics-server
 
 ---
 apiVersion: v1

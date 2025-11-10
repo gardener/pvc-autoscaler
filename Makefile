@@ -37,6 +37,7 @@ SHELL = /usr/bin/env bash -o pipefail
 REPO_ROOT                         := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 KIND_KUBECONFIG                   := $(REPO_ROOT)/example/kind/local/kubeconfig
 DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
+KUBERNETES_VERSION				  ?= v1.33.4
 
 ## Rules
 kind-up kind-down pvc-autoscaler-up pvc-autoscaler-dev: export KUBECONFIG = $(KIND_KUBECONFIG)
@@ -102,6 +103,7 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 kind-up: kind kustomize kubectl
 	./hack/kind-up.sh \
 	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT) \
+	--version $(KUBERNETES_VERSION)
 
 .PHONY: kind-down
 kind-down: kind
