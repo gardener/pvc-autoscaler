@@ -1,0 +1,37 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: metrics-test
+  namespace: pvc-autoscaler-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 100Gi
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: metrics-test-pod
+  namespace: pvc-autoscaler-system
+  labels:
+    app: metrics-test-pod
+spec:
+  containers:
+  - name: metrics-test-container
+    image: busybox:latest
+    command:
+    - sleep
+    - infinity
+    volumeMounts:
+    - name: data-volume
+      mountPath: /data
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: metrics-test
+  restartPolicy: Always

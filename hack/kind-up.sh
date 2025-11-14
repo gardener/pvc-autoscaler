@@ -9,6 +9,7 @@ set -o pipefail
 
 
 WITH_LPP_RESIZE_SUPPORT=${WITH_LPP_RESIZE_SUPPORT:-true}
+KINDEST_NODE_IMAGE_TAG=${KINDEST_NODE_IMAGE_TAG:-v1.33.4@sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2}
 
 parse_flags() {
   while test $# -gt 0; do
@@ -17,8 +18,11 @@ parse_flags() {
       shift
       WITH_LPP_RESIZE_SUPPORT="${1}"
       ;;
+    --kindest-node-image-tag)
+      shift
+      KINDEST_NODE_IMAGE_TAG="${1}"
+      ;;
     esac
-
     shift
   done
 }
@@ -84,6 +88,7 @@ setup_kind_with_lpp_resize_support() {
   kubectl delete --ignore-not-found=true storageclass local-path
 }
 
-kind create cluster --name pvc-autoscaler
+kind create cluster --name pvc-autoscaler --image "kindest/node:${KINDEST_NODE_IMAGE_TAG}"
 setup_kind_sc_default_volume_type
 setup_kind_with_lpp_resize_support
+
