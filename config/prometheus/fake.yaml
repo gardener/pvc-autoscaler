@@ -24,14 +24,14 @@ spec:
         - -c
         - |
           echo "Waiting for metrics-test-pod..."
-          kubectl wait --for=condition=Ready --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod
+          chroot /host kubectl wait --for=condition=Ready --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod --kubeconfig=/etc/kubernetes/admin.conf
 
           sleep 60 # wait for metrics
           echo "Starting kubelet_volume_stats_* metrics validation..."
-          node_name=$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+          node_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}' --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
           metrics_path="/api/v1/nodes/${node_name}/proxy/metrics"
           
-          output=$(kubectl get --raw "${metrics_path}")
+          output=$(chroot /host kubectl get --raw "${metrics_path}" --kubeconfig=/etc/kubernetes/admin.conf)
           exit_status=$?
           
           if [ $exit_status -eq 0 ]; then
@@ -48,13 +48,12 @@ spec:
             exit $exit_status
           fi
           echo "kubelet_volume_stats_* metrics validation completed"
-        resources:
-          requests:
-            memory: "64Mi"
-            cpu: "100m"
-          limits:
-            memory: "128Mi"
-            cpu: "200m"
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+          readOnly: true
+        securityContext:
+          privileged: true
       containers:
       - name: nginx
         image: nginx:alpine
@@ -91,7 +90,10 @@ spec:
       - name: config
         configMap:
           name: minimal-fake-metrics-config
-      serviceAccountName: minimal-fake-metrics-server
+      - name: host-root
+        hostPath:
+          path: /
+          type: Directory
 
 ---
 apiVersion: v1

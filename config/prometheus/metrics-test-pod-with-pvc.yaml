@@ -23,20 +23,13 @@ metadata:
 spec:
   containers:
   - name: metrics-test-container
-    image: busybox:1.35
+    image: busybox:latest
     command:
     - sleep
-    - "3600"
+    - infinity
     volumeMounts:
     - name: data-volume
       mountPath: /data
-    resources:
-      requests:
-        memory: "64Mi"
-        cpu: "250m"
-      limits:
-        memory: "128Mi"
-        cpu: "500m"
   volumes:
   - name: data-volume
     persistentVolumeClaim:

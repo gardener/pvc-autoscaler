@@ -6,8 +6,5 @@ configMapGenerator:
 
 resources:
 - metrics-test-pod-with-pvc.yaml
-- fake_service_account.yaml
-- fake_role.yaml
-- fake_role_binding.yaml
 - fake.yaml
 - monitor.yaml
