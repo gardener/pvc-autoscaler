@@ -18,7 +18,7 @@ spec:
     spec:
       initContainers:
       - name: metrics-verifier
-        image: europe-docker.pkg.dev/sap-se-gcp-k8s-delivery/releases-public/europe-docker_pkg_dev/gardener-project/releases/gardener/ops-toolbelt:latest
+        image: busybox:latest
         command:
         - /bin/sh
         - -c
@@ -26,7 +26,7 @@ spec:
           echo "Waiting for metrics-test-pod..."
           chroot /host kubectl wait --for=condition=Ready --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod --kubeconfig=/etc/kubernetes/admin.conf
 
-          sleep 60 # wait for metrics
+          sleep 60 
           echo "Starting kubelet_volume_stats_* metrics validation..."
           node_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}' --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
           metrics_path="/api/v1/nodes/${node_name}/proxy/metrics"
