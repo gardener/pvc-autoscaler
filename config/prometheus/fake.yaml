@@ -16,6 +16,44 @@ spec:
       labels:
         app: minimal-fake-metrics-server
     spec:
+      initContainers:
+      - name: metrics-verifier
+        image: busybox:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Waiting for metrics-test-pod..."
+          chroot /host kubectl wait --for=condition=Ready --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod --kubeconfig=/etc/kubernetes/admin.conf
+
+          sleep 60 
+          echo "Starting kubelet_volume_stats_* metrics validation..."
+          node_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}' --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
+          metrics_path="/api/v1/nodes/${node_name}/proxy/metrics"
+          
+          output=$(chroot /host kubectl get --raw "${metrics_path}" --kubeconfig=/etc/kubernetes/admin.conf)
+          exit_status=$?
+          
+          if [ $exit_status -eq 0 ]; then
+            echo "Successfully accessed kubelet metrics endpoint"
+            if echo "${output}" | grep -q "kubelet_volume_stats_"; then
+              echo "kubelet_volume_stats_* metrics found:"
+              echo "${output}" | grep "kubelet_volume_stats_"
+            else
+              echo "kubelet_volume_stats_* metrics NOT found"
+              exit 1 # analogy to no lines found in grep
+            fi
+          else
+            echo "Cannot access kubelet metrics endpoint"
+            exit $exit_status
+          fi
+          echo "kubelet_volume_stats_* metrics validation completed"
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+          readOnly: true
+        securityContext:
+          privileged: true
       containers:
       - name: nginx
         image: nginx:alpine
@@ -52,6 +90,10 @@ spec:
       - name: config
         configMap:
           name: minimal-fake-metrics-config
+      - name: host-root
+        hostPath:
+          path: /
+          type: Directory
 
 ---
 apiVersion: v1
