@@ -3,6 +3,9 @@ configMapGenerator:
   files:
   - nginx.conf
   - metrics.txt
+  - dummy_stage1.txt
+  - dummy_stage2.txt
+  - dummy_stage3.txt
 
 resources:
 - metrics-test-pod-with-pvc.yaml

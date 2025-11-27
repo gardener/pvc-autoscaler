@@ -15,6 +15,8 @@ spec:
     metadata:
       labels:
         app: minimal-fake-metrics-server
+      annotations:
+        fake-metrics.pvc-autoscaler.io/stage: "dummy_stage1"
     spec:
       initContainers:
       - name: metrics-verifier
@@ -54,6 +56,44 @@ spec:
           readOnly: true
         securityContext:
           privileged: true
+      - name: stage-selector
+        image: busybox:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Multi-stage fake metrics server initializing..."
+          
+          # Get stage from downward API environment variable
+          STAGE_FILE="${METRICS_STAGE}.txt"
+          
+          echo "Selected stage: ${METRICS_STAGE}"
+          echo "Looking for file: ${STAGE_FILE}"
+          
+          # Check if the stage file exists
+          if [ -f "/config/${STAGE_FILE}" ]; then
+            echo "Found stage file: ${STAGE_FILE}"
+            cp "/config/${STAGE_FILE}" "/etc/nginx/metrics.txt"
+          else
+            echo "ERROR: Stage file ${STAGE_FILE} not found"
+            echo "Available stages:"
+            ls -la /config/stage*.txt || true
+            exit 1
+          fi
+          
+          echo "Stage selection completed. Current stage: ${METRICS_STAGE}"
+          echo "Content preview:"
+          head "/etc/nginx/metrics.txt"
+        env:
+        - name: METRICS_STAGE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['fake-metrics.pvc-autoscaler.io/stage']
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: nginx-served-metrics
+          mountPath: /etc/nginx
       containers:
       - name: nginx
         image: nginx:alpine
@@ -64,16 +104,8 @@ spec:
         - name: config
           mountPath: /etc/nginx/nginx.conf
           subPath: nginx.conf
-        - name: config
-          mountPath: /etc/nginx/metrics.txt
-          subPath: metrics.txt
-        resources:
-          requests:
-            memory: "32Mi"
-            cpu: "10m"
-          limits:
-            memory: "64Mi"
-            cpu: "50m"
+        - name: nginx-served-metrics
+          mountPath: /etc/nginx
         readinessProbe:
           httpGet:
             path: /health
@@ -90,6 +122,8 @@ spec:
       - name: config
         configMap:
           name: minimal-fake-metrics-config
+      - name: nginx-served-metrics
+        emptyDir: {}
       - name: host-root
         hostPath:
           path: /
