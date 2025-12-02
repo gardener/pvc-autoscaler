@@ -28,28 +28,46 @@ spec:
           echo "Waiting for metrics-test-pod..."
           chroot /host kubectl wait --for=condition=Ready --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod --kubeconfig=/etc/kubernetes/admin.conf
 
-          sleep 60 
           echo "Starting kubelet_volume_stats_* metrics validation..."
           node_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}' --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
           metrics_path="/api/v1/nodes/${node_name}/proxy/metrics"
           
-          output=$(chroot /host kubectl get --raw "${metrics_path}" --kubeconfig=/etc/kubernetes/admin.conf)
-          exit_status=$?
+          # Retry logic: try every 10 seconds for up to 3 minutes
+          max_attempts=18
+          attempt=1
+          success=false
           
-          if [ $exit_status -eq 0 ]; then
-            echo "Successfully accessed kubelet metrics endpoint"
-            if echo "${output}" | grep -q "kubelet_volume_stats_"; then
-              echo "kubelet_volume_stats_* metrics found:"
-              echo "${output}" | grep "kubelet_volume_stats_"
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt/$max_attempts: Fetching kubelet metrics..."
+            
+            output=$(chroot /host kubectl get --raw "${metrics_path}" --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
+            exit_status=$?
+            
+            if [ $exit_status -eq 0 ]; then
+              echo "Successfully accessed kubelet metrics endpoint"
+              if echo "${output}" | grep -q "kubelet_volume_stats_"; then
+                echo "kubelet_volume_stats_* metrics found:"
+                echo "${output}" | grep "kubelet_volume_stats_"
+                success=true
+                break
+              else
+                echo "kubelet_volume_stats_* metrics NOT found in response"
+              fi
             else
-              echo "kubelet_volume_stats_* metrics NOT found"
-              exit 1 # analogy to no lines found in grep
+              echo "Cannot access kubelet metrics endpoint (exit code: $exit_status)"
             fi
-          else
-            echo "Cannot access kubelet metrics endpoint"
-            exit $exit_status
+            
+            echo "Waiting 10 seconds before next attempt..."
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+          
+          if [ "$success" = "false" ]; then
+            echo "ERROR: Failed to find kubelet_volume_stats_* metrics after 3 minutes"
+            exit 1
           fi
-          echo "kubelet_volume_stats_* metrics validation completed"
+          
+          echo "kubelet_volume_stats_* metrics validation completed successfully"
         volumeMounts:
         - name: host-root
           mountPath: /host
