@@ -3,18 +3,18 @@ configMapGenerator:
   files:
   - nginx.conf
   - metrics.txt
-  - dummy_stage1.txt
-  - dummy_stage2.txt
-  - dummy_stage3.txt
-  - dummy_stage4.txt
-  - dummy_stage5.txt
-  - dummy_stage6.txt
-  - dummy_stage7.txt
-  - dummy_stage8.txt
-  - dummy_stage9.txt
-  - dummy_stage10.txt
-  - dummy_stage11.txt
-  - dummy_stage12.txt
+  - pod_bytes_low_1Gi.txt
+  - pod_bytes_high_1Gi.txt
+  - pod_bytes_low_2Gi.txt
+  - pod_bytes_high_2Gi.txt
+  - pod_bytes_low_3Gi.txt
+  - pod_bytes_high_3Gi.txt
+  - pod_inode_low_1Gi.txt
+  - pod_inode_high_1Gi.txt
+  - pod_inode_low_2Gi.txt
+  - pod_inode_high_2Gi.txt
+  - pod_inode_low_3Gi.txt
+  - pod_inode_high_3Gi.txt
 
 resources:
 - metrics-test-pod-with-pvc.yaml

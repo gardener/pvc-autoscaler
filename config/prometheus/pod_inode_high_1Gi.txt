@@ -12,4 +12,4 @@ kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvol
 kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 65536
 # HELP fake_metrics_stage Current stage information
 # TYPE fake_metrics_stage gauge
-fake_metrics_dummy_stage7{stage="7",description="medium_usage"} 1
+fake_metrics_pod_inode_high_1Gi{stage="8",description="inode_high"} 1

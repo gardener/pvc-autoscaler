@@ -1,15 +1,15 @@
 # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
 # TYPE kubelet_volume_stats_available_bytes gauge
-kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 1073741824
+kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 3221225472
 # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
 # TYPE kubelet_volume_stats_capacity_bytes gauge
-kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 1073741824
+kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 3221225472
 # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
 # TYPE kubelet_volume_stats_inodes_free gauge
-kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 65536
+kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 76000
 # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
 # TYPE kubelet_volume_stats_inodes gauge
-kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 65536
+kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 196000
 # HELP fake_metrics_stage Current stage information
 # TYPE fake_metrics_stage gauge
-fake_metrics_dummy_stage12{stage="12",description="high_usage"} 1
+fake_metrics_pod_inode_low_3Gi{stage="11",description="inode_low"} 1

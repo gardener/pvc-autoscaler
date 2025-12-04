@@ -13,7 +13,7 @@ if [[ $# -eq 0 ]]; then
     exit 1
 fi
 
-STAGE="$1"
+stage="$1"
 echo "Setting stage to: $stage"
 
 # Update pod template annotation to trigger restart and change stage
