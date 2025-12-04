@@ -47,12 +47,15 @@ function _wait_for_event() {
   local _type="${1}"
   local _reason="${2}"
   local _object="${3}"
-  local _poll_sec=${4:-10}
-  local _max_attempts=${5:-60}
+  local _namespace=${4:-"pvc-autoscaler-system"}
+  local _poll_sec=${5:-10}
+  local _max_attempts=${6:-60}
+  
 
   for i in $( seq 1 "${_max_attempts}" ); do
     _msg_info "[${i}/${_max_attempts}] waiting for '${_reason}' (${_type}) event(s) ..."
     local _events=$( kubectl events \
+                             -n "${_namespace}" \
                              --for "${_object}" \
                              --types "${_type}" \
                              -o yaml | \
@@ -83,12 +86,14 @@ function _wait_for_event_to_occur_n_times() {
   local _reason="${2}"
   local _object="${3}"
   local _n="${4}"
-  local _poll_sec=${5:-10}
-  local _max_attempts=${6:-60}
+  local _namespace=${5:-"pvc-autoscaler-system"}
+  local _poll_sec=${6:-10}
+  local _max_attempts=${7:-60}
 
   for i in $( seq 1 "${_max_attempts}" ); do
     _msg_info "[${i}/${_max_attempts}] waiting for '${_reason}' (${_type}) event to occur ${_n} time(s) ..."
     local _events=$( kubectl events \
+                             -n "${_namespace}" \
                              --for "${_object}" \
                              --types "${_type}" \
                              -o yaml | \
@@ -133,4 +138,21 @@ function _ensure_pvc_capacity() {
   if [ "${_want_capacity}" != "${_got_capacity}" ]; then
     _msg_error "pvc ${_namespace}/${_pvc_name} capacity is ${_got_capacity} (want ${_want_capacity})" 1
   fi
+}
+
+# Cleanup unused resources
+#
+# $1: pod name
+# $2: pvc name
+# $3: pvca name
+# $4: namespace
+function _cleanup() {
+  local _pod_name="${1}"
+  local _pvc_name="${2}"
+  local _pvca_name="${3}"
+  local _namespace="${4}"
+
+  kubectl --namespace "${_namespace}" delete pod "${_pod_name}"
+  kubectl --namespace "${_namespace}" delete pvc "${_pvc_name}"
+  kubectl --namespace "${_namespace}" delete pvca "${_pvca_name}"
 }

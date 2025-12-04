@@ -3,6 +3,7 @@ apiVersion: autoscaling.gardener.cloud/v1alpha1
 kind: PersistentVolumeClaimAutoscaler
 metadata:
   name: test-pvca-1
+  namespace: pvc-autoscaler-system
 spec:
   increaseBy: "10%"
   threshold: "20%"

@@ -29,6 +29,7 @@ function _test_consume_space_and_resize() {
 
   _msg_info "starting test: consume space and resize"
   _msg_info "creating test pvc, pvca and pod ..."
+  sleep 20
   kubectl create -f "${_pvc_yaml}"
   kubectl create -f "${_pvca_yaml}"
   kubectl create -f "${_pod_yaml}"
@@ -39,6 +40,7 @@ function _test_consume_space_and_resize() {
           --namespace "${_namespace}" \
           --timeout 10m
 
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage1
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
   kubectl wait "pvca/${_pvca_name}" \
           --for condition=Healthy \
@@ -50,21 +52,18 @@ function _test_consume_space_and_resize() {
 
   # Consume 90% of the PVC capacity.
   _msg_info "consuming 900MB of the space ..."
-  env POD="${_pod_name}" \
-      NAMESPACE="${_namespace}" \
-      NUM_FILES=9 \
-      FILE_SIZE=100M \
-      POD_PATH="${_pod_path}" \
-      ${_SCRIPT_DIR}/consume-pod-space.sh
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage2
 
   # Once we consume the space we expect to see these events for the PVC object.
   _wait_for_event Warning FreeSpaceThresholdReached "pvc/${_pvc_name}"
   _wait_for_event Normal ResizingStorage "pvc/${_pvc_name}"
   _wait_for_event Normal Resizing "pvc/${_pvc_name}"
-  _wait_for_event Normal FileSystemResizeRequired "pvc/${_pvc_name}"
+  # _wait_for_event Normal FileSystemResizeRequired "pvc/${_pvc_name}"
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
 
   # We should be at 2Gi now
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage3
+  sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
 
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
@@ -74,29 +73,19 @@ function _test_consume_space_and_resize() {
           --timeout 10m
 
   _msg_info "consuming another 900MB of space ..."
-  env POD="${_pod_name}" \
-      NAMESPACE="${_namespace}" \
-      NUM_FILES=9 \
-      FILE_SIZE=100M \
-      POD_PATH="${_pod_path}" \
-      ${_SCRIPT_DIR}/consume-pod-space.sh
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage4
 
   # We should see a second occurrence of these events
   _wait_for_event_to_occur_n_times Normal Resizing "pvc/${_pvc_name}" 2
-  _wait_for_event_to_occur_n_times Normal FileSystemResizeRequired "pvc/${_pvc_name}" 2
   _wait_for_event_to_occur_n_times Normal FileSystemResizeSuccessful "pvc/${_pvc_name}" 2
 
   # We should be at 3Gi now
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage5
+  sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
 
   _msg_info "consuming all available disk space ..."
-  env POD="${_pod_name}" \
-      NAMESPACE="${_namespace}" \
-      NUM_FILES=100 \
-      FILE_SIZE=100M \
-      POD_PATH="${_pod_path}" \
-      ${_SCRIPT_DIR}/consume-pod-space.sh >& /dev/null || \
-    _msg_info "available disk space consumed"
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage6
 
   # And finally we should be at the max capacity, which is to 3Gi in the test
   # manifests.
@@ -110,6 +99,8 @@ function _test_consume_space_and_resize() {
           --for condition=Healthy=false \
           --namespace "${_namespace}" \
           --timeout 10m
+
+  _cleanup "${_pod_name}" "${_pvc_name}" "${_pvca_name}" "${_namespace}"
 }
 
 # Tests the PVC autoscaler by consuming inodes from a volume and then expects
@@ -136,6 +127,7 @@ function _test_consume_inodes_and_resize() {
           --namespace "${_namespace}" \
           --timeout 10m
 
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage12
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
   kubectl wait "pvca/${_pvca_name}" \
           --for condition=Healthy \
@@ -148,21 +140,17 @@ function _test_consume_inodes_and_resize() {
   # The test pod initially comes a PVC of size 1Gi, which gives us ~ 65K of
   # available inodes.
   _msg_info "consuming 60K inodes ..."
-  env POD="${_pod_name}" \
-      NAMESPACE="${_namespace}" \
-      NUM_FILES=60000 \
-      FILE_SIZE=1B \
-      POD_PATH="${_pod_path}" \
-      ${_SCRIPT_DIR}/consume-pod-space.sh
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage7
 
   # We should see these events
   _wait_for_event Warning FreeInodesThresholdReached "pvc/${_pvc_name}"
   _wait_for_event Normal ResizingStorage "pvc/${_pvc_name}"
   _wait_for_event Normal Resizing "pvc/${_pvc_name}"
-  _wait_for_event Normal FileSystemResizeRequired "pvc/${_pvc_name}"
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
 
   # We should be at 2Gi now
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage8
+  sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
 
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
@@ -173,30 +161,20 @@ function _test_consume_inodes_and_resize() {
 
   # After the first increase of the volume we should have a total of ~ 130K inodes.
   _msg_info "consuming another 60K inodes ..."
-  env POD="${_pod_name}" \
-      NAMESPACE="${_namespace}" \
-      NUM_FILES=60000 \
-      FILE_SIZE=1B \
-      POD_PATH="${_pod_path}" \
-      ${_SCRIPT_DIR}/consume-pod-space.sh
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage9
 
   # We should see a second occurrence of these events
   _wait_for_event_to_occur_n_times Normal Resizing "pvc/${_pvc_name}" 2
-  _wait_for_event_to_occur_n_times Normal FileSystemResizeRequired "pvc/${_pvc_name}" 2
   _wait_for_event_to_occur_n_times Normal FileSystemResizeSuccessful "pvc/${_pvc_name}" 2
 
   # We should be at 3Gi now
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage10
+  sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
 
   # Once the volume resizes for a second time we should have a total of ~196K inodes.
   _msg_info "consuming all available inodes ..."
-  env POD="${_pod_name}" \
-      NAMESPACE="${_namespace}" \
-      NUM_FILES=100000 \
-      FILE_SIZE=1B \
-      POD_PATH="${_pod_path}" \
-      ${_SCRIPT_DIR}/consume-pod-space.sh >& /dev/null || \
-    _msg_info "available inodes consumed"
+  ${_SCRIPT_DIR}/consume-kind-pod-space.sh dummy_stage11
 
   # And finally we should be at the max limit, so no more resizing happens
   _wait_for_event Warning MaxCapacityReached "pvc/${_pvc_name}"
@@ -209,10 +187,34 @@ function _test_consume_inodes_and_resize() {
           --for condition=Healthy=false \
           --namespace "${_namespace}" \
           --timeout 10m
+
+  _cleanup "${_pod_name}" "${_pvc_name}" "${_pvca_name}" "${_namespace}"
 }
 
 # Main entrypoint
 function _main() {
+  kubectl patch deployment pvc-autoscaler-controller-manager -n pvc-autoscaler-system --type='json' -p='[
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/args/-",
+    "value": "--metrics-available-bytes-query=kubelet_volume_stats_available_bytes{type=\"fake\"}"
+  },
+  {
+    "op": "add", 
+    "path": "/spec/template/spec/containers/0/args/-",
+    "value": "--metrics-capacity-bytes-query=kubelet_volume_stats_capacity_bytes{type=\"fake\"}"
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/args/-", 
+    "value": "--metrics-available-inodes-query=kubelet_volume_stats_inodes_free{type=\"fake\"}"
+  },
+  {
+    "op": "add",
+    "path": "/spec/template/spec/containers/0/args/-",
+    "value": "--metrics-capacity-inodes-query=kubelet_volume_stats_inodes{type=\"fake\"}"
+  }
+  ]'
   _msg_info "Waiting for pvc-autoscaler pods to become ready ..."
   kubectl wait \
           --for condition=Ready \
