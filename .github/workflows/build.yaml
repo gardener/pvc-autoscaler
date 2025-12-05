@@ -20,6 +20,24 @@ jobs:
     permissions:
       contents: read
 
+  sast-lint:
+    uses: gardener/cc-utils/.github/workflows/sastlint-ocm.yaml@master
+    permissions:
+      contents: read
+    with:
+      setup-git-identity: true
+      linter: gosec
+      run: |
+        set -euo pipefail
+        if [ '${{ inputs.mode }}' == 'release' ]; then
+          make sast-report
+          # generates `gosec-report.sarif
+        else
+          # tests are run using prow for non-release-runs, so early-exit
+          echo "dummy" > gosec-report.sarif
+        fi
+      go-version: '1.25.5'
+
   verify:
     runs-on: ubuntu-latest
     permissions:
