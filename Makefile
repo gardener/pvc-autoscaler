@@ -132,12 +132,12 @@ minikube-load-image: minikube docker-build  ## Load the operator image into the 
 	rm -f image.tar
 
 .PHONY: e2e-env-setup
-e2e-env-setup: minikube  ## Create a new e2e test environment.
-	$(MAKE) minikube-start minikube-load-image deploy
+e2e-env-setup: kind kustomize kubectl  ## Create a new e2e test environment.
+	$(MAKE) kind-up pvc-autoscaler-up
 
 .PHONY: e2e-env-teardown
-e2e-env-teardown: minikube  ## Teardown the e2e test environment.
-	$(MAKE) minikube-stop
+e2e-env-teardown: kind  ## Teardown the e2e test environment.
+	$(MAKE) kind-down
 
 ##@ Build
 
