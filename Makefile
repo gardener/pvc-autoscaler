@@ -80,6 +80,14 @@ fmt:  ## Run go fmt against code.
 vet:  ## Run go vet against code.
 	go vet ./...
 
+.PHONY: sast
+sast: sast-sh gosec
+	@bash $(SAST)
+
+.PHONY: sast-report
+sast-report: sast-sh gosec
+	@bash $(SAST) --gosec-report true
+
 .PHONY: test
 test: manifests generate fmt vet envtest  ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
@@ -226,6 +234,9 @@ HELM ?= $(LOCALBIN)/helm
 KIND ?= $(LOCALBIN)/kind
 SKAFFOLD ?= $(LOCALBIN)/skaffold
 KUBECTL ?= $(LOCALBIN)/kubectl
+SAST ?= $(LOCALBIN)/hack/sast.sh
+GOSEC ?= $(LOCALBIN)/gosec
+INSTALL_GOSEC ?= $(LOCALBIN)/hack/install-gosec.sh
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
@@ -238,6 +249,7 @@ HELM_VERSION ?= v3.16.2
 KIND_VERSION ?= v0.30.0
 SKAFFOLD_VERSION ?= v2.16.1
 KUBECTL_VERSION ?= v1.33.4
+GOSEC_VERSION ?= v2.22.10
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -300,6 +312,24 @@ $(KIND): $(call gen-tool-version,$(KIND),$(KIND_VERSION))
 skaffold: $(SKAFFOLD) | $(LOCALBIN)  ## Download skaffold locally if necessary.
 $(SKAFFOLD): $(call gen-tool-version,$(SKAFFOLD),$(SKAFFOLD_VERSION))
 		$(call download-tool,skaffold,https://storage.googleapis.com/skaffold/releases/$(SKAFFOLD_VERSION)/skaffold-$(GOOS)-$(GOARCH))
+
+.PHONY: sast-sh
+sast-sh: $(SAST) | $(LOCALBIN)  ## Download kubectl locally if necessary.
+$(SAST):
+	mkdir -p $(LOCALBIN)/hack
+	$(call download-tool,hack/sast.sh,https://raw.githubusercontent.com/gardener/gardener/master/hack/sast.sh)
+
+.PHONY: install-gosec
+install-gosec: $(INSTALL_GOSEC) | $(LOCALBIN)  ## Download kubectl locally if necessary.
+$(INSTALL_GOSEC):
+	mkdir -p $(LOCALBIN)/hack
+	$(call download-tool,hack/install-gosec.sh,https://raw.githubusercontent.com/gardener/gardener/master/hack/tools/install-gosec.sh)
+
+
+.PHONY: gosec
+gosec: install-gosec $(GOSEC) | $(LOCALBIN)
+$(GOSEC): $(call tool_version_file,$(GOSEC),$(GOSEC_VERSION))
+	@GOSEC_VERSION=$(GOSEC_VERSION) TOOLS_BIN_DIR=$(LOCALBIN) bash $(LOCALBIN)/hack/install-gosec.sh
 
 .PHONY: kubectl
 kubectl: $(KUBECTL) | $(LOCALBIN)  ## Download kubectl locally if necessary.
