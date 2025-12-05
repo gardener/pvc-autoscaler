@@ -15,6 +15,8 @@ spec:
     metadata:
       labels:
         app: minimal-fake-metrics-server
+      annotations:
+        fake-metrics.pvc-autoscaler.io/stage: "dummy_stage1"
     spec:
       initContainers:
       - name: metrics-verifier
@@ -26,34 +28,90 @@ spec:
           echo "Waiting for metrics-test-pod..."
           chroot /host kubectl wait --for=condition=Ready --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod --kubeconfig=/etc/kubernetes/admin.conf
 
-          sleep 60 
           echo "Starting kubelet_volume_stats_* metrics validation..."
           node_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}' --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
           metrics_path="/api/v1/nodes/${node_name}/proxy/metrics"
           
-          output=$(chroot /host kubectl get --raw "${metrics_path}" --kubeconfig=/etc/kubernetes/admin.conf)
-          exit_status=$?
+          # Retry logic: try every 10 seconds for up to 3 minutes
+          max_attempts=18
+          attempt=1
+          success=false
           
-          if [ $exit_status -eq 0 ]; then
-            echo "Successfully accessed kubelet metrics endpoint"
-            if echo "${output}" | grep -q "kubelet_volume_stats_"; then
-              echo "kubelet_volume_stats_* metrics found:"
-              echo "${output}" | grep "kubelet_volume_stats_"
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt/$max_attempts: Fetching kubelet metrics..."
+            
+            output=$(chroot /host kubectl get --raw "${metrics_path}" --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
+            exit_status=$?
+            
+            if [ $exit_status -eq 0 ]; then
+              echo "Successfully accessed kubelet metrics endpoint"
+              if echo "${output}" | grep -q "kubelet_volume_stats_"; then
+                echo "kubelet_volume_stats_* metrics found:"
+                echo "${output}" | grep "kubelet_volume_stats_"
+                success=true
+                break
+              else
+                echo "kubelet_volume_stats_* metrics NOT found in response"
+              fi
             else
-              echo "kubelet_volume_stats_* metrics NOT found"
-              exit 1 # analogy to no lines found in grep
+              echo "Cannot access kubelet metrics endpoint (exit code: $exit_status)"
             fi
-          else
-            echo "Cannot access kubelet metrics endpoint"
-            exit $exit_status
+            
+            echo "Waiting 10 seconds before next attempt..."
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+          
+          if [ "$success" = "false" ]; then
+            echo "ERROR: Failed to find kubelet_volume_stats_* metrics after 3 minutes"
+            exit 1
           fi
-          echo "kubelet_volume_stats_* metrics validation completed"
+          
+          echo "kubelet_volume_stats_* metrics validation completed successfully"
         volumeMounts:
         - name: host-root
           mountPath: /host
           readOnly: true
         securityContext:
           privileged: true
+      - name: stage-selector
+        image: busybox:latest
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Multi-stage fake metrics server initializing..."
+          
+          # Get stage from downward API environment variable
+          STAGE_FILE="${METRICS_STAGE}.txt"
+          
+          echo "Selected stage: ${METRICS_STAGE}"
+          echo "Looking for file: ${STAGE_FILE}"
+          
+          # Check if the stage file exists
+          if [ -f "/config/${STAGE_FILE}" ]; then
+            echo "Found stage file: ${STAGE_FILE}"
+            cp "/config/${STAGE_FILE}" "/etc/nginx/metrics.txt"
+          else
+            echo "ERROR: Stage file ${STAGE_FILE} not found"
+            echo "Available stages:"
+            ls -la /config/stage*.txt || true
+            exit 1
+          fi
+          
+          echo "Stage selection completed. Current stage: ${METRICS_STAGE}"
+          echo "Content preview:"
+          cat "/etc/nginx/metrics.txt"
+        env:
+        - name: METRICS_STAGE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['fake-metrics.pvc-autoscaler.io/stage']
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: nginx-served-metrics
+          mountPath: /etc/nginx
       containers:
       - name: nginx
         image: nginx:alpine
@@ -64,16 +122,8 @@ spec:
         - name: config
           mountPath: /etc/nginx/nginx.conf
           subPath: nginx.conf
-        - name: config
-          mountPath: /etc/nginx/metrics.txt
-          subPath: metrics.txt
-        resources:
-          requests:
-            memory: "32Mi"
-            cpu: "10m"
-          limits:
-            memory: "64Mi"
-            cpu: "50m"
+        - name: nginx-served-metrics
+          mountPath: /etc/nginx
         readinessProbe:
           httpGet:
             path: /health
@@ -90,6 +140,8 @@ spec:
       - name: config
         configMap:
           name: minimal-fake-metrics-config
+      - name: nginx-served-metrics
+        emptyDir: {}
       - name: host-root
         hostPath:
           path: /
