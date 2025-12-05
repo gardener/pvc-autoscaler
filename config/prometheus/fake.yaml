@@ -101,7 +101,7 @@ spec:
           
           echo "Stage selection completed. Current stage: ${METRICS_STAGE}"
           echo "Content preview:"
-          head "/etc/nginx/metrics.txt"
+          cat "/etc/nginx/metrics.txt"
         env:
         - name: METRICS_STAGE
           valueFrom:
