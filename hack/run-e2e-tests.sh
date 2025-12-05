@@ -58,13 +58,12 @@ function _test_consume_space_and_resize() {
   _wait_for_event Warning FreeSpaceThresholdReached "pvc/${_pvc_name}"
   _wait_for_event Normal ResizingStorage "pvc/${_pvc_name}"
   _wait_for_event Normal Resizing "pvc/${_pvc_name}"
-  # _wait_for_event Normal FileSystemResizeRequired "pvc/${_pvc_name}"
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
 
   # We should be at 2Gi now
-  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_2Gi
   sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_2Gi
 
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
   kubectl wait "pvca/${_pvca_name}" \
@@ -80,9 +79,9 @@ function _test_consume_space_and_resize() {
   _wait_for_event_to_occur_n_times Normal FileSystemResizeSuccessful "pvc/${_pvc_name}" 2
 
   # We should be at 3Gi now
-  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_3Gi
   sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_3Gi
 
   _msg_info "consuming all available disk space ..."
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_high_3Gi
@@ -149,9 +148,9 @@ function _test_consume_inodes_and_resize() {
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
 
   # We should be at 2Gi now
-  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_inode_low_2Gi
   sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_inode_low_2Gi
 
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
   kubectl wait "pvca/${_pvca_name}" \
@@ -168,9 +167,9 @@ function _test_consume_inodes_and_resize() {
   _wait_for_event_to_occur_n_times Normal FileSystemResizeSuccessful "pvc/${_pvc_name}" 2
 
   # We should be at 3Gi now
-  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_inode_low_3Gi
   sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_inode_low_3Gi
 
   # Once the volume resizes for a second time we should have a total of ~196K inodes.
   _msg_info "consuming all available inodes ..."
