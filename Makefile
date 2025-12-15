@@ -81,11 +81,11 @@ vet:  ## Run go vet against code.
 	go vet ./...
 
 .PHONY: sast
-sast: sast-sh gosec
+sast: gosec
 	@bash $(SAST)
 
 .PHONY: sast-report
-sast-report: sast-sh gosec
+sast-report: gosec
 	@bash $(SAST) --gosec-report true
 
 .PHONY: test
@@ -219,6 +219,7 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
+LOCALHACK ?= $(shell pwd)/hack
 export PATH := $(abspath $(LOCALBIN)):$(PATH)
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
@@ -234,9 +235,9 @@ HELM ?= $(LOCALBIN)/helm
 KIND ?= $(LOCALBIN)/kind
 SKAFFOLD ?= $(LOCALBIN)/skaffold
 KUBECTL ?= $(LOCALBIN)/kubectl
-SAST ?= $(LOCALBIN)/hack/sast.sh
+SAST ?= $(LOCALHACK)/sast.sh
 GOSEC ?= $(LOCALBIN)/gosec
-INSTALL_GOSEC ?= $(LOCALBIN)/hack/install-gosec.sh
+INSTALL_GOSEC ?= $(LOCALHACK)/install-gosec.sh
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
@@ -313,23 +314,10 @@ skaffold: $(SKAFFOLD) | $(LOCALBIN)  ## Download skaffold locally if necessary.
 $(SKAFFOLD): $(call gen-tool-version,$(SKAFFOLD),$(SKAFFOLD_VERSION))
 		$(call download-tool,skaffold,https://storage.googleapis.com/skaffold/releases/$(SKAFFOLD_VERSION)/skaffold-$(GOOS)-$(GOARCH))
 
-.PHONY: sast-sh
-sast-sh: $(SAST) | $(LOCALBIN)  ## Download kubectl locally if necessary.
-$(SAST):
-	mkdir -p $(LOCALBIN)/hack
-	$(call download-tool,hack/sast.sh,https://raw.githubusercontent.com/gardener/gardener/master/hack/sast.sh)
-
-.PHONY: install-gosec
-install-gosec: $(INSTALL_GOSEC) | $(LOCALBIN)  ## Download kubectl locally if necessary.
-$(INSTALL_GOSEC):
-	mkdir -p $(LOCALBIN)/hack
-	$(call download-tool,hack/install-gosec.sh,https://raw.githubusercontent.com/gardener/gardener/master/hack/tools/install-gosec.sh)
-
-
 .PHONY: gosec
-gosec: install-gosec $(GOSEC) | $(LOCALBIN)
+gosec: $(GOSEC) | $(LOCALHACK)
 $(GOSEC): $(call tool_version_file,$(GOSEC),$(GOSEC_VERSION))
-	@GOSEC_VERSION=$(GOSEC_VERSION) TOOLS_BIN_DIR=$(LOCALBIN) bash $(LOCALBIN)/hack/install-gosec.sh
+	@GOSEC_VERSION=$(GOSEC_VERSION) TOOLS_BIN_DIR=$(LOCALBIN) bash $(LOCALHACK)/install-gosec.sh
 
 .PHONY: kubectl
 kubectl: $(KUBECTL) | $(LOCALBIN)  ## Download kubectl locally if necessary.

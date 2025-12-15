@@ -59,6 +59,7 @@ jobs:
     needs:
       - prepare
       - verify
+      - sast-lint
     permissions:
       contents: read
       packages: write
