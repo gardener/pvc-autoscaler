@@ -75,14 +75,6 @@ generate: controller-gen ## Generate DeepCopy, DeepCopyInto, and DeepCopyObject 
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	$(MAKE) format
 
-.PHONY: fmt
-fmt:  ## Run go fmt against code.
-	go fmt ./...
-
-.PHONY: vet
-vet:  ## Run go vet against code.
-	go vet ./...
-
 .PHONY: sast
 sast: gosec
 	@bash $(SAST)
