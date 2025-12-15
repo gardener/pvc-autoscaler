@@ -135,9 +135,19 @@ function _ensure_pvc_capacity() {
   local _want_capacity="${3}"
   local _got_capacity=$( _pvc_capacity "${_pvc_name}" "${_namespace}" )
 
-  if [ "${_want_capacity}" != "${_got_capacity}" ]; then
-    _msg_error "pvc ${_namespace}/${_pvc_name} capacity is ${_got_capacity} (want ${_want_capacity})" 1
-  fi
+  for attempt in 1 2; do
+    local _got_capacity=$( _pvc_capacity "${_pvc_name}" "${_namespace}" )
+    
+    if [ "${_want_capacity}" = "${_got_capacity}" ]; then
+      return 0
+    fi
+    
+    if [ ${attempt} -eq 1 ]; then
+      sleep 30
+    else
+      _msg_error "pvc ${_namespace}/${_pvc_name} capacity is ${_got_capacity} (want ${_want_capacity})" 1
+    fi
+  done
 }
 
 # Cleanup unused resources
