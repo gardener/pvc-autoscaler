@@ -40,7 +40,7 @@ DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
 KINDEST_NODE_IAMGE_TAG		      ?= v1.33.4@sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
 
 ## Rules
-kind-up kind-down pvc-autoscaler-up pvc-autoscaler-dev test-e2e: export KUBECONFIG = $(KIND_KUBECONFIG)
+kind-up kind-down pvc-autoscaler-up pvc-autoscaler-dev test-e2e ci-test-e2e: export KUBECONFIG = $(KIND_KUBECONFIG)
 
 .PHONY: all
 all: build
@@ -85,8 +85,12 @@ test: manifests generate fmt vet envtest  ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 		go test -v -coverprofile cover.out $$(go list ./... | grep -v -E 'test/e2e|test/utils|/cmd')
 
-.PHONY: test-e2e  # Run the e2e tests against a minikube k8s instance that is spun up.
+.PHONY: test-e2e  # Run the e2e tests against a kind k8s instance that is already spun up.
 test-e2e:
+	./hack/run-e2e-tests.sh
+
+.PHONY: ci-test-e2e  # Create a kind kind k8s instance and run the e2e tests against it.
+ci-test-e2e:
 	$(MAKE) e2e-env-setup
 	./hack/run-e2e-tests.sh
 	$(MAKE) e2e-env-teardown
