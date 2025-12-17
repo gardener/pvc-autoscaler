@@ -135,6 +135,7 @@ function _ensure_pvc_capacity() {
   local _want_capacity="${3}"
   local _got_capacity=$( _pvc_capacity "${_pvc_name}" "${_namespace}" )
 
+  # retry 1 time on fail
   for attempt in 1 2; do
     local _got_capacity=$( _pvc_capacity "${_pvc_name}" "${_namespace}" )
     

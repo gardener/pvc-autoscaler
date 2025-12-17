@@ -29,7 +29,6 @@ function _test_consume_space_and_resize() {
 
   _msg_info "starting test: consume space and resize"
   _msg_info "creating test pvc, pvca and pod ..."
-  sleep 20
   kubectl create -f "${_pvc_yaml}"
   kubectl create -f "${_pvca_yaml}"
   kubectl create -f "${_pod_yaml}"
@@ -61,7 +60,6 @@ function _test_consume_space_and_resize() {
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
 
   # We should be at 2Gi now
-  sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_2Gi
 
@@ -79,7 +77,6 @@ function _test_consume_space_and_resize() {
   _wait_for_event_to_occur_n_times Normal FileSystemResizeSuccessful "pvc/${_pvc_name}" 2
 
   # We should be at 3Gi now
-  sleep 30
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_3Gi
 

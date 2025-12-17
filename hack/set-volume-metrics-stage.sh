@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Minimal script to change fake metrics stages
-# Usage: ./change-stage.sh <stage name>
+# Usage: ./hack/set-volume-metrics-stage.sh <stage name>
 
 set -euo pipefail
 
