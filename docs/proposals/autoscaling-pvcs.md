@@ -127,7 +127,7 @@ status:
     usedInodesPercentage: "70%"
     currentSize: 3Gi
     targetSize: 4Gi
-    usedByPods: ["prometheus-seed-1"]"]
+    usedByPods: ["prometheus-seed-1"]
 ```
 
 ### Key Features
@@ -200,7 +200,7 @@ The initial version of `pvc-autoscaler` will focus on the immediate value of pre
 For these reasons we will postpone the implementation of downscaling and potentially only do it if the requirements for it outweigh the downsides.
 Additionally, the task of downscaling will be implemented as part of a separate controller or tool.
 One possible approach is to offer a plugin mechanism, allowing stakeholders to write their own downscaling logic which is specific to their application.
-The `pvc-autoscaler` will only be responsible to trigger downscaling and monitor its status.
+The `pvc-autoscaler` will only be responsible for triggering downscaling and monitor its status.
 
 ### Architecture Overview
 
@@ -265,7 +265,7 @@ By using the `strategy` field for scale-up operations, users can specify how the
 
 #### Dependency on `csi-resizer`
 
-As the `csi-resizer` is a failure point we have no control over, pvc upscaling may fail because of it.
+As the `csi-resizer` is a failure point we have no control over, PVC upscaling may fail because of it.
 In that case there is nothing that can be done to prevent volume exhaustion.
 Even if the volume is exhausted the worst outcome of it would be:
 
@@ -279,7 +279,6 @@ Even if the volume is exhausted the worst outcome of it would be:
 At first glance, it seems like the PersistentVolumeClaimAutoscaler API should be similar to the VerticalPodAutoscaler (VPA) API as both scale resources vertically.
 However, VPA is based on a much more complex, harder to reason and debug algorithm which uses historical data, histograms and percentiles, which dictates the way that the VPA API is designed.
 VPA's recommendation engine analyzes resource usage over time windows, calculates percentiles (typically p95 or p99), and applies sophisticated algorithms to determine resource recommendations.
-It requires that
 
 The main benefit of using histograms is that random spikes of CPU won't trigger unnecessary scaling events.
 However, disk space consumption does not have random spikes like CPU or memory. Storage usage follows predictable growth patterns.
