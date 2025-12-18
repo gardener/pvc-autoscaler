@@ -1,11 +1,25 @@
 ---
 name: Bug Report
 about: Report a bug
-labels: kind/bug
 
 ---
 
 <!-- Please ensure that you do not include company internal information. -->
+
+**How to categorize this issue?**
+<!--
+Please select area, kind, and priority for this issue. This helps the community categorizing it.
+Replace below TODOs or exchange the existing identifiers with those that fit best in your opinion.
+If multiple identifiers make sense you can also state the commands multiple times, e.g.
+  /area control-plane
+  /area auto-scaling
+  ...
+
+"/area" identifiers:     audit-logging|auto-scaling|backup|certification|control-plane-migration|control-plane|cost|delivery|dev-productivity|disaster-recovery|documentation|high-availability|logging|metering|monitoring|networking|open-source|ops-productivity|os|performance|quality|robustness|scalability|security|storage|testing|usability|user-management
+"/kind" identifiers:     api-change|bug|cleanup|discussion|enhancement|epic|impediment|poc|post-mortem|question|regression|task|technical-debt|test
+-->
+/area TODO
+/kind bug
 
 **What happened**:
 
@@ -13,6 +27,11 @@ labels: kind/bug
 
 **How to reproduce it (as minimally and precisely as possible)**:
 
-**Anything else we need to know**:
+**Anything else we need to know?**:
 
 **Environment**:
+
+- Version:
+- Kubernetes version (use `kubectl version`):
+- Cloud provider or hardware configuration:
+- Others:
