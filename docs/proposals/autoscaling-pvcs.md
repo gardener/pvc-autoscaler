@@ -50,9 +50,9 @@ A way to resolve these issues is to automatically adapt the size of PVCs to fit 
 
 ### Who Benefits
 
-- **Platform operators** gain automated storage management, reducing manual toil and operational risk while optimizing infrastructure costs across their cluster fleet.
-- **End users** benefit from reliable observability services that automatically adapt to their cluster's needs without service interruptions or data loss.
-- **Stakeholders** see reduced cloud spending through right-sized storage allocation that matches actual usage patterns rather than worst-case scenarios.
+- **Gardener operators** gain automated storage management, reducing manual toil and operational risk while optimizing infrastructure costs across their cluster fleet.
+- **End users** no longer face issues caused by missing observability signals.
+- **Stakeholders** can see reduced cloud spending because of right-sized storage allocation that matches actual usage patterns rather than worst-case scenarios.
 
 ## Proposal
 
@@ -78,15 +78,15 @@ spec:
   volumeClaimPolicies:
   - minCapacity: 2Gi
     maxCapacity: 5Gi
-#   match:
-#    regex: ".*"
-#    selector:
-#      matchLabels:
-#        foo: bar
-#      matchExpressions:
-#        key: foo
-#        operator: In
-#        values: ["bar"]
+    match: # if this field is omitted, the configured policy is used for all PVCs
+     nameRegex: ".*" # use this policy only for PVCs which have a name that matches the provided regex
+   # selector: # optional label based selector, that can be used when PVCs are created with labels
+   #   matchLabels:
+   #     foo: bar
+   #   matchExpressions:
+   #     key: foo
+   #     operator: In
+   #     values: ["bar"]
     scaleUp:
       cooldownDuration: 180s
       stabilizationWindowDuration: 3000s
@@ -94,7 +94,7 @@ spec:
       stepPercent: 25
       minStepAbsolute: 1Gi
       strategy: InPlace | RestartPodsIfNecessary | Off
-    scaleDown:
+    scaleDown: # the scaleDown section is shown as an example, due to the complex implementation it will only be added if enough demand for it is present
       cooldownDuration: 180s
       stabilizationWindowDuration: 3000s
       thresholdPercent: 60
@@ -138,11 +138,10 @@ The autoscaler will automatically identify PVCs to manage by examining the contr
 The `volumePolicies` section allows control over specific volumes using regex or selector based matching, enabling different scaling behaviors for different volume types (e.g., data vs. WAL volumes).
 By default, if no regex or selector is specified, the configurations in the `PersistentVolumeClaimAutoscaler` resource apply to all PVCs that are identified by the `pvc-autoscaler`.
 
-#### Scale-Up Capabilities (Initial Version):
+#### Scale-Up Capabilities:
 
-- Monitor volume usage against configurable thresholds.
-- Check if the storage class of the identified PVC supports volume expansion.
-- Automatically increase PVC size when utilization exceeds thresholds.
+- Check if the storage class of the identified PVCs support volume expansion.
+- Monitor volume usage and increase PVC size when utilization exceeds configured threshold.
 - Support for percentage-based and absolute minimum step increases.
 - Cooldown periods to prevent rapid successive scaling operations.
 - Configurable pod restart strategies (manual or automatic).
@@ -159,7 +158,7 @@ The autoscaler exposes Prometheus metrics for monitoring and alerting:
 - `pvc_autoscaler_max_capacity_reached_total` - Total number of times the max capacity has been reached for a PVC (labeled by namespace, PVC name and owning PVCA name)
 - `pvc_autoscaler_skipped_total` - Total number of times a PVC has been skipped from reconciliation (labeled by namespace, PVC name, owning PVCA name, and reason)
 
-These metrics enable operators to track autoscaling behavior, identify capacity planning needs, and set up alerts for when PVCs reach maximum capacity.
+These metrics enable operators to track autoscaling behavior, evaluate configured thresholds, and set up alerts for when PVCs reach maximum capacity.
 
 More metrics can be added in the future.
 
@@ -186,7 +185,7 @@ Downscaling PVCs is significantly more complex than upscaling because it require
 - Safe data migration to smaller volumes.
 - Coordination with application downtime or maintenance windows.
 - Risk mitigation for potential data loss.
-- Downscaling of some PVCs could result in a size smaller than the one specified in the workload controller that manages the PVC. Depending on the controller, it might try to scale up the PVC back to its original size.
+- Downscaling PVCs could result in a size smaller than the one specified in the workload controller that manages the PVC. Depending on the controller, it might try to scale up the PVC back to its original size.
 - Data migration via VolumeSnapshot does not work as smaller PVCs cannot be created from VolumeSnapshots that were taken from volumes with a larger storage size.
 This means an external tool (e.g. a pod that runs rsync or some backup-restore functionality similar to [`etcd-backup-restore`][1]) is required to migrate the data.
 
@@ -375,7 +374,7 @@ We are seeking approval from the Technical Steering Committee to:
 
 #### Phase 3 (Future Enhancement)
 - Extend deployment to Shoot clusters (may require different metrics access patterns).
-- Allow collecting volume stats metrics from other sources.
+- If necessary, collect volume stats metrics from other sources.
 - Enable `Shoot` owners to use the autoscaler for their own workloads.
 - Advanced strategies for restarts.
 
