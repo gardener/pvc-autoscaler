@@ -80,7 +80,7 @@ sast-report: gosec
 	@bash $(SAST) --gosec-report true
 
 .PHONY: test
-test: generate fmt vet envtest  ## Run tests.
+test: generate envtest  ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 		go test -v -race -timeout=2m $$(go list ./... | grep -v -E 'test/e2e|test/utils|/cmd')
 
@@ -171,11 +171,11 @@ minikube-load-image: minikube docker-build  ## Load the operator image into the 
 ##@ Build
 
 .PHONY: build
-build: generate fmt vet ## Build manager binary.
+build: generate ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 .PHONY: run
-run: generate fmt vet ## Run a controller from your host.
+run: generate ## Run a controller from your host.
 	go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
