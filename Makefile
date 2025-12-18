@@ -80,6 +80,14 @@ fmt:  ## Run go fmt against code.
 vet:  ## Run go vet against code.
 	go vet ./...
 
+.PHONY: sast
+sast: gosec
+	@bash $(SAST)
+
+.PHONY: sast-report
+sast-report: gosec
+	@bash $(SAST) --gosec-report true
+
 .PHONY: test
 test: manifests generate fmt vet envtest  ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
@@ -211,6 +219,7 @@ undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.
 
 ## Location to install dependencies to
 LOCALBIN ?= $(shell pwd)/bin
+LOCALHACK ?= $(shell pwd)/hack
 export PATH := $(abspath $(LOCALBIN)):$(PATH)
 $(LOCALBIN):
 	mkdir -p $(LOCALBIN)
@@ -226,6 +235,9 @@ HELM ?= $(LOCALBIN)/helm
 KIND ?= $(LOCALBIN)/kind
 SKAFFOLD ?= $(LOCALBIN)/skaffold
 KUBECTL ?= $(LOCALBIN)/kubectl
+SAST ?= $(LOCALHACK)/sast.sh
+GOSEC ?= $(LOCALBIN)/gosec
+INSTALL_GOSEC ?= $(LOCALHACK)/install-gosec.sh
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
@@ -238,6 +250,7 @@ HELM_VERSION ?= v3.16.2
 KIND_VERSION ?= v0.30.0
 SKAFFOLD_VERSION ?= v2.16.1
 KUBECTL_VERSION ?= v1.33.4
+GOSEC_VERSION ?= v2.22.10
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -300,6 +313,11 @@ $(KIND): $(call gen-tool-version,$(KIND),$(KIND_VERSION))
 skaffold: $(SKAFFOLD) | $(LOCALBIN)  ## Download skaffold locally if necessary.
 $(SKAFFOLD): $(call gen-tool-version,$(SKAFFOLD),$(SKAFFOLD_VERSION))
 		$(call download-tool,skaffold,https://storage.googleapis.com/skaffold/releases/$(SKAFFOLD_VERSION)/skaffold-$(GOOS)-$(GOARCH))
+
+.PHONY: gosec
+gosec: $(GOSEC) | $(LOCALHACK)
+$(GOSEC): $(call tool_version_file,$(GOSEC),$(GOSEC_VERSION))
+	@GOSEC_VERSION=$(GOSEC_VERSION) TOOLS_BIN_DIR=$(LOCALBIN) bash $(LOCALHACK)/install-gosec.sh
 
 .PHONY: kubectl
 kubectl: $(KUBECTL) | $(LOCALBIN)  ## Download kubectl locally if necessary.
