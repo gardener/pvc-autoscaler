@@ -78,9 +78,9 @@ spec:
   volumeClaimPolicies:
   - minCapacity: 2Gi
     maxCapacity: 5Gi
-    match:
-     regex: ".*"
-#    labelSelector:
+#   match:
+#    regex: ".*"
+#    selector:
 #      matchLabels:
 #        foo: bar
 #      matchExpressions:
@@ -103,18 +103,12 @@ spec:
       strategy: Rsync | OnVolumeDeletion | Off
 status:
   conditions:
-  - type: PersistentVolumeClaimsScalingReason
-    status: Successful
-    lastTransitionTime: ""2025-08-07T11:59:54Z"
-    message: |
-      - PersistentVolumeClaim prometheus-seed-0 scaled-up due to passing inodes threshold.
-      - PersistentVolumeClaim prometheus-seed-1 scaled-up due to passing storage threshold.
   - type: PersistentVolumeClaimsScaled
     status: "Progressing"
     lastTransitionTime: "2025-08-07T11:59:54Z"
     message: |
       Some PersistentVolumeClaims have not been scaled:
-      - PVC prometheus-seed-1 is being scaled - current size 3Gi does not match target size 4Gi.
+      - PVC prometheus-seed-1 is being scaled due to passing inodes threshold. Current size 3Gi does not match target size 4Gi.
   persistentVolumeClaims:
   - persistentVolumeClaimName: prometheus-seed-0
     usedSpacePercentage: "30%"
@@ -186,21 +180,21 @@ The PVC autoscaler employs a **simple threshold-based scaling approach** that ma
 6. Respect cooldown periods to prevent thrashing
 7. Cap at `maxCapacity` for scaling up, and at `minCapacity` for downscaling
 
-#### Downscaling (Future Development)
+#### Downscaling (Potential Future Development)
 
 Downscaling PVCs is significantly more complex than upscaling because it requires:
 - Safe data migration to smaller volumes.
-- Data migration via VolumeSnapshot does not work as smaller PVCs cannot be created from VolumeSnapshots that were taken from volumes with a larger storage size.
-This means an external tool (e.g. a pod that runs rsync or some backup-restore functionality similar to [`etcd-backup-restore`][1]) is required to migrate the data.
 - Coordination with application downtime or maintenance windows.
 - Risk mitigation for potential data loss.
 - Downscaling of some PVCs could result in a size smaller than the one specified in the workload controller that manages the PVC. Depending on the controller, it might try to scale up the PVC back to its original size.
+- Data migration via VolumeSnapshot does not work as smaller PVCs cannot be created from VolumeSnapshots that were taken from volumes with a larger storage size.
+This means an external tool (e.g. a pod that runs rsync or some backup-restore functionality similar to [`etcd-backup-restore`][1]) is required to migrate the data.
 
 The initial version of `pvc-autoscaler` will focus on the immediate value of preventing storage exhaustion through automated scale-up.
 For these reasons we will postpone the implementation of downscaling and potentially only do it if the requirements for it outweigh the downsides.
-Additionally, the task of downscaling will be implemented as part of a separate controller or tool.
+Additionally, the task of downscaling will be implemented as part of a separate controller or an external tool.
+The `pvc-autoscaler` will only be responsible for triggering downscaling and monitoring the status of the operation.
 One possible approach is to offer a plugin mechanism, allowing stakeholders to write their own downscaling logic which is specific to their application.
-The `pvc-autoscaler` will only be responsible for triggering downscaling and monitor its status.
 
 ### Architecture Overview
 
@@ -386,8 +380,8 @@ We are seeking approval from the Technical Steering Committee to:
 - Advanced strategies for restarts.
 
 #### Phase 4 (If required by stakeholders)
-- Extend the API scale-down capabilities (requires complex data migration strategies like rsync-based data migration). Will only be implemented if demand is high enough and outweighs the downsides.
-- The scale-down itself will be handled by a separate controller or plugin
+- Extend the API with scale-down capabilities (requires complex data migration strategies like rsync-based data migration). Will only be implemented if demand is high enough and outweighs the downsides.
+- The scale-down itself will be handled by a separate controller or plugin.
 
 ### Next Steps
 
@@ -420,10 +414,18 @@ If the PVC's size is scaled up and ends up being bigger than what is specified i
 If the PVC's size is scaled down and is smaller than what is specified in the `VLSingle` resource, the controller responsible for `VLSingle` scales up the PVC to match the size in the `VLSingle` resource.
 
 ### Supporting materials (linked or embedded)
-- [1]: <https://github.com/gardener/etcd-backup-restore> (etcd-backup-restore)
-- [2]: <https://github.com/prometheus/prometheus/pull/13181> (Only skip invalid wal record)
-- [3]: <https://github.com/topolvm/pvc-autoresizer> (topolvm/pvc-autoresizer)
-- [4]: <https://github.com/lorenzophys/pvc-autoscaler> (lorenzophys/pvc-autoscaler)
-- [5]: <https://github.com/DevOps-Nirvana/Kubernetes-Volume-Autoscaler> (DevOps-Nirvana/Kubernetes-Volume-Autoscaler)
-- [6]: <https://github.com/kubernetes/enhancements/pull/4651> (KEP 4651)
-- [7]: <https://github.com/gardener/gardener/pull/13242> (GEP 35)
+- [etcd-backup-restore][1]
+- [Only skip invalid wal record][2]
+- [topolvm/pvc-autoresizer][3]
+- [lorenzophys/pvc-autoscaler][4]
+- [DevOps-Nirvana/Kubernetes-Volume-Autoscaler][5]
+- [KEP 4651][6]
+- [GEP 35][7]
+
+[1]: https://github.com/gardener/etcd-backup-restore
+[2]: https://github.com/prometheus/prometheus/pull/13181
+[3]: https://github.com/topolvm/pvc-autoresizer
+[4]: https://github.com/lorenzophys/pvc-autoscaler
+[5]: https://github.com/DevOps-Nirvana/Kubernetes-Volume-Autoscaler
+[6]: https://github.com/kubernetes/enhancements/pull/4651
+[7]: https://github.com/gardener/gardener/pull/13242
