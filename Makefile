@@ -40,7 +40,7 @@ DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
 KINDEST_NODE_IAMGE_TAG		      ?= v1.33.4@sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
 
 ## Rules
-tools-for-generate: golangci-lint goimports helm yq
+tools-for-generate: controller-gen golangci-lint goimports helm yq
 kind-up kind-down pvc-autoscaler-up pvc-autoscaler-dev test-e2e-local ci-e2e-kind: export KUBECONFIG = $(KIND_KUBECONFIG)
 ci-e2e-kind: export ARTIFACTS ?= /tmp/artifacts
 

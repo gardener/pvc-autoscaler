@@ -20,7 +20,7 @@ function run() {
 }
 
 # skaffold.yaml - Main PVC autoscaler development workflow
-run "skaffold.yaml" "pvc-autoscaler" "default"
+run "skaffold.yaml" "pvc-autoscaler" "pvc-autoscaler"
 
 if ! $success ; then
   exit 1
