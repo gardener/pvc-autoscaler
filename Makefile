@@ -106,6 +106,12 @@ ci-e2e-kind:
 lint: golangci-lint  ## Run golangci-lint linter & yamllint
 	$(GOLANGCI_LINT) run
 
+.PHONY: clean
+clean:
+	@$(shell find ./example -type f -name "controller-registration.yaml" -exec rm '{}' \;)
+	@$(shell find ./example -type f -name "extension.yaml" -exec rm '{}' \;)
+	@bash $(REPO_ROOT)/hack/clean.sh ./cmd/... ./internal/... ./test/...
+
 .PHONY: tidy
 tidy:
 	@GO111MODULE=on go mod tidy
