@@ -127,6 +127,12 @@ tidy:
 format: $(GOIMPORTS) $(GOIMPORTSREVISER)
 	@bash $(REPO_ROOT)/hack/format.sh ./cmd ./internal ./test
 
+.PHONY: verify
+verify: check format test sast
+
+.PHONY: verify-extended
+verify-extended: check-generate check format sast-report
+
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
