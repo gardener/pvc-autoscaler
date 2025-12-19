@@ -38,3 +38,12 @@ deploy:
       apply:
         - --server-side
         - --force-conflicts
+profiles:
+- name: e2e
+  deploy:
+    kubectl:
+      defaultNamespace: pvc-autoscaler-system
+  manifests:
+    kustomize:
+      paths:
+      - config/overlays/e2e

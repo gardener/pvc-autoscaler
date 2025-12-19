@@ -186,29 +186,7 @@ function _test_consume_inodes_and_resize() {
 }
 
 # Main entrypoint
-function _main() {
-  kubectl patch deployment pvc-autoscaler-controller-manager -n pvc-autoscaler-system --type='json' -p='[
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/args/-",
-    "value": "--metrics-available-bytes-query=kubelet_volume_stats_available_bytes{type=\"fake\"}"
-  },
-  {
-    "op": "add", 
-    "path": "/spec/template/spec/containers/0/args/-",
-    "value": "--metrics-capacity-bytes-query=kubelet_volume_stats_capacity_bytes{type=\"fake\"}"
-  },
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/args/-", 
-    "value": "--metrics-available-inodes-query=kubelet_volume_stats_inodes_free{type=\"fake\"}"
-  },
-  {
-    "op": "add",
-    "path": "/spec/template/spec/containers/0/args/-",
-    "value": "--metrics-capacity-inodes-query=kubelet_volume_stats_inodes{type=\"fake\"}"
-  }
-  ]'
+function _main() {  
   _msg_info "Waiting for pvc-autoscaler pods to become ready ..."
   kubectl wait \
           --for condition=Ready \

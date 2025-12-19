@@ -167,3 +167,40 @@ function _cleanup() {
   kubectl --namespace "${_namespace}" delete pvc "${_pvc_name}"
   kubectl --namespace "${_namespace}" delete pvca "${_pvca_name}"
 }
+
+export_artifacts() {
+  cluster_name="${1}"
+  echo "> Exporting logs of kind cluster '$cluster_name'"
+  kind export logs "${ARTIFACTS:-}/$cluster_name" --name "$cluster_name" || true
+
+  echo "> Exporting events of kind cluster '$cluster_name' > '$ARTIFACTS/$cluster_name'"
+  export_events_for_cluster "$ARTIFACTS/$cluster_name"
+
+  export_resource_yamls_for pvcas
+}
+
+export_resource_yamls_for() {
+  mkdir -p $ARTIFACTS
+  # Loop over the resource types
+  for resource_type in "$@"; do
+    echo "> Exporting Resource '$resource_type' yaml > $ARTIFACTS/$resource_type.yaml"
+    echo -e "---\n# cluster name: '${cluster_name:-}'" >> "$ARTIFACTS/$resource_type.yaml"
+    kubectl get "$resource_type" -A -o yaml >> "$ARTIFACTS/$resource_type.yaml" || true
+  done
+}
+
+export_events_for_cluster() {
+  local dir="$1/events"
+  mkdir -p "$dir"
+
+  while IFS= read -r namespace; do
+    kubectl -n "$namespace" get event --sort-by=lastTimestamp >"$dir/$namespace.log" 2>&1 || true
+  done < <(kubectl get ns -oname | cut -d/ -f2)
+}
+
+clamp_mss_to_pmtu() {
+  # https://github.com/kubernetes/test-infra/issues/23741
+  if [[ "$OSTYPE" != "darwin"* ]]; then
+    iptables -t mangle -A POSTROUTING -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+  fi
+}

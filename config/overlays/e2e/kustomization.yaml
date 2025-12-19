@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../default
+
+patches:
+- patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --metrics-available-bytes-query=kubelet_volume_stats_available_bytes{type="fake"}
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --metrics-capacity-bytes-query=kubelet_volume_stats_capacity_bytes{type="fake"}
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --metrics-available-inodes-query=kubelet_volume_stats_inodes_free{type="fake"}
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --metrics-capacity-inodes-query=kubelet_volume_stats_inodes{type="fake"}
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: pvc-autoscaler-controller-manager
