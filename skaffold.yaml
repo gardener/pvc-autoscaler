@@ -4,18 +4,24 @@ metadata:
   name: pvc-autoscaler
 build:
   artifacts:
-    - image: pvc-autoscaler-local
+    - image: local-skaffold/pvc-autoscaler
       ko:
         dependencies:
           paths:
-            - "**/*.go"           # All Go source files
-            - go.mod              # Go module definition
-            - go.sum              # Go module checksums
-            - config/**           # Kustomize configurations
-        main: ./cmd
+            - api/autoscaling/v1alpha1
+            - cmd/pvc-autoscaler
+            - internal/common
+            - internal/controller/autoscaling
+            - internal/metrics
+            - internal/metrics/source
+            - internal/metrics/source/prometheus
+            - internal/periodic
+            - internal/utils
+            - VERSION
+        main: ./cmd/pvc-autoscaler
 manifests:
   kustomize:
-    paths: 
+    paths:
       - config/default
 deploy:
   helm:
