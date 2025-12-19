@@ -106,6 +106,10 @@ ci-e2e-kind:
 lint: golangci-lint  ## Run golangci-lint linter & yamllint
 	$(GOLANGCI_LINT) run
 
+.PHONY: tidy
+tidy:
+	@GO111MODULE=on go mod tidy
+
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
