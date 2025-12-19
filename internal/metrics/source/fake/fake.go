@@ -65,7 +65,7 @@ func (i *Item) Consume() {
 // Fake implements the [metricssource.Source] interface by providing a fake
 // source of metrics, which can be used in unit tests.
 type Fake struct {
-	sync.Mutex
+	mu sync.Mutex
 
 	// The "registry" of fake items
 	items map[types.NamespacedName]*Item
@@ -105,8 +105,8 @@ func WithInterval(i time.Duration) Option {
 
 // Register registers the given items with the [Fake] metrics source.
 func (f *Fake) Register(items ...*Item) {
-	f.Lock()
-	defer f.Unlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	for _, item := range items {
 		f.items[item.NamespacedName] = item
@@ -131,8 +131,8 @@ func (f *Fake) Start(ctx context.Context) {
 
 // consumeItems will "consume" space and inodes from the registered items
 func (f *Fake) consumeItems() {
-	f.Lock()
-	defer f.Unlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	for _, v := range f.items {
 		v.Consume()
 	}
@@ -140,8 +140,8 @@ func (f *Fake) consumeItems() {
 
 // Get implements the [metricssource.Source] interface
 func (f *Fake) Get(ctx context.Context) (metricssource.Metrics, error) {
-	f.Lock()
-	defer f.Unlock()
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	result := make(metricssource.Metrics)
 	for _, item := range f.items {
