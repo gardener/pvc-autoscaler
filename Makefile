@@ -120,6 +120,10 @@ clean:
 tidy:
 	@GO111MODULE=on go mod tidy
 
+.PHONY: format
+format: $(GOIMPORTS) $(GOIMPORTSREVISER)
+	@bash $(REPO_ROOT)/hack/format.sh ./cmd ./internal ./test
+
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
@@ -256,6 +260,7 @@ SAST ?= $(LOCALHACK)/sast.sh
 GOSEC ?= $(LOCALBIN)/gosec
 INSTALL_GOSEC ?= $(LOCALHACK)/install-gosec.sh
 GOIMPORTS ?= $(LOCALBIN)/goimports
+GOIMPORTSREVISER ?= $(LOCALBIN)/goimports-reviser
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
@@ -270,6 +275,7 @@ SKAFFOLD_VERSION ?= v2.16.1
 KUBECTL_VERSION ?= v1.33.4
 GOSEC_VERSION ?= v2.22.10
 GOIMPORTS_VERSION ?= v0.38.0
+GOIMPORTSREVISER_VERSION ?= v3.11.0
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -347,6 +353,11 @@ $(KUBECTL): $(call gen-tool-version,$(KUBECTL),$(KUBECTL_VERSION))
 goimports: $(GOIMPORTS) | $(LOCALBIN)  ## Download goimports locally if necessary.
 $(GOIMPORTS): $(call gen-tool-version,$(GOIMPORTS),$(GOIMPORTS_VERSION))
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
+
+.PHONY: goimports-reviser
+goimports-reviser: $(GOIMPORTSREVISER) | $(LOCALBIN)  ## Download goimports-reviser locally if necessary.
+$(GOIMPORTSREVISER): $(call gen-tool-version,$(GOIMPORTSREVISER),$(GOIMPORTSREVISER_VERSION))
+	$(call go-install-tool,$(GOIMPORTSREVISER),github.com/incu6us/goimports-reviser/v3,$(GOIMPORTSREVISER_VERSION))
 
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
