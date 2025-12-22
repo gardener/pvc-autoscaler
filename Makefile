@@ -139,7 +139,7 @@ format: $(GOIMPORTS) $(GOIMPORTSREVISER)
 verify: check format test sast
 
 .PHONY: verify-extended
-verify-extended: check-generate check format test-cov test-clean sast-report
+verify-extended: check-generate check format test-cov test-cov-clean sast-report
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
