@@ -103,6 +103,14 @@ test-e2e-local:
 ci-e2e-kind:
 	./hack/ci-e2e-kind.sh
 
+.PHONY: test-cov
+test-cov: promtool helm
+	@./hack/test-cover.sh ./cmd/... ./internal/... ./api/...
+
+.PHONY: test-cov-clean
+test-cov-clean:
+	@./hack/test-cover-clean.sh
+
 .PHONY: check-generate
 check-generate: tools-for-generate
 	@bash $(REPO_ROOT)/hack/check-generate.sh $(REPO_ROOT)
@@ -131,7 +139,7 @@ format: $(GOIMPORTS) $(GOIMPORTSREVISER)
 verify: check format test sast
 
 .PHONY: verify-extended
-verify-extended: check-generate check format sast-report
+verify-extended: check-generate check format test-cov test-clean sast-report
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
@@ -266,6 +274,7 @@ GOSEC ?= $(LOCALBIN)/gosec
 INSTALL_GOSEC ?= $(LOCALHACK)/install-gosec.sh
 GOIMPORTS ?= $(LOCALBIN)/goimports
 GOIMPORTSREVISER ?= $(LOCALBIN)/goimports-reviser
+PROMTOOL ?= $(LOCALBIN)/promtool
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
@@ -281,6 +290,7 @@ KUBECTL_VERSION ?= v1.33.4
 GOSEC_VERSION ?= v2.22.10
 GOIMPORTS_VERSION ?= v0.38.0
 GOIMPORTSREVISER_VERSION ?= v3.11.0
+PROMTOOL_VERSION ?= 3.8.0
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -363,6 +373,11 @@ $(GOIMPORTS): $(call gen-tool-version,$(GOIMPORTS),$(GOIMPORTS_VERSION))
 goimports-reviser: $(GOIMPORTSREVISER) | $(LOCALBIN)  ## Download goimports-reviser locally if necessary.
 $(GOIMPORTSREVISER): $(call gen-tool-version,$(GOIMPORTSREVISER),$(GOIMPORTSREVISER_VERSION))
 	$(call go-install-tool,$(GOIMPORTSREVISER),github.com/incu6us/goimports-reviser/v3,$(GOIMPORTSREVISER_VERSION))
+
+.PHONY: promtool
+promtool: $(PROMTOOL) | $(LOCALBIN)  ## Download promtool locally if necessary.
+$(PROMTOOL): $(call gen-tool-version,$(PROMTOOL),$(PROMTOOL_VERSION))
+	$(call download-tar-tool,promtool,https://github.com/prometheus/prometheus/releases/download/v$(PROMTOOL_VERSION)/prometheus-$(subst v,,$(PROMTOOL_VERSION)).$(GOOS)-$(GOARCH).tar.gz,prometheus-$(subst v,,$(PROMTOOL_VERSION)).$(GOOS)-$(GOARCH)/promtool)
 
 
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
