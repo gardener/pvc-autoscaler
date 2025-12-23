@@ -37,6 +37,26 @@ patches:
 # crd/kustomization.yaml
 - path: manager_webhook_patch.yaml
 
+# [FAKE METRICS] Override metrics queries to use fake metrics for testing with the label type="fake".
+- patch: |-
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --metrics-available-bytes-query=kubelet_volume_stats_available_bytes{type="fake"}
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --metrics-capacity-bytes-query=kubelet_volume_stats_capacity_bytes{type="fake"}
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --metrics-available-inodes-query=kubelet_volume_stats_inodes_free{type="fake"}
+    - op: add
+      path: /spec/template/spec/containers/0/args/-
+      value: --metrics-capacity-inodes-query=kubelet_volume_stats_inodes{type="fake"}
+  target:
+    group: apps
+    version: v1
+    kind: Deployment
+    name: pvc-autoscaler-controller-manager
+
 # [CERTMANAGER] To enable cert-manager, uncomment all sections with 'CERTMANAGER'.
 # Uncomment 'CERTMANAGER' sections in crd/kustomization.yaml to enable the CA injection in the admission webhooks.
 # 'CERTMANAGER' needs to be enabled to use ca injection

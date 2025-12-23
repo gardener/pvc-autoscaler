@@ -16,7 +16,7 @@ spec:
       labels:
         app: minimal-fake-metrics-server
       annotations:
-        fake-metrics.pvc-autoscaler.io/stage: "dummy_stage1"
+        fake-metrics.pvc-autoscaler.io/stage: "pod_bytes_low_1Gi"
     spec:
       initContainers:
       - name: metrics-verifier

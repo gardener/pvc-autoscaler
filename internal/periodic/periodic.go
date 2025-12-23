@@ -334,7 +334,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 			delta = -delta
 		}
 		if delta > common.ScalingResolutionBytes/2 {
-			return false, common.ErrStaleMetrics
+			return false, fmt.Errorf("stale metrics data detected: pvc size=%d bytes, metrics size=%d bytes:%w", statusSize, volInfo.CapacityBytes, common.ErrStaleMetrics)
 		}
 	}
 
