@@ -41,6 +41,7 @@ KINDEST_NODE_IAMGE_TAG		      ?= v1.33.4@sha256:25a6018e48dfcaee478f4a59af81157a
 
 ## Rules
 kind-up kind-down pvc-autoscaler-up pvc-autoscaler-dev: export KUBECONFIG = $(KIND_KUBECONFIG)
+tools-for-generate: controller-gen golangci-lint goimports helm yq
 
 .PHONY: all
 all: build
@@ -93,15 +94,49 @@ test: manifests generate fmt vet envtest  ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 		go test -v -coverprofile cover.out $$(go list ./... | grep -v -E 'test/e2e|test/utils|/cmd')
 
+.PHONY: test-cov
+test-cov: promtool helm
+	@./hack/test-cover.sh ./cmd/... ./internal/... ./api/...
+
+.PHONY: test-cov-clean
+test-cov-clean:
+	@./hack/test-cover-clean.sh
+
 .PHONY: test-e2e  # Run the e2e tests against a minikube k8s instance that is spun up.
 test-e2e:
 	$(MAKE) e2e-env-setup
 	./hack/run-e2e-tests.sh
 	$(MAKE) e2e-env-teardown
 
-.PHONY: lint
-lint: golangci-lint  ## Run golangci-lint linter & yamllint
-	$(GOLANGCI_LINT) run
+.PHONY: check-generate
+check-generate: tools-for-generate
+	@bash $(REPO_ROOT)/hack/check-generate.sh $(REPO_ROOT)
+
+.PHONY: check
+check: tools-for-generate
+	@bash $(REPO_ROOT)/hack/check.sh --golangci-lint-config=./.golangci.yaml ./cmd/... ./internal/... ./test/...
+	@bash $(REPO_ROOT)/hack/check-charts.sh ./pvc-autoscaler/charts
+	@bash $(REPO_ROOT)/hack/check-skaffold-deps.sh
+
+.PHONY: clean
+clean:
+	@$(shell find ./example -type f -name "controller-registration.yaml" -exec rm '{}' \;)
+	@$(shell find ./example -type f -name "extension.yaml" -exec rm '{}' \;)
+	@bash $(REPO_ROOT)/hack/clean.sh ./cmd/... ./internal/... ./test/...
+
+.PHONY: tidy
+tidy:
+	@GO111MODULE=on go mod tidy
+
+.PHONY: format
+format: goimports goimports-reviser
+	@bash $(REPO_ROOT)/hack/format.sh ./cmd ./internal ./test
+
+.PHONY: verify
+verify: check format test sast
+
+.PHONY: verify-extended
+verify-extended: check-generate check format test-cov test-cov-clean sast-report
 
 .PHONY: lint-fix
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
@@ -238,12 +273,15 @@ KUBECTL ?= $(LOCALBIN)/kubectl
 SAST ?= $(LOCALHACK)/sast.sh
 GOSEC ?= $(LOCALBIN)/gosec
 INSTALL_GOSEC ?= $(LOCALHACK)/install-gosec.sh
+GOIMPORTS ?= $(LOCALBIN)/goimports
+GOIMPORTSREVISER ?= $(LOCALBIN)/goimports-reviser
+PROMTOOL ?= $(LOCALBIN)/promtool
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.5.0
 CONTROLLER_TOOLS_VERSION ?= v0.16.4
 ENVTEST_VERSION ?= release-0.19
-GOLANGCI_LINT_VERSION ?= v2.5.0
+GOLANGCI_LINT_VERSION ?= v2.7.2
 MINIKUBE_VERSION ?= v1.34.0
 YQ_VERSION ?= v4.44.3
 HELM_VERSION ?= v3.16.2
@@ -251,6 +289,9 @@ KIND_VERSION ?= v0.30.0
 SKAFFOLD_VERSION ?= v2.16.1
 KUBECTL_VERSION ?= v1.33.4
 GOSEC_VERSION ?= v2.22.10
+GOIMPORTS_VERSION ?= v0.38.0
+GOIMPORTSREVISER_VERSION ?= v3.10.0
+PROMTOOL_VERSION ?= 3.8.0
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -297,7 +338,7 @@ $(ENVTEST): $(call gen-tool-version,$(ENVTEST),$(ENVTEST_VERSION))
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) | $(LOCALBIN)  ## Download golangci-lint locally if necessary.
 $(GOLANGCI_LINT): $(call gen-tool-version,$(GOLANGCI_LINT),$(GOLANGCI_LINT_VERSION))
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+	$(call download-tar-tool,golangci-lint,https://github.com/golangci/golangci-lint/releases/download/$(GOLANGCI_LINT_VERSION)/golangci-lint-$(subst v,,$(GOLANGCI_LINT_VERSION))-$(GOOS)-$(GOARCH).tar.gz,golangci-lint-$(subst v,,$(GOLANGCI_LINT_VERSION))-$(GOOS)-$(GOARCH)/golangci-lint)
 
 .PHONY: yq
 yq: $(YQ) | $(LOCALBIN)  ## Download yq locally if necessary.
@@ -324,6 +365,22 @@ kubectl: $(KUBECTL) | $(LOCALBIN)  ## Download kubectl locally if necessary.
 $(KUBECTL): $(call gen-tool-version,$(KUBECTL),$(KUBECTL_VERSION))
 		$(call download-tool,kubectl,https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/$(GOOS)/$(GOARCH)/kubectl)
 
+.PHONY: goimports
+goimports: $(GOIMPORTS) | $(LOCALBIN)  ## Download goimports locally if necessary.
+$(GOIMPORTS): $(call gen-tool-version,$(GOIMPORTS),$(GOIMPORTS_VERSION))
+	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VERSION))
+
+.PHONY: goimports-reviser
+goimports-reviser: $(GOIMPORTSREVISER) | $(LOCALBIN)  ## Download goimports-reviser locally if necessary.
+$(GOIMPORTSREVISER): $(call gen-tool-version,$(GOIMPORTSREVISER),$(GOIMPORTSREVISER_VERSION))
+	$(call go-install-tool,$(GOIMPORTSREVISER),github.com/incu6us/goimports-reviser/v3,$(GOIMPORTSREVISER_VERSION))
+
+.PHONY: promtool
+promtool: $(PROMTOOL) | $(LOCALBIN)  ## Download promtool locally if necessary.
+$(PROMTOOL): $(call gen-tool-version,$(PROMTOOL),$(PROMTOOL_VERSION))
+	$(call download-tar-tool,promtool,https://github.com/prometheus/prometheus/releases/download/v$(PROMTOOL_VERSION)/prometheus-$(subst v,,$(PROMTOOL_VERSION)).$(GOOS)-$(GOARCH).tar.gz,prometheus-$(subst v,,$(PROMTOOL_VERSION)).$(GOOS)-$(GOARCH)/promtool)
+
+
 # go-install-tool will 'go install' any package with custom target and name of binary, if it doesn't exist
 #
 # $1 - target path with name of binary (ideally with version)
@@ -347,3 +404,21 @@ echo "Downloading $${tool}" ;\
 curl -o $(LOCALBIN)/$(1) -sSfL $(2) ;\
 chmod +x $(LOCALBIN)/$(1)
 endef
+
+# download-tar-tool will download and extract a tar archive, then move the binary to LOCALBIN.
+#
+# $1 - name of the tool binary
+# $2 - HTTP URL to download the tar archive from
+# $3 - path inside the tar archive to the binary (e.g., "linux-amd64/helm" or just "binary-name")
+define download-tar-tool
+@set -e; \
+tool=$(1) ;\
+archive_path=$(3) ;\
+curl -sSfL $(2) | tar -xzf - -C $(LOCALBIN) --strip-components=0 "$${archive_path}" ;\
+if [ "$${archive_path}" != "$(1)" ]; then \
+  mv "$(LOCALBIN)/$${archive_path}" "$(LOCALBIN)/$(1)" ;\
+fi ;\
+chmod +x $(LOCALBIN)/$(1)
+endef
+
+
