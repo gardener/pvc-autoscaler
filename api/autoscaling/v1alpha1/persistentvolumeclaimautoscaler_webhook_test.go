@@ -7,7 +7,7 @@ package v1alpha1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,7 +26,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 				Spec: PersistentVolumeClaimAutoscalerSpec{
 					// No increaseBy and threshold specified
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						Name: "pvc-1",
 					},
 				},
@@ -51,7 +51,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					// MaxCapacity is not set
 					IncreaseBy: common.DefaultIncreaseByValue,
 					Threshold:  common.DefaultThresholdValue,
-					ScaleTargetRef: corev1.LocalObjectReference{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						Name: "pvc-2",
 					},
 				},
@@ -71,7 +71,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  "bad-increase-by",
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						Name: "pvc-3",
 					},
 				},
@@ -89,7 +89,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  common.DefaultIncreaseByValue,
 					Threshold:   "bad-threshold",
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						Name: "pvc-4",
 					},
 				},
@@ -125,7 +125,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  common.DefaultIncreaseByValue,
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						Name: "pvc-6",
 					},
 				},
@@ -145,7 +145,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  "0%",
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						Name: "pvc-7",
 					},
 				},
@@ -162,7 +162,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  common.DefaultIncreaseByValue,
 					Threshold:   "0%",
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						Name: "pvc-8",
 					},
 				},
@@ -181,7 +181,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  common.DefaultIncreaseByValue,
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						Name: "pvc-9",
 					},
 				},

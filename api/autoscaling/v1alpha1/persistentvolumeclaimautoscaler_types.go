@@ -7,7 +7,7 @@ package v1alpha1
 import (
 	"context"
 
-	corev1 "k8s.io/api/core/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,9 +32,9 @@ type PersistentVolumeClaimAutoscalerSpec struct {
 	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
 	MaxCapacity resource.Quantity `json:"maxCapacity,omitempty"`
 
-	// ScaleTargetRef specifies the reference to the PVC which will be
+	// TargetRef specifies the reference to the PVC which will be
 	// managed by the controller.
-	ScaleTargetRef corev1.LocalObjectReference `json:"scaleTargetRef,omitempty"`
+	TargetRef autoscalingv1.CrossVersionObjectReference `json:"targetRef,omitempty"`
 }
 
 // PersistentVolumeClaimAutoscalerStatus defines the observed state of
@@ -77,7 +77,7 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pvca
-// +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.scaleTargetRef.name`
+// +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetRef.name`
 // +kubebuilder:printcolumn:name="Increase By",type=string,JSONPath=`.spec.increaseBy`
 // +kubebuilder:printcolumn:name="Threshold",type=string,JSONPath=`.spec.threshold`
 // +kubebuilder:printcolumn:name="Max Capacity",type=string,JSONPath=`.spec.maxCapacity`

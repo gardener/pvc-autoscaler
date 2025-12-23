@@ -107,8 +107,8 @@ func validateResourceSpec(obj runtime.Object) error {
 		allErrs = append(allErrs, e)
 	}
 
-	if pvca.Spec.ScaleTargetRef.Name == "" {
-		e := field.Invalid(field.NewPath("spec.scaleTargetRef.name"), "", "no target pvc specified")
+	if pvca.Spec.TargetRef.Name == "" {
+		e := field.Invalid(field.NewPath("spec.targetRef.name"), "", "no target pvc specified")
 		allErrs = append(allErrs, e)
 	}
 
