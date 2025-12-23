@@ -7,5 +7,7 @@ spec:
   increaseBy: "10%"
   threshold: "20%"
   maxCapacity: 3Gi
-  scaleTargetRef:
+  targetRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
     name: test-pvc-2
