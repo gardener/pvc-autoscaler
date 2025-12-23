@@ -11,6 +11,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -123,12 +124,18 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-is-resizing",
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-is-resizing",
-				"pvc-is-resizing",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -177,12 +184,18 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-fs-resize-is-pending",
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-fs-resize-is-pending",
-				"pvc-fs-resize-is-pending",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -231,12 +244,18 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-vol-is-being-modified",
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-vol-is-being-modified",
-				"pvc-vol-is-being-modified",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -275,12 +294,18 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-vol-is-still-being-resized",
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-vol-is-still-being-resized",
-				"pvc-vol-is-still-being-resized",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -326,12 +351,18 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-should-resize",
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-should-resize",
-				"pvc-should-resize",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -375,12 +406,18 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-max-capacity-reached",
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-max-capacity-reached",
-				"pvc-max-capacity-reached",
+				targetRef,
 				"3Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())

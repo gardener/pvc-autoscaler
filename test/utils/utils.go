@@ -84,7 +84,7 @@ func CreatePVC(ctx context.Context,
 func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 	k8sClient client.Client,
 	name string,
-	targetRef string,
+	targetRef autoscalingv1.CrossVersionObjectReference,
 	maxCapacity string) (*v1alpha1.PersistentVolumeClaimAutoscaler, error) {
 	obj := &v1alpha1.PersistentVolumeClaimAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
@@ -95,9 +95,7 @@ func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 			IncreaseBy:  common.DefaultIncreaseByValue,
 			Threshold:   common.DefaultThresholdValue,
 			MaxCapacity: resource.MustParse(maxCapacity),
-			TargetRef: autoscalingv1.CrossVersionObjectReference{
-				Name: targetRef,
-			},
+			TargetRef:   targetRef,
 		},
 	}
 

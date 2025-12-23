@@ -27,7 +27,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					// No increaseBy and threshold specified
 					MaxCapacity: resource.MustParse("5Gi"),
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						Name: "pvc-1",
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-1",
 					},
 				},
 			}
@@ -52,7 +54,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy: common.DefaultIncreaseByValue,
 					Threshold:  common.DefaultThresholdValue,
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						Name: "pvc-2",
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-2",
 					},
 				},
 			}
@@ -72,7 +76,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						Name: "pvc-3",
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-3",
 					},
 				},
 			}
@@ -90,7 +96,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Threshold:   "bad-threshold",
 					MaxCapacity: resource.MustParse("5Gi"),
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						Name: "pvc-4",
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-4",
 					},
 				},
 			}
@@ -126,7 +134,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						Name: "pvc-6",
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-6",
 					},
 				},
 			}
@@ -146,7 +156,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						Name: "pvc-7",
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-7",
 					},
 				},
 			}
@@ -163,7 +175,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Threshold:   "0%",
 					MaxCapacity: resource.MustParse("5Gi"),
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						Name: "pvc-8",
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-8",
 					},
 				},
 			}
@@ -182,7 +196,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						Name: "pvc-9",
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-9",
 					},
 				},
 			}

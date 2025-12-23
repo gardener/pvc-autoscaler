@@ -112,5 +112,25 @@ func validateResourceSpec(obj runtime.Object) error {
 		allErrs = append(allErrs, e)
 	}
 
+	if pvca.Spec.TargetRef.Kind == "" {
+		e := field.Invalid(field.NewPath("spec.targetRef.kind"), "", "no target kind is specified")
+		allErrs = append(allErrs, e)
+	}
+
+	if pvca.Spec.TargetRef.Kind != "PersistentVolumeClaim" {
+		e := field.Invalid(field.NewPath("spec.targetRef.kind"), pvca.Spec.TargetRef.Kind, "only PersistentVolumeClaim kind is supported")
+		allErrs = append(allErrs, e)
+	}
+
+	if pvca.Spec.TargetRef.APIVersion == "" {
+		e := field.Invalid(field.NewPath("spec.targetRef.apiVersion"), "", "no target apiVersion is specified")
+		allErrs = append(allErrs, e)
+	}
+
+	if pvca.Spec.TargetRef.APIVersion != "v1" {
+		e := field.Invalid(field.NewPath("spec.targetRef.apiVersion"), pvca.Spec.TargetRef.APIVersion, "only v1 apiVersion is supported")
+		allErrs = append(allErrs, e)
+	}
+
 	return allErrs.ToAggregate()
 }
