@@ -129,7 +129,7 @@ tidy:
 	@GO111MODULE=on go mod tidy
 
 .PHONY: format
-format: $(GOIMPORTS) $(GOIMPORTSREVISER)
+format: goimports goimports-reviser
 	@bash $(REPO_ROOT)/hack/format.sh ./cmd ./internal ./test
 
 .PHONY: verify
