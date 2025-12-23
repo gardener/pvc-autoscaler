@@ -21,5 +21,5 @@ trap "
   ( make kind-down )
 " EXIT
 
-make pvc-autoscaler-up-e2e
+make pvc-autoscaler-up
 make test-e2e-local

@@ -116,10 +116,6 @@ kind-down: kind
 pvc-autoscaler-up: skaffold kustomize kubectl
 	$(SKAFFOLD) run 
 
-.PHONY: pvc-autoscaler-up-e2e
-pvc-autoscaler-up-e2e: skaffold kustomize kubectl
-	$(SKAFFOLD) run -p e2e
-
 .PHONY: pvc-autoscaler-dev
 pvc-autoscaler-dev: skaffold kustomize kubectl
 	$(SKAFFOLD) dev
