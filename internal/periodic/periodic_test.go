@@ -13,6 +13,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -116,11 +117,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-1",
+			}
+
 			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-1",
-				"pvc-1",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -141,11 +148,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-2",
+			}
+
 			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-2",
-				"pvc-2",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -175,11 +188,17 @@ var _ = Describe("Periodic Runner", func() {
 
 	Context("shouldReconcilePVC predicate", func() {
 		It("should return error - PVC is not found", func() {
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-missing-pvc",
+			}
+
 			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-missing-pvc",
-				"pvc-missing-pvc",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -200,11 +219,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-without-volinfo",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-without-volinfo",
-				"pvc-without-volinfo",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -250,11 +275,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
 			// The PVC Autoscaler targeting our test PVC
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-without-storageclass",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-without-storageclass",
-				"pvc-without-storageclass",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -311,11 +342,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
 			// The PVC Autoscaler targeting our test PVC
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-sc-no-expansion",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-sc-no-expansion",
-				"pvc-sc-no-expansion",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -359,11 +396,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
 			// The PVC Autoscaler targeting our test PVC
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-block-mode",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-block-mode",
-				"pvc-block-mode",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -400,11 +443,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
 			// The PVC Autoscaler targeting our test PVC
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-lost-claim",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-lost-claim",
-				"pvc-lost-claim",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -433,11 +482,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(pvc).NotTo(BeNil())
 
 			// The PVC Autoscaler targeting our test PVC
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-free-space-threshold-reached",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-free-space-threshold-reached",
-				"pvc-free-space-threshold-reached",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -475,11 +530,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(pvc).NotTo(BeNil())
 
 			// The PVC Autoscaler targeting our test PVC
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-stale-metrics",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-stale-metrics",
-				"pvc-stale-metrics",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -508,11 +569,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(pvc).NotTo(BeNil())
 
 			// The PVC Autoscaler targeting our test PVC
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-free-inodes-threshold-reached",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-free-inodes-threshold-reached",
-				"pvc-free-inodes-threshold-reached",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -550,11 +617,17 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(pvc).NotTo(BeNil())
 
 			// The PVC Autoscaler targeting our test PVC
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-plenty-of-space-and-inodes",
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-plenty-of-space-and-inodes",
-				"pvc-plenty-of-space-and-inodes",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -589,12 +662,18 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-no-pvc-for-it",
+			}
+
 			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-no-pvc-for-it",
-				"pvc-no-pvc-for-it",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -652,12 +731,18 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "sample-pvc-2",
+			}
+
 			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"sample-pvca-2",
-				"sample-pvc-2",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -683,12 +768,18 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "sample-pvc-3",
+			}
+
 			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"sample-pvca-3",
-				"sample-pvc-3",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -747,12 +838,18 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "sample-pvc-4",
+			}
+
 			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"sample-pvca-4",
-				"sample-pvc-4",
+				targetRef,
 				"5Gi",
 			)
 			Expect(err).NotTo(HaveOccurred())

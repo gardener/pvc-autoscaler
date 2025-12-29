@@ -41,7 +41,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.scaleTargetRef.name
+    - jsonPath: .spec.targetRef.name
       name: Target
       type: string
     - jsonPath: .spec.increaseBy
@@ -97,9 +97,9 @@ spec:
                   [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
                 pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                 x-kubernetes-int-or-string: true
-              scaleTargetRef:
+              targetRef:
                 description: |-
-                  ScaleTargetRef specifies the reference to the PVC which will be
+                  TargetRef specifies the reference to the PVC which will be
                   managed by the controller.
                 properties:
                   name:

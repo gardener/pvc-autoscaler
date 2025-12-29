@@ -56,7 +56,9 @@ metadata:
     app: dummy-app
     pvc: dummy-storage
 spec:
-  scaleTargetRef:
+  targetRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
     name: vali-vali-0
   threshold: "20%"      # Trigger scaling when free space < 20%
   increaseBy: "10%"     # Increase capacity by 10%
