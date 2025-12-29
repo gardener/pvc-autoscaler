@@ -3,8 +3,9 @@ kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
   name: test-pvc-1
+  namespace: pvc-autoscaler-system
 spec:
-  storageClassName: openebs-lvm
+  storageClassName: standard
   volumeMode: Filesystem
   accessModes:
     - ReadWriteOnce
