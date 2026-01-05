@@ -6,5 +6,5 @@ resources:
 
 images:
 - name: controller
-  newName: pvc-autoscaler-local
+  newName: local-skaffold/pvc-autoscaler
   newTag: latest
