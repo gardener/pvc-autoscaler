@@ -97,7 +97,7 @@ var _ = Describe("Fake", func() {
 			// Start the fake source and give it some time to
 			// consume it all
 			go func() {
-				ch := time.After(time.Second)
+				ch := time.After(2 * time.Second)
 				<-ch
 				cancelFunc()
 			}()
