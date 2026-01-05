@@ -97,6 +97,8 @@ var _ = Describe("Fake", func() {
 			// Start the fake source and give it some time to
 			// consume it all
 			go func() {
+				// Every 10 milliseconds 1 percent is consumed and we expect after 1 second 100 percent to be consumed.
+				// But there might be some delays so we might need a bit more time.
 				ch := time.After(2 * time.Second)
 				<-ch
 				cancelFunc()
