@@ -5,6 +5,7 @@ on:
 
 jobs:
   build:
+    if: ${{ github.repository == 'gardener/pvc-autoscaler' }}
     uses: ./.github/workflows/build.yaml
     with:
       mode: snapshot
@@ -15,6 +16,7 @@ jobs:
       id-token: write
 
   component-descriptor:
+    if: ${{ github.repository == 'gardener/pvc-autoscaler' }}
     uses: gardener/cc-utils/.github/workflows/post-build.yaml@master
     needs:
       - build
