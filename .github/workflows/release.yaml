@@ -10,6 +10,7 @@ on:
 
 jobs:
   build:
+    if: ${{ github.repository == 'gardener/pvc-autoscaler' }}
     uses: ./.github/workflows/build.yaml
     permissions:
       contents: write
@@ -19,6 +20,7 @@ jobs:
       mode: release
 
   release-to-github-and-bump:
+    if: ${{ github.repository == 'gardener/pvc-autoscaler' }}
     uses: gardener/cc-utils/.github/workflows/release.yaml@master
     needs:
       - build
