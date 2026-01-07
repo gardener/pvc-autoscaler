@@ -88,6 +88,8 @@ setup_kind_with_lpp_resize_support() {
   kubectl delete --ignore-not-found=true storageclass local-path
 }
 
+parse_flags "$@"
+
 kind create cluster --name pvc-autoscaler --image "kindest/node:${KINDEST_NODE_IMAGE_TAG}"
 setup_kind_sc_default_volume_type
 setup_kind_with_lpp_resize_support
