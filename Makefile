@@ -121,15 +121,15 @@ kind-down: kind
 	$(KIND) delete cluster --name pvc-autoscaler
 
 .PHONY: pvc-autoscaler-up
-pvc-autoscaler-up: skaffold kustomize kubectl helm
+pvc-autoscaler-up: skaffold kustomize kubectl helm yq
 	$(SKAFFOLD) run 
 
 .PHONY: pvc-autoscaler-dev
-pvc-autoscaler-dev: skaffold kustomize kubectl helm
+pvc-autoscaler-dev: skaffold kustomize kubectl helm yq
 	$(SKAFFOLD) dev
 
 .PHONY: pvc-autoscaler-down
-pvc-autoscaler-down: skaffold kustomize kubectl helm
+pvc-autoscaler-down: skaffold kustomize kubectl helm yq
 	$(SKAFFOLD) delete
 
 .PHONY: minikube-start
