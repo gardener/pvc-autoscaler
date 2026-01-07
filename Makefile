@@ -41,7 +41,7 @@ KINDEST_NODE_IAMGE_TAG		      ?= v1.33.4@sha256:25a6018e48dfcaee478f4a59af81157a
 
 ## Rules
 kind-up kind-down pvc-autoscaler-up pvc-autoscaler-dev test-e2e-local ci-e2e-kind: export KUBECONFIG = $(KIND_KUBECONFIG)
-ci-e2e-kind: export ARTIFACTS=/tmp/artifacts
+ci-e2e-kind: export ARTIFACTS ?= /tmp/artifacts
 
 .PHONY: all
 all: build
