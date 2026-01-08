@@ -176,7 +176,7 @@ export_artifacts() {
   echo "> Exporting events of kind cluster '$cluster_name' > '$ARTIFACTS/$cluster_name'"
   export_events_for_cluster "$ARTIFACTS/$cluster_name"
 
-  export_resource_yamls_for pvcas
+  export_resource_yamls_for pods pvcas
 }
 
 export_resource_yamls_for() {
