@@ -52,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          make lint test
+          make verify
 
   oci-images:
     name: Build OCI-Images
