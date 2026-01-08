@@ -128,7 +128,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	pvcObjKey := client.ObjectKey{Namespace: pvca.Namespace, Name: pvca.Spec.ScaleTargetRef.Name}
+	pvcObjKey := client.ObjectKey{Namespace: pvca.Namespace, Name: pvca.Spec.TargetRef.Name}
 	pvcObj := &corev1.PersistentVolumeClaim{}
 	if err := r.client.Get(ctx, pvcObjKey, pvcObj); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
