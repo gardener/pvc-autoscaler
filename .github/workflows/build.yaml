@@ -47,12 +47,34 @@ jobs:
       - uses: gardener/cc-utils/.github/actions/setup-git-identity@master
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version: '1.25'
       - name: verify
         shell: bash
         run: |
           set -euo pipefail
-          make verify
+          mkdir -p /tmp/blobs.d
+          if [ '${{ inputs.mode }}' == 'release' ]; then
+            make verify-extended |& tee /tmp/blobs.d/tests-log.txt
+            tar czf /tmp/blobs.d/tests-log.tar.gz -C /tmp/blobs.d tests-log.txt
+          else
+            # tests are run using prow for non-release-runs, so early-exit
+            echo "dummy" > /tmp/blobs.d/tests-log.tar.gz
+            exit 0
+          fi
+      - name: add-tests-report-to-component-descriptor
+        uses: gardener/cc-utils/.github/actions/export-ocm-fragments@master
+        with:
+          blobs-directory: /tmp/blobs.d
+          ocm-resources: |
+            name: test-results
+            relation: local
+            access:
+              type: localBlob
+              localReference: tests-log.tar.gz
+            labels:
+              - name: gardener.cloud/purposes
+                value:
+                  - test
 
   oci-images:
     name: Build OCI-Images
