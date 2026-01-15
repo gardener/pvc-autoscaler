@@ -7,7 +7,7 @@ package v1alpha1
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	corev1 "k8s.io/api/core/v1"
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,8 +26,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 				Spec: PersistentVolumeClaimAutoscalerSpec{
 					// No increaseBy and threshold specified
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
-						Name: "pvc-1",
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-1",
 					},
 				},
 			}
@@ -51,8 +53,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					// MaxCapacity is not set
 					IncreaseBy: common.DefaultIncreaseByValue,
 					Threshold:  common.DefaultThresholdValue,
-					ScaleTargetRef: corev1.LocalObjectReference{
-						Name: "pvc-2",
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-2",
 					},
 				},
 			}
@@ -71,8 +75,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  "bad-increase-by",
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
-						Name: "pvc-3",
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-3",
 					},
 				},
 			}
@@ -89,8 +95,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  common.DefaultIncreaseByValue,
 					Threshold:   "bad-threshold",
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
-						Name: "pvc-4",
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-4",
 					},
 				},
 			}
@@ -125,8 +133,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  common.DefaultIncreaseByValue,
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
-						Name: "pvc-6",
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-6",
 					},
 				},
 			}
@@ -145,8 +155,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  "0%",
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
-						Name: "pvc-7",
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-7",
 					},
 				},
 			}
@@ -162,8 +174,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  common.DefaultIncreaseByValue,
 					Threshold:   "0%",
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
-						Name: "pvc-8",
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-8",
 					},
 				},
 			}
@@ -181,8 +195,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					IncreaseBy:  common.DefaultIncreaseByValue,
 					Threshold:   common.DefaultThresholdValue,
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleTargetRef: corev1.LocalObjectReference{
-						Name: "pvc-9",
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-9",
 					},
 				},
 			}
@@ -194,6 +210,153 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 
 			pvca.Spec.Threshold = "invalid-threshold"
 			Expect(k8sClient.Update(ctx, pvca)).NotTo(Succeed())
+		})
+
+		It("Should deny if targetRef kind is empty", func() {
+			obj := &PersistentVolumeClaimAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pvca-10",
+					Namespace: "default",
+				},
+				Spec: PersistentVolumeClaimAutoscalerSpec{
+					IncreaseBy:  common.DefaultIncreaseByValue,
+					Threshold:   common.DefaultThresholdValue,
+					MaxCapacity: resource.MustParse("5Gi"),
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "",
+						Name:       "pvc-10",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
+		})
+
+		It("Should deny if targetRef kind contains invalid characters", func() {
+			obj := &PersistentVolumeClaimAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pvca-11",
+					Namespace: "default",
+				},
+				Spec: PersistentVolumeClaimAutoscalerSpec{
+					IncreaseBy:  common.DefaultIncreaseByValue,
+					Threshold:   common.DefaultThresholdValue,
+					MaxCapacity: resource.MustParse("5Gi"),
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "Invalid/Kind",
+						Name:       "pvc-11",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
+		})
+
+		It("Should deny if targetRef kind is not PersistentVolumeClaim", func() {
+			obj := &PersistentVolumeClaimAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pvca-12",
+					Namespace: "default",
+				},
+				Spec: PersistentVolumeClaimAutoscalerSpec{
+					IncreaseBy:  common.DefaultIncreaseByValue,
+					Threshold:   common.DefaultThresholdValue,
+					MaxCapacity: resource.MustParse("5Gi"),
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "StatefulSet",
+						Name:       "pvc-12",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
+		})
+
+		It("Should deny if targetRef name is empty", func() {
+			obj := &PersistentVolumeClaimAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pvca-13",
+					Namespace: "default",
+				},
+				Spec: PersistentVolumeClaimAutoscalerSpec{
+					IncreaseBy:  common.DefaultIncreaseByValue,
+					Threshold:   common.DefaultThresholdValue,
+					MaxCapacity: resource.MustParse("5Gi"),
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
+		})
+
+		It("Should deny if targetRef name contains invalid characters", func() {
+			obj := &PersistentVolumeClaimAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pvca-14",
+					Namespace: "default",
+				},
+				Spec: PersistentVolumeClaimAutoscalerSpec{
+					IncreaseBy:  common.DefaultIncreaseByValue,
+					Threshold:   common.DefaultThresholdValue,
+					MaxCapacity: resource.MustParse("5Gi"),
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc/invalid/name",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
+		})
+
+		It("Should deny if targetRef apiVersion is empty", func() {
+			obj := &PersistentVolumeClaimAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pvca-15",
+					Namespace: "default",
+				},
+				Spec: PersistentVolumeClaimAutoscalerSpec{
+					IncreaseBy:  common.DefaultIncreaseByValue,
+					Threshold:   common.DefaultThresholdValue,
+					MaxCapacity: resource.MustParse("5Gi"),
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-15",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
+		})
+
+		It("Should deny if targetRef apiVersion is not v1", func() {
+			obj := &PersistentVolumeClaimAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pvca-16",
+					Namespace: "default",
+				},
+				Spec: PersistentVolumeClaimAutoscalerSpec{
+					IncreaseBy:  common.DefaultIncreaseByValue,
+					Threshold:   common.DefaultThresholdValue,
+					MaxCapacity: resource.MustParse("5Gi"),
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v2",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-16",
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 	})
 })

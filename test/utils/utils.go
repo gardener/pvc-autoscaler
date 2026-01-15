@@ -7,6 +7,7 @@ package utils
 import (
 	"context"
 
+	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -83,7 +84,7 @@ func CreatePVC(ctx context.Context,
 func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 	k8sClient client.Client,
 	name string,
-	scaleTargetRef string,
+	targetRef autoscalingv1.CrossVersionObjectReference,
 	maxCapacity string) (*v1alpha1.PersistentVolumeClaimAutoscaler, error) {
 	obj := &v1alpha1.PersistentVolumeClaimAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
@@ -94,9 +95,7 @@ func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 			IncreaseBy:  common.DefaultIncreaseByValue,
 			Threshold:   common.DefaultThresholdValue,
 			MaxCapacity: resource.MustParse(maxCapacity),
-			ScaleTargetRef: corev1.LocalObjectReference{
-				Name: scaleTargetRef,
-			},
+			TargetRef:   targetRef,
 		},
 	}
 
