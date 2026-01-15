@@ -111,7 +111,8 @@ func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, kl
 type PersistentVolumeClaimAutoscalerList struct {
 	metav1.TypeMeta `json:",inline"` // nolint:revive
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []PersistentVolumeClaimAutoscaler `json:"items"`
+
+	Items []PersistentVolumeClaimAutoscaler `json:"items"`
 }
 
 func init() {
