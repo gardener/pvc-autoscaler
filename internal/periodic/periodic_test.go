@@ -192,7 +192,7 @@ var _ = Describe("Periodic Runner", func() {
 			// No metrics at all
 			ok, err := runner.shouldReconcilePVC(parentCtx, obj, nil)
 			Expect(ok).To(BeFalse())
-			Expect(err).NotTo(BeNil())
+			Expect(err).To(HaveOccurred())
 		})
 
 		It("should return common.ErrNoMetrics", func() {
@@ -424,7 +424,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeFalse())
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		It("should reconcile - free space threshold reached", func() {
@@ -462,7 +462,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeTrue())
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			event := <-eventRecorder.Events
 			wantEvent := `Warning FreeSpaceThresholdReached free space (9.00%) is less than the configured threshold (10.00%)`
@@ -537,7 +537,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeTrue())
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 
 			event := <-eventRecorder.Events
 			wantEvent := `Warning FreeInodesThresholdReached free inodes (9.00%) are less than the configured threshold (10.00%)`
@@ -574,7 +574,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeFalse())
-			Expect(err).To(BeNil())
+			Expect(err).ToNot(HaveOccurred())
 		})
 	})
 
