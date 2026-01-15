@@ -17,9 +17,9 @@ COVERPROFILE_HTML="$REPO_ROOT/test.coverage.html"
 
 trap "rm -rf \"$COVERPROFILE_TMP\"" EXIT ERR INT TERM
 
-GO111MODULE=on GOTOOLCHAIN=go1.25.0+auto go test -cover -coverprofile "$COVERPROFILE_TMP" -race -timeout=2m $@ | grep -v 'no test files'
+GO111MODULE=on go test -cover -coverprofile "$COVERPROFILE_TMP" -race -timeout=2m $@ | grep -v 'no test files'
 
 cat "$COVERPROFILE_TMP" | grep -vE "\.pb\.go|zz_generated" > "$COVERPROFILE"
-GOTOOLCHAIN=go1.25.0+auto go tool cover -html="$COVERPROFILE" -o="$COVERPROFILE_HTML"
+go tool cover -html="$COVERPROFILE" -o="$COVERPROFILE_HTML"
 
-GOTOOLCHAIN=go1.25.0+auto go tool cover -func="$COVERPROFILE"
+go tool cover -func="$COVERPROFILE"
