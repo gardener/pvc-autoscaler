@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/gardener/pvc-autoscaler/internal/common"
-	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks
@@ -40,14 +39,16 @@ func (r *PersistentVolumeClaimAutoscaler) Default(ctx context.Context, obj runti
 		return fmt.Errorf("expected PersistentVolumeClaimAutoscaler resource, but got %T", obj)
 	}
 
-	if pvca.Spec.IncreaseBy == "" {
-		pvca.Spec.IncreaseBy = common.DefaultIncreaseByValue
+	for i := range pvca.Spec.VolumePolicies {
+		if pvca.Spec.VolumePolicies[i].ScaleUp.UtilizationThresholdPercent == nil {
+			defaultThreshold := common.DefaultThresholdValue
+			pvca.Spec.VolumePolicies[i].ScaleUp.UtilizationThresholdPercent = &defaultThreshold
+		}
+		if pvca.Spec.VolumePolicies[i].ScaleUp.StepPercent == nil {
+			defaultStep := common.DefaultIncreaseByValue
+			pvca.Spec.VolumePolicies[i].ScaleUp.StepPercent = &defaultStep
+		}
 	}
-
-	if pvca.Spec.Threshold == "" {
-		pvca.Spec.Threshold = common.DefaultThresholdValue
-	}
-
 	return nil
 }
 
@@ -82,30 +83,52 @@ func validateResourceSpec(obj runtime.Object) error {
 	}
 
 	allErrs := make(field.ErrorList, 0)
-	increaseBy, err := utils.ParsePercentage(pvca.Spec.IncreaseBy)
-	if err != nil {
-		e := field.Invalid(field.NewPath("spec.increaseBy"), pvca.Spec.IncreaseBy, err.Error())
+
+	if len(pvca.Spec.VolumePolicies) == 0 {
+		e := field.Required(field.NewPath("spec.volumePolicies"), "at least one volume policy must be specified")
 		allErrs = append(allErrs, e)
 	}
 
-	if err == nil && increaseBy == 0.0 {
-		e := field.Invalid(field.NewPath("spec.increaseBy"), pvca.Spec.IncreaseBy, common.ErrZeroPercentage.Error())
+	if len(pvca.Spec.VolumePolicies) > 1 {
+		e := field.Invalid(field.NewPath("spec.volumePolicies"), pvca.Spec.VolumePolicies, "only one volume policy is supported currently")
 		allErrs = append(allErrs, e)
 	}
 
-	threshold, err := utils.ParsePercentage(pvca.Spec.Threshold)
-	if err != nil {
-		e := field.Invalid(field.NewPath("spec.threshold"), pvca.Spec.Threshold, err.Error())
-		allErrs = append(allErrs, e)
-	}
-	if err == nil && threshold == 0.0 {
-		e := field.Invalid(field.NewPath("spec.threshold"), pvca.Spec.Threshold, common.ErrZeroPercentage.Error())
-		allErrs = append(allErrs, e)
-	}
+	for i, policy := range pvca.Spec.VolumePolicies {
+		policyPath := field.NewPath("spec.volumePolicies").Index(i)
+		if policy.MaxCapacity.IsZero() {
+			e := field.Invalid(policyPath.Child("maxCapacity"), policy.MaxCapacity, "max capacity must be specified and greater than zero")
+			allErrs = append(allErrs, e)
+		}
 
-	if pvca.Spec.MaxCapacity.IsZero() {
-		e := field.Invalid(field.NewPath("spec.maxCapacity"), pvca.Spec.MaxCapacity, "zero max capacity")
-		allErrs = append(allErrs, e)
+		if !policy.MinCapacity.IsZero() && !policy.MaxCapacity.IsZero() {
+			if policy.MinCapacity.Cmp(policy.MaxCapacity) > 0 {
+				e := field.Invalid(policyPath.Child("minCapacity"), policy.MinCapacity, "min capacity must be less than or equal to max capacity")
+				allErrs = append(allErrs, e)
+			}
+		}
+
+		scaleUpPath := policyPath.Child("scaleUp")
+
+		if *policy.ScaleUp.UtilizationThresholdPercent <= 0 || *policy.ScaleUp.UtilizationThresholdPercent > 100 {
+			e := field.Invalid(scaleUpPath.Child("utilizationThresholdPercent"), *policy.ScaleUp.UtilizationThresholdPercent, "utilization threshold percent must be between 1 and 100")
+			allErrs = append(allErrs, e)
+		}
+
+		if *policy.ScaleUp.StepPercent <= 0 || *policy.ScaleUp.StepPercent > 100 {
+			e := field.Invalid(scaleUpPath.Child("stepPercent"), *policy.ScaleUp.StepPercent, "step percent must be between 1 and 100")
+			allErrs = append(allErrs, e)
+		}
+
+		if policy.ScaleUp.MinStepAbsolute.IsZero() {
+			e := field.Invalid(scaleUpPath.Child("minStepAbsolute"), policy.ScaleUp.MinStepAbsolute, "min step absolute must be specified and greater than zero")
+			allErrs = append(allErrs, e)
+		}
+
+		if policy.ScaleUp.CooldownDuration.Duration <= 0 {
+			e := field.Invalid(scaleUpPath.Child("cooldownDuration"), policy.ScaleUp.CooldownDuration, "cooldown duration must be greater than 0")
+			allErrs = append(allErrs, e)
+		}
 	}
 
 	if len(pvca.Spec.TargetRef.Kind) == 0 {

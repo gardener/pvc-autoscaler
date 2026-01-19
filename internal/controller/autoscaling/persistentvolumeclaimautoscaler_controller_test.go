@@ -17,6 +17,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -130,13 +131,26 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 				Name:       "pvc-is-resizing",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-is-resizing",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -190,13 +204,26 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 				Name:       "pvc-fs-resize-is-pending",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-fs-resize-is-pending",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -250,13 +277,26 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 				Name:       "pvc-vol-is-being-modified",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-vol-is-being-modified",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -300,13 +340,26 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 				Name:       "pvc-vol-is-still-being-resized",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-vol-is-still-being-resized",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -357,13 +410,26 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 				Name:       "pvc-should-resize",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-should-resize",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -412,13 +478,26 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 				Name:       "pvc-max-capacity-reached",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("3Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler resource targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				ctx,
 				k8sClient,
 				"pvca-max-capacity-reached",
 				targetRef,
-				"3Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())

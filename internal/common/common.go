@@ -37,11 +37,11 @@ const (
 
 	// DefaultThresholdValue is the default threshold value, if not
 	// specified for a PVC object.
-	DefaultThresholdValue = "10%"
+	DefaultThresholdValue = 90
 
 	// DefaultIncreaseByValue is the default increase-by value, if not
 	// specified for a PVC object.
-	DefaultIncreaseByValue = "10%"
+	DefaultIncreaseByValue = 10
 
 	// ScalingResolutionBytes is the smallest possible step. Any storage
 	// request set by the autoscaler is guaranteed to be divisible by that

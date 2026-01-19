@@ -25,6 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/fake"
@@ -123,12 +124,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-1",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-1",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).NotTo(BeNil())
@@ -154,12 +168,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-2",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-2",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).NotTo(BeNil())
@@ -194,12 +221,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-missing-pvc",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			obj, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-missing-pvc",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).NotTo(BeNil())
@@ -225,12 +265,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-without-volinfo",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-without-volinfo",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -281,12 +334,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-without-storageclass",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-without-storageclass",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -348,12 +414,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-sc-no-expansion",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-sc-no-expansion",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -402,12 +481,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-block-mode",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-block-mode",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -449,12 +541,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-lost-claim",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-lost-claim",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -488,12 +593,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-free-space-threshold-reached",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-free-space-threshold-reached",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -536,12 +654,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-stale-metrics",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-stale-metrics",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -575,12 +706,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-free-inodes-threshold-reached",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-free-inodes-threshold-reached",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -623,12 +767,25 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-plenty-of-space-and-inodes",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-plenty-of-space-and-inodes",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -668,13 +825,26 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "pvc-no-pvc-for-it",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"pvca-no-pvc-for-it",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -737,13 +907,26 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "sample-pvc-2",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"sample-pvca-2",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -774,13 +957,26 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "sample-pvc-3",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"sample-pvca-3",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
@@ -844,13 +1040,26 @@ var _ = Describe("Periodic Runner", func() {
 				Name:       "sample-pvc-4",
 			}
 
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MinCapacity: resource.MustParse("1Gi"),
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: v1alpha1.ScaleUpPolicy{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
+						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+						MinStepAbsolute:             resource.MustParse("1Gi"),
+						CooldownDuration:            metav1.Duration{Duration: 3600},
+					},
+				},
+			}
+
 			// The PVC Autoscaler targeting our test PVC
 			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 				parentCtx,
 				k8sClient,
 				"sample-pvca-4",
 				targetRef,
-				"5Gi",
+				volumePolicies,
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())

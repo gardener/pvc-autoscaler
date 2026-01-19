@@ -301,11 +301,15 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	// Validate the PVC itself against the spec
 	currStatusSize := pvcObj.Status.Capacity.Storage()
 	if currStatusSize.IsZero() {
-		return false, fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
+		return false, fmt.Errorf(".status.capacity.storage is invalid: %s, status: %v", currStatusSize.String(), pvcObj.Status.Capacity)
 	}
 
-	if pvca.Spec.MaxCapacity.Value() < currStatusSize.Value() {
-		return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", pvca.Spec.MaxCapacity.String(), currStatusSize.String())
+	if len(pvca.Spec.VolumePolicies) > 0 {
+		policy := pvca.Spec.VolumePolicies[0]
+
+		if policy.MaxCapacity.Value() < currStatusSize.Value() {
+			return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
+		}
 	}
 
 	// We need a StorageClass with expansion support
@@ -324,7 +328,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, ErrStorageClassDoesNotSupportExpansion
 	}
 
-	// Detect whether the metrics source is reporting stale data.  Stale
+	// Detect whether the metrics source is reporting stale data. Stale
 	// metrics data would be when the volume info metrics reported by the
 	// metrics source are deviate from the current PVC size indicated by
 	// `.status.capacity.storage'
@@ -352,9 +356,13 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, common.ErrNoMetrics
 	}
 
-	threshold, err := utils.ParsePercentage(pvca.Spec.Threshold)
-	if err != nil {
-		return false, fmt.Errorf("cannot parse threshold: %w", err)
+	// Get threshold from volume policy
+	var threshold float64
+	if len(pvca.Spec.VolumePolicies) > 0 {
+		policy := pvca.Spec.VolumePolicies[0]
+		threshold = 100.0 - float64(*policy.ScaleUp.UtilizationThresholdPercent)
+	} else {
+		return false, fmt.Errorf("no volume policies configured")
 	}
 
 	// VolumeMode should be Filesystem
@@ -408,24 +416,34 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 // validatePVCA sanity checks the spec in order to ensure it contains valid
 // values. Returns nil if the spec is valid, and non-nil error otherwise.
 func (*Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
-	threshold, err := utils.ParsePercentage(obj.Spec.Threshold)
-	if err != nil {
-		return fmt.Errorf("cannot parse threshold: %w", err)
-	}
-	if threshold == 0.0 {
-		return fmt.Errorf("invalid threshold: %w", common.ErrZeroPercentage)
+	if len(obj.Spec.VolumePolicies) == 0 {
+		return fmt.Errorf("no volume policies configured")
 	}
 
-	if obj.Spec.MaxCapacity.IsZero() {
-		return fmt.Errorf("invalid max capacity: %w", common.ErrNoMaxCapacity)
-	}
+	for i, policy := range obj.Spec.VolumePolicies {
+		if policy.MaxCapacity.IsZero() {
+			return fmt.Errorf("volume policy %d: invalid max capacity: %w", i, common.ErrNoMaxCapacity)
+		}
 
-	increaseBy, err := utils.ParsePercentage(obj.Spec.IncreaseBy)
-	if err != nil {
-		return fmt.Errorf("cannot parse increase-by value: %w", err)
-	}
-	if increaseBy == 0.0 {
-		return fmt.Errorf("invalid increase-by: %w", common.ErrZeroPercentage)
+		if !policy.MinCapacity.IsZero() && policy.MinCapacity.Cmp(policy.MaxCapacity) > 0 {
+			return fmt.Errorf("volume policy %d: min capacity cannot be greater than max capacity", i)
+		}
+
+		if *policy.ScaleUp.UtilizationThresholdPercent <= 0 || *policy.ScaleUp.UtilizationThresholdPercent > 100 {
+			return fmt.Errorf("volume policy %d: utilization threshold percent must be between 1 and 100", i)
+		}
+
+		if *policy.ScaleUp.StepPercent <= 0 || *policy.ScaleUp.StepPercent > 100 {
+			return fmt.Errorf("volume policy %d: step percent must be between 1 and 100", i)
+		}
+
+		if policy.ScaleUp.MinStepAbsolute.IsZero() {
+			return fmt.Errorf("volume policy %d: min step absolute must be greater than 0", i)
+		}
+
+		if policy.ScaleUp.CooldownDuration.Duration <= 0 {
+			return fmt.Errorf("volume policy %d: cooldown duration must be greater than 0", i)
+		}
 	}
 
 	return nil

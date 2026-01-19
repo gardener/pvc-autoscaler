@@ -14,27 +14,51 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// ScaleUpPolicy defines the policy for scaling up a PVC
+type ScaleUpPolicy struct {
+	// UtilizationThresholdPercent specifies the threshold percentage for used space.
+	// When the used space reaches or exceeds this threshold, a scale-up is triggered.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +optional
+	UtilizationThresholdPercent *int `json:"utilizationThresholdPercent,omitempty"`
+
+	// StepPercent specifies the percentage increase for the PVC capacity during scale-up.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +optional
+	StepPercent *int `json:"stepPercent,omitempty"`
+
+	// MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
+	// This ensures that the capacity increase is at least this amount, regardless of the percentage.
+	MinStepAbsolute resource.Quantity `json:"minStepAbsolute,omitempty"`
+
+	// CooldownDuration specifies the duration to wait before another scale-up operation.
+	CooldownDuration metav1.Duration `json:"cooldownDuration,omitempty"`
+}
+
+// VolumePolicy defines the autoscaling policy for a specific PVC
+type VolumePolicy struct {
+	// MinCapacity specifies the minimum capacity for the PVC.
+	MinCapacity resource.Quantity `json:"minCapacity,omitempty"`
+
+	// MaxCapacity specifies the maximum capacity up to which a PVC is
+	// allowed to be extended.
+	MaxCapacity resource.Quantity `json:"maxCapacity,omitempty"`
+
+	// ScaleUp defines the policy for scaling up the PVC.
+	ScaleUp ScaleUpPolicy `json:"scaleUp,omitempty"`
+}
+
 // PersistentVolumeClaimAutoscalerSpec defines the desired state of
 // PersistentVolumeClaimAutoscaler
 type PersistentVolumeClaimAutoscalerSpec struct {
-	// IncreaseBy specifies an increase by percentage value (e.g. 10%, 20%,
-	// etc.) by which the Persistent Volume Claim storage will be resized.
-	IncreaseBy string `json:"increaseBy,omitempty"`
-
-	// Threshold specifies the threshold value in percentage (e.g. 10%, 20%,
-	// etc.) for the PVC. Once the available capacity (free space) for the
-	// PVC reaches or drops below the specified threshold this will trigger
-	// a resize operation by the controller.
-	Threshold string `json:"threshold,omitempty"`
-
-	// MaxCapacity specifies the maximum capacity up to which a PVC is
-	// allowed to be extended. The max capacity is specified as a
-	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
-	MaxCapacity resource.Quantity `json:"maxCapacity,omitempty"`
-
-	// TargetRef specifies the reference to the PVC which will be
-	// managed by the controller.
+	// TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
+	// whose PVCs will be managed by the autoscaler.
 	TargetRef autoscalingv1.CrossVersionObjectReference `json:"targetRef,omitempty"`
+
+	// VolumePolicies defines a list of policies for autoscaling PVCs.
+	VolumePolicies []VolumePolicy `json:"volumePolicies,omitempty"`
 }
 
 // PersistentVolumeClaimAutoscalerStatus defines the observed state of
@@ -78,9 +102,6 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pvca
 // +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetRef.name`
-// +kubebuilder:printcolumn:name="Increase By",type=string,JSONPath=`.spec.increaseBy`
-// +kubebuilder:printcolumn:name="Threshold",type=string,JSONPath=`.spec.threshold`
-// +kubebuilder:printcolumn:name="Max Capacity",type=string,JSONPath=`.spec.maxCapacity`
 
 // PersistentVolumeClaimAutoscaler is the Schema for the
 // persistentvolumeclaimautoscalers API
