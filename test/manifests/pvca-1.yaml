@@ -5,10 +5,15 @@ metadata:
   name: test-pvca-1
   namespace: pvc-autoscaler-system
 spec:
-  increaseBy: "10%"
-  threshold: "20%"
-  maxCapacity: 3Gi
   targetRef:
     apiVersion: v1
     kind: PersistentVolumeClaim
     name: test-pvc-1
+  volumePolicies:
+  - minCapacity: 1Gi
+    maxCapacity: 3Gi
+    scaleUp:
+      utilizationThresholdPercent: 80
+      stepPercent: 10
+      minStepAbsolute: 1Gi
+      cooldownDuration: 1800s
