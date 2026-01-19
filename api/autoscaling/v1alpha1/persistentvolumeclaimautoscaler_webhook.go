@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 
+	pathvalidation "k8s.io/apimachinery/pkg/api/validation/path"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -107,8 +108,34 @@ func validateResourceSpec(obj runtime.Object) error {
 		allErrs = append(allErrs, e)
 	}
 
-	if pvca.Spec.ScaleTargetRef.Name == "" {
-		e := field.Invalid(field.NewPath("spec.scaleTargetRef.name"), "", "no target pvc specified")
+	if len(pvca.Spec.TargetRef.Kind) == 0 {
+		allErrs = append(allErrs, field.Required(field.NewPath("spec.targetRef.kind"), ""))
+	} else {
+		for _, msg := range pathvalidation.IsValidPathSegmentName(pvca.Spec.TargetRef.Kind) {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec.targetRef.kind"), pvca.Spec.TargetRef.Kind, msg))
+		}
+	}
+
+	if pvca.Spec.TargetRef.Kind != "PersistentVolumeClaim" {
+		e := field.Invalid(field.NewPath("spec.targetRef.kind"), pvca.Spec.TargetRef.Kind, "only PersistentVolumeClaim kind is supported")
+		allErrs = append(allErrs, e)
+	}
+
+	if len(pvca.Spec.TargetRef.Name) == 0 {
+		allErrs = append(allErrs, field.Required(field.NewPath("spec.targetRef.name"), ""))
+	} else {
+		for _, msg := range pathvalidation.IsValidPathSegmentName(pvca.Spec.TargetRef.Name) {
+			allErrs = append(allErrs, field.Invalid(field.NewPath("spec.targetRef.name"), pvca.Spec.TargetRef.Name, msg))
+		}
+	}
+
+	if len(pvca.Spec.TargetRef.APIVersion) == 0 {
+		e := field.Required(field.NewPath("spec.targetRef.apiVersion"), "")
+		allErrs = append(allErrs, e)
+	}
+
+	if pvca.Spec.TargetRef.APIVersion != "v1" {
+		e := field.Invalid(field.NewPath("spec.targetRef.apiVersion"), pvca.Spec.TargetRef.APIVersion, "only v1 apiVersion is supported")
 		allErrs = append(allErrs, e)
 	}
 

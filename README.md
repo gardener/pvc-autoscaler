@@ -71,7 +71,9 @@ spec:
   increaseBy: "10%"
   threshold: "20%"
   maxCapacity: 10Gi
-  scaleTargetRef:
+  targetRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
     name: my-pvc
 ```
 
@@ -83,7 +85,7 @@ The following properties must be specified when creating a new
 | `.spec.increaseBy`          | Specifies how much to increase the PVC in percentage during resize          | `10%`   |
 | `.spec.threshold`           | Specify the threshold in percentage, which once reached will cause a resize | `10%`   |
 | `.spec.maxCapacity`         | Max capacity up to which a PVC can be resized                               | N/A     |
-| `.spec.scaleTargetRef.name` | Name of the PVC to monitor and autoscale                                    | N/A     |
+| `.spec.targetRef.name` | Name of the PVC to monitor and autoscale                                    | N/A     |
 
 In order to watch the status of the autoscaler you can `kubectl describe` your
 `PersistentVolumeClaimAutoscaler` resource, where you will find information

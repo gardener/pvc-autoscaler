@@ -180,14 +180,14 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 
 	toReconcile := make([]v1alpha1.PersistentVolumeClaimAutoscaler, 0)
 	for _, item := range items.Items {
-		pvcObjKey := client.ObjectKey{Namespace: item.Namespace, Name: item.Spec.ScaleTargetRef.Name}
+		pvcObjKey := client.ObjectKey{Namespace: item.Namespace, Name: item.Spec.TargetRef.Name}
 		volInfo := metricsData[pvcObjKey]
 		logger := log.FromContext(
 			ctx,
 			"controller", common.ControllerName,
 			"namespace", item.Namespace,
 			"name", item.Name,
-			"pvc", item.Spec.ScaleTargetRef.Name,
+			"pvc", item.Spec.TargetRef.Name,
 		)
 
 		ok, err := r.shouldReconcilePVC(ctx, &item, volInfo)
@@ -278,7 +278,7 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 // [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
 // reconciliation.
 func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volInfo *metricssource.VolumeInfo) (bool, error) {
-	pvcObjKey := client.ObjectKey{Namespace: pvca.Namespace, Name: pvca.Spec.ScaleTargetRef.Name}
+	pvcObjKey := client.ObjectKey{Namespace: pvca.Namespace, Name: pvca.Spec.TargetRef.Name}
 	pvcObj := &corev1.PersistentVolumeClaim{}
 	if err := r.client.Get(ctx, pvcObjKey, pvcObj); err != nil {
 		return false, err
