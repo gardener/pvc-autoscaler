@@ -20,15 +20,6 @@ spec:
     - jsonPath: .spec.targetRef.name
       name: Target
       type: string
-    - jsonPath: .spec.increaseBy
-      name: Increase By
-      type: string
-    - jsonPath: .spec.threshold
-      name: Threshold
-      type: string
-    - jsonPath: .spec.maxCapacity
-      name: Max Capacity
-      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -58,25 +49,10 @@ spec:
               PersistentVolumeClaimAutoscalerSpec defines the desired state of
               PersistentVolumeClaimAutoscaler
             properties:
-              increaseBy:
-                description: |-
-                  IncreaseBy specifies an increase by percentage value (e.g. 10%, 20%,
-                  etc.) by which the Persistent Volume Claim storage will be resized.
-                type: string
-              maxCapacity:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  MaxCapacity specifies the maximum capacity up to which a PVC is
-                  allowed to be extended. The max capacity is specified as a
-                  [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               targetRef:
                 description: |-
-                  TargetRef specifies the reference to the PVC which will be
-                  managed by the controller.
+                  TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
+                  whose PVCs will be managed by the autoscaler.
                 properties:
                   apiVersion:
                     description: apiVersion is the API version of the referent
@@ -92,13 +68,62 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
-              threshold:
-                description: |-
-                  Threshold specifies the threshold value in percentage (e.g. 10%, 20%,
-                  etc.) for the PVC. Once the available capacity (free space) for the
-                  PVC reaches or drops below the specified threshold this will trigger
-                  a resize operation by the controller.
-                type: string
+              volumePolicies:
+                description: VolumePolicies defines a list of policies for autoscaling
+                  PVCs.
+                items:
+                  description: VolumePolicy defines the autoscaling policy for a specific
+                    PVC
+                  properties:
+                    maxCapacity:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: |-
+                        MaxCapacity specifies the maximum capacity up to which a PVC is
+                        allowed to be extended.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    minCapacity:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: MinCapacity specifies the minimum capacity for
+                        the PVC.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    scaleUp:
+                      description: ScaleUp defines the policy for scaling up the PVC.
+                      properties:
+                        cooldownDuration:
+                          description: CooldownDuration specifies the duration to
+                            wait before another scale-up operation.
+                          type: string
+                        minStepAbsolute:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: |-
+                            MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
+                            This ensures that the capacity increase is at least this amount, regardless of the percentage.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        stepPercent:
+                          description: StepPercent specifies the percentage increase
+                            for the PVC capacity during scale-up.
+                          maximum: 100
+                          minimum: 1
+                          type: integer
+                        utilizationThresholdPercent:
+                          description: |-
+                            UtilizationThresholdPercent specifies the threshold percentage for used space.
+                            When the used space reaches or exceeds this threshold, a scale-up is triggered.
+                          maximum: 100
+                          minimum: 1
+                          type: integer
+                      type: object
+                  type: object
+                type: array
             type: object
           status:
             description: |-
