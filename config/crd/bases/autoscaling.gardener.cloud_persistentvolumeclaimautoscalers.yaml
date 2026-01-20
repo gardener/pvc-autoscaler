@@ -99,6 +99,9 @@ spec:
                           description: CooldownDuration specifies the duration to
                             wait before another scale-up operation.
                           type: string
+                          x-kubernetes-validations:
+                          - message: cooldownDuration must be greater than 0
+                            rule: duration(self) > duration('0s')
                         minStepAbsolute:
                           anyOf:
                           - type: integer
@@ -109,21 +112,35 @@ spec:
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
                         stepPercent:
+                          default: 10
                           description: StepPercent specifies the percentage increase
                             for the PVC capacity during scale-up.
                           maximum: 100
                           minimum: 1
                           type: integer
                         utilizationThresholdPercent:
+                          default: 90
                           description: |-
                             UtilizationThresholdPercent specifies the threshold percentage for used space.
                             When the used space reaches or exceeds this threshold, a scale-up is triggered.
                           maximum: 100
                           minimum: 1
                           type: integer
+                      required:
+                      - cooldownDuration
+                      - minStepAbsolute
                       type: object
+                  required:
+                  - maxCapacity
+                  - minCapacity
+                  - scaleUp
                   type: object
+                maxItems: 1
+                minItems: 1
                 type: array
+            required:
+            - targetRef
+            - volumePolicies
             type: object
           status:
             description: |-
