@@ -49,6 +49,7 @@ func (r *PersistentVolumeClaimAutoscaler) Default(ctx context.Context, obj runti
 			pvca.Spec.VolumePolicies[i].ScaleUp.StepPercent = &defaultStep
 		}
 	}
+
 	return nil
 }
 

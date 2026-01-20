@@ -358,12 +358,12 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 
 	// Get threshold from volume policy
 	var threshold float64
-	if len(pvca.Spec.VolumePolicies) > 0 {
-		policy := pvca.Spec.VolumePolicies[0]
-		threshold = 100.0 - float64(*policy.ScaleUp.UtilizationThresholdPercent)
-	} else {
-		return false, fmt.Errorf("no volume policies configured")
+	if len(pvca.Spec.VolumePolicies) == 0 {
+		return false, errors.New("no volume policies configured")
 	}
+	// Currently only one policy is supported
+	policy := pvca.Spec.VolumePolicies[0]
+	threshold = 100.0 - float64(*policy.ScaleUp.UtilizationThresholdPercent)
 
 	// VolumeMode should be Filesystem
 	if pvcObj.Spec.VolumeMode == nil {
@@ -417,7 +417,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 // values. Returns nil if the spec is valid, and non-nil error otherwise.
 func (*Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
 	if len(obj.Spec.VolumePolicies) == 0 {
-		return fmt.Errorf("no volume policies configured")
+		return errors.New("no volume policies configured")
 	}
 
 	for i, policy := range obj.Spec.VolumePolicies {

@@ -193,6 +193,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 
 	// Loop through volume policies. Currently only one policy is supported,
 	// but this structure allows for better readability and future expansion.
+	var condition metav1.Condition
 	for _, policy := range pvca.Spec.VolumePolicies {
 		// Calculate the new size
 		stepPercent := float64(*policy.ScaleUp.StepPercent)
@@ -207,9 +208,11 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		switch cmp {
 		case 0:
 			logger.Info("new and current size are the same")
+
 			return ctrl.Result{}, nil
 		case -1:
 			logger.Info("new size is less than current")
+
 			return ctrl.Result{}, nil
 		}
 
@@ -224,7 +227,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			)
 			logger.Info("max capacity reached")
 			metrics.MaxCapacityReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
-			condition := metav1.Condition{
+			condition = metav1.Condition{
 				Type:    utils.ConditionTypeHealthy,
 				Status:  metav1.ConditionFalse,
 				Reason:  "Reconciling",
@@ -260,17 +263,15 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			return ctrl.Result{}, err
 		}
 
-		condition := metav1.Condition{
+		condition = metav1.Condition{
 			Type:    utils.ConditionTypeHealthy,
 			Status:  metav1.ConditionFalse,
 			Reason:  "Reconciling",
 			Message: fmt.Sprintf("Resizing from %s to %s", currSpecSize.String(), newSize.String()),
 		}
-
-		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 }
 
 // SetupWithManager sets up the controller with the Manager.
