@@ -20,34 +20,37 @@ type ScaleUpPolicy struct {
 	// When the used space reaches or exceeds this threshold, a scale-up is triggered.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=90
 	// +optional
 	UtilizationThresholdPercent *int `json:"utilizationThresholdPercent,omitempty"`
 
 	// StepPercent specifies the percentage increase for the PVC capacity during scale-up.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=10
 	// +optional
 	StepPercent *int `json:"stepPercent,omitempty"`
 
 	// MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
 	// This ensures that the capacity increase is at least this amount, regardless of the percentage.
-	MinStepAbsolute resource.Quantity `json:"minStepAbsolute,omitempty"`
+	MinStepAbsolute resource.Quantity `json:"minStepAbsolute"`
 
 	// CooldownDuration specifies the duration to wait before another scale-up operation.
-	CooldownDuration metav1.Duration `json:"cooldownDuration,omitempty"`
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be greater than 0"
+	CooldownDuration metav1.Duration `json:"cooldownDuration"`
 }
 
 // VolumePolicy defines the autoscaling policy for a specific PVC
 type VolumePolicy struct {
 	// MinCapacity specifies the minimum capacity for the PVC.
-	MinCapacity resource.Quantity `json:"minCapacity,omitempty"`
+	MinCapacity resource.Quantity `json:"minCapacity"`
 
 	// MaxCapacity specifies the maximum capacity up to which a PVC is
 	// allowed to be extended.
-	MaxCapacity resource.Quantity `json:"maxCapacity,omitempty"`
+	MaxCapacity resource.Quantity `json:"maxCapacity"`
 
 	// ScaleUp defines the policy for scaling up the PVC.
-	ScaleUp ScaleUpPolicy `json:"scaleUp,omitempty"`
+	ScaleUp ScaleUpPolicy `json:"scaleUp"`
 }
 
 // PersistentVolumeClaimAutoscalerSpec defines the desired state of
@@ -55,10 +58,12 @@ type VolumePolicy struct {
 type PersistentVolumeClaimAutoscalerSpec struct {
 	// TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
 	// whose PVCs will be managed by the autoscaler.
-	TargetRef autoscalingv1.CrossVersionObjectReference `json:"targetRef,omitempty"`
+	TargetRef autoscalingv1.CrossVersionObjectReference `json:"targetRef"`
 
 	// VolumePolicies defines a list of policies for autoscaling PVCs.
-	VolumePolicies []VolumePolicy `json:"volumePolicies,omitempty"`
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=1
+	VolumePolicies []VolumePolicy `json:"volumePolicies"`
 }
 
 // PersistentVolumeClaimAutoscalerStatus defines the observed state of

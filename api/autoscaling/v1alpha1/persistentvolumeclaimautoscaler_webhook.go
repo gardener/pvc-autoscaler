@@ -14,43 +14,14 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-
-	"github.com/gardener/pvc-autoscaler/internal/common"
 )
 
 // SetupWebhookWithManager will setup the manager to manage the webhooks
 func (r *PersistentVolumeClaimAutoscaler) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewWebhookManagedBy(mgr).
 		For(r).
-		WithDefaulter(r).
 		WithValidator(r).
 		Complete()
-}
-
-// +kubebuilder:webhook:path=/mutate-autoscaling-gardener-cloud-v1alpha1-persistentvolumeclaimautoscaler,mutating=true,failurePolicy=fail,sideEffects=None,groups=autoscaling.gardener.cloud,resources=persistentvolumeclaimautoscalers,verbs=create;update,versions=v1alpha1,name=mpersistentvolumeclaimautoscaler.kb.io,admissionReviewVersions=v1
-
-var _ webhook.CustomDefaulter = &PersistentVolumeClaimAutoscaler{}
-
-// Default implements [webhook.CustomDefaulter] so a webhook will be registered
-// for the type
-func (r *PersistentVolumeClaimAutoscaler) Default(ctx context.Context, obj runtime.Object) error {
-	pvca, ok := obj.(*PersistentVolumeClaimAutoscaler)
-	if !ok {
-		return fmt.Errorf("expected PersistentVolumeClaimAutoscaler resource, but got %T", obj)
-	}
-
-	for i := range pvca.Spec.VolumePolicies {
-		if pvca.Spec.VolumePolicies[i].ScaleUp.UtilizationThresholdPercent == nil {
-			defaultThreshold := common.DefaultThresholdValue
-			pvca.Spec.VolumePolicies[i].ScaleUp.UtilizationThresholdPercent = &defaultThreshold
-		}
-		if pvca.Spec.VolumePolicies[i].ScaleUp.StepPercent == nil {
-			defaultStep := common.DefaultIncreaseByValue
-			pvca.Spec.VolumePolicies[i].ScaleUp.StepPercent = &defaultStep
-		}
-	}
-
-	return nil
 }
 
 // Modifying the path for an invalid path can cause API server errors; failing to locate the webhook.
@@ -85,16 +56,6 @@ func validateResourceSpec(obj runtime.Object) error {
 
 	allErrs := make(field.ErrorList, 0)
 
-	if len(pvca.Spec.VolumePolicies) == 0 {
-		e := field.Required(field.NewPath("spec.volumePolicies"), "at least one volume policy must be specified")
-		allErrs = append(allErrs, e)
-	}
-
-	if len(pvca.Spec.VolumePolicies) > 1 {
-		e := field.Invalid(field.NewPath("spec.volumePolicies"), pvca.Spec.VolumePolicies, "only one volume policy is supported currently")
-		allErrs = append(allErrs, e)
-	}
-
 	for i, policy := range pvca.Spec.VolumePolicies {
 		policyPath := field.NewPath("spec.volumePolicies").Index(i)
 		if policy.MaxCapacity.IsZero() {
@@ -109,25 +70,8 @@ func validateResourceSpec(obj runtime.Object) error {
 			}
 		}
 
-		scaleUpPath := policyPath.Child("scaleUp")
-
-		if *policy.ScaleUp.UtilizationThresholdPercent <= 0 || *policy.ScaleUp.UtilizationThresholdPercent > 100 {
-			e := field.Invalid(scaleUpPath.Child("utilizationThresholdPercent"), *policy.ScaleUp.UtilizationThresholdPercent, "utilization threshold percent must be between 1 and 100")
-			allErrs = append(allErrs, e)
-		}
-
-		if *policy.ScaleUp.StepPercent <= 0 || *policy.ScaleUp.StepPercent > 100 {
-			e := field.Invalid(scaleUpPath.Child("stepPercent"), *policy.ScaleUp.StepPercent, "step percent must be between 1 and 100")
-			allErrs = append(allErrs, e)
-		}
-
 		if policy.ScaleUp.MinStepAbsolute.IsZero() {
-			e := field.Invalid(scaleUpPath.Child("minStepAbsolute"), policy.ScaleUp.MinStepAbsolute, "min step absolute must be specified and greater than zero")
-			allErrs = append(allErrs, e)
-		}
-
-		if policy.ScaleUp.CooldownDuration.Duration <= 0 {
-			e := field.Invalid(scaleUpPath.Child("cooldownDuration"), policy.ScaleUp.CooldownDuration, "cooldown duration must be greater than 0")
+			e := field.Invalid(policyPath.Child("scaleUp").Child("minStepAbsolute"), policy.ScaleUp.MinStepAbsolute, "min step absolute must be specified and greater than zero")
 			allErrs = append(allErrs, e)
 		}
 	}
