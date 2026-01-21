@@ -108,6 +108,9 @@ spec:
                         allowed to be extended.
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       x-kubernetes-int-or-string: true
+                      x-kubernetes-validations:
+                      - message: maxCapacity must be > 0
+                        rule: quantity(self).isGreaterThan(quantity('0'))
                     minCapacity:
                       anyOf:
                       - type: integer
@@ -116,6 +119,9 @@ spec:
                         the PVC.
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       x-kubernetes-int-or-string: true
+                      x-kubernetes-validations:
+                      - message: minCapacity must be > 0
+                        rule: quantity(self).isGreaterThan(quantity('0'))
                     scaleUp:
                       description: ScaleUp defines the policy for scaling up the PVC.
                       properties:
@@ -156,9 +162,11 @@ spec:
                       type: object
                   required:
                   - maxCapacity
-                  - minCapacity
                   - scaleUp
                   type: object
+                  x-kubernetes-validations:
+                  - message: maxCapacity must be >= minCapacity
+                    rule: '!quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))'
                 maxItems: 1
                 minItems: 1
                 type: array
