@@ -32,6 +32,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					},
 					VolumePolicies: []VolumePolicy{
 						{
+							MinCapacity: resource.MustParse("1Gi"),
 							MaxCapacity: resource.MustParse("5Gi"),
 							ScaleUp: ScaleUpPolicy{
 								MinStepAbsolute:  resource.MustParse("1Gi"),

@@ -41,12 +41,15 @@ type ScaleUpPolicy struct {
 }
 
 // VolumePolicy defines the autoscaling policy for a specific PVC
+// +kubebuilder:validation:XValidation:rule="!quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))",message="maxCapacity must be >= minCapacity"
 type VolumePolicy struct {
 	// MinCapacity specifies the minimum capacity for the PVC.
+	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="minCapacity must be > 0"
 	MinCapacity resource.Quantity `json:"minCapacity"`
 
 	// MaxCapacity specifies the maximum capacity up to which a PVC is
 	// allowed to be extended.
+	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="maxCapacity must be > 0"
 	MaxCapacity resource.Quantity `json:"maxCapacity"`
 
 	// ScaleUp defines the policy for scaling up the PVC.

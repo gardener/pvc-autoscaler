@@ -56,26 +56,6 @@ func validateResourceSpec(obj runtime.Object) error {
 
 	allErrs := make(field.ErrorList, 0)
 
-	for i, policy := range pvca.Spec.VolumePolicies {
-		policyPath := field.NewPath("spec.volumePolicies").Index(i)
-		if policy.MaxCapacity.IsZero() {
-			e := field.Invalid(policyPath.Child("maxCapacity"), policy.MaxCapacity, "max capacity must be specified and greater than zero")
-			allErrs = append(allErrs, e)
-		}
-
-		if !policy.MinCapacity.IsZero() && !policy.MaxCapacity.IsZero() {
-			if policy.MinCapacity.Cmp(policy.MaxCapacity) > 0 {
-				e := field.Invalid(policyPath.Child("minCapacity"), policy.MinCapacity, "min capacity must be less than or equal to max capacity")
-				allErrs = append(allErrs, e)
-			}
-		}
-
-		if policy.ScaleUp.MinStepAbsolute.IsZero() {
-			e := field.Invalid(policyPath.Child("scaleUp").Child("minStepAbsolute"), policy.ScaleUp.MinStepAbsolute, "min step absolute must be specified and greater than zero")
-			allErrs = append(allErrs, e)
-		}
-	}
-
 	if len(pvca.Spec.TargetRef.Kind) == 0 {
 		allErrs = append(allErrs, field.Required(field.NewPath("spec.targetRef.kind"), ""))
 	} else {
