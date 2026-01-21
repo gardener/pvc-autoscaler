@@ -131,8 +131,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -175,8 +175,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -228,8 +228,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -272,8 +272,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -341,8 +341,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -421,8 +421,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -488,8 +488,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -548,8 +548,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -600,8 +600,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -661,8 +661,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -713,8 +713,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -774,8 +774,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -832,8 +832,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -914,8 +914,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -964,8 +964,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}
@@ -1047,8 +1047,8 @@ var _ = Describe("Periodic Runner", func() {
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
 						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
-						MinStepAbsolute:             resource.MustParse("1Gi"),
-						CooldownDuration:            metav1.Duration{Duration: 3600},
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 					},
 				},
 			}

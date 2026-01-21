@@ -96,9 +96,10 @@ spec:
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       x-kubernetes-int-or-string: true
                       x-kubernetes-validations:
-                      - message: minCapacity must be > 0
-                        rule: quantity(self).isGreaterThan(quantity('0'))
+                      - message: minCapacity must be > 0 if specified
+                        rule: self == null || quantity(self).isGreaterThan(quantity('0'))
                     scaleUp:
+                      default: {}
                       description: ScaleUp defines the policy for scaling up the PVC.
                       properties:
                         cooldownDuration:
@@ -106,12 +107,13 @@ spec:
                             wait before another scale-up operation.
                           type: string
                           x-kubernetes-validations:
-                          - message: cooldownDuration must be greater than 0
-                            rule: duration(self) > duration('0s')
+                          - message: cooldownDuration must be >= 0s
+                            rule: duration(self) >= duration('0s')
                         minStepAbsolute:
                           anyOf:
                           - type: integer
                           - type: string
+                          default: 1Gi
                           description: |-
                             MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
                             This ensures that the capacity increase is at least this amount, regardless of the percentage.
@@ -132,13 +134,9 @@ spec:
                           maximum: 100
                           minimum: 1
                           type: integer
-                      required:
-                      - cooldownDuration
-                      - minStepAbsolute
                       type: object
                   required:
                   - maxCapacity
-                  - scaleUp
                   type: object
                   x-kubernetes-validations:
                   - message: maxCapacity must be >= minCapacity

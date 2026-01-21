@@ -33,18 +33,21 @@ type ScaleUpPolicy struct {
 
 	// MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
 	// This ensures that the capacity increase is at least this amount, regardless of the percentage.
-	MinStepAbsolute resource.Quantity `json:"minStepAbsolute"`
+	// +optional
+	// +kubebuilder:default="1Gi"
+	MinStepAbsolute *resource.Quantity `json:"minStepAbsolute,omitempty"`
 
 	// CooldownDuration specifies the duration to wait before another scale-up operation.
-	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be greater than 0"
-	CooldownDuration metav1.Duration `json:"cooldownDuration"`
+	// +kubebuilder:validation:XValidation:rule="duration(self) >= duration('0s')",message="cooldownDuration must be >= 0s"
+	// +optional
+	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }
 
 // VolumePolicy defines the autoscaling policy for a specific PVC
 // +kubebuilder:validation:XValidation:rule="!quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))",message="maxCapacity must be >= minCapacity"
 type VolumePolicy struct {
 	// MinCapacity specifies the minimum capacity for the PVC.
-	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="minCapacity must be > 0"
+	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).isGreaterThan(quantity('0'))",message="minCapacity must be > 0 if specified"
 	// +optional
 	MinCapacity *resource.Quantity `json:"minCapacity,omitempty"`
 
@@ -54,7 +57,9 @@ type VolumePolicy struct {
 	MaxCapacity resource.Quantity `json:"maxCapacity"`
 
 	// ScaleUp defines the policy for scaling up the PVC.
-	ScaleUp ScaleUpPolicy `json:"scaleUp"`
+	// +kubebuilder:default:={}
+	// +optional
+	ScaleUp ScaleUpPolicy `json:"scaleUp,omitempty"`
 }
 
 // PersistentVolumeClaimAutoscalerSpec defines the desired state of

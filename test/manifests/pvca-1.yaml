@@ -10,10 +10,4 @@ spec:
     kind: PersistentVolumeClaim
     name: test-pvc-1
   volumePolicies:
-  - minCapacity: 1Gi
-    maxCapacity: 3Gi
-    scaleUp:
-      utilizationThresholdPercent: 80
-      stepPercent: 10
-      minStepAbsolute: 1Gi
-      cooldownDuration: 1800s
+  - maxCapacity: 3Gi

@@ -299,12 +299,10 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, fmt.Errorf(".status.capacity.storage is invalid: %s, status: %v", currStatusSize.String(), pvcObj.Status.Capacity)
 	}
 
-	if len(pvca.Spec.VolumePolicies) > 0 {
-		policy := pvca.Spec.VolumePolicies[0]
-
-		if policy.MaxCapacity.Value() < currStatusSize.Value() {
-			return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
-		}
+	// Only one volume policy is supported currently
+	policy := pvca.Spec.VolumePolicies[0]
+	if policy.MaxCapacity.Value() < currStatusSize.Value() {
+		return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
 	}
 
 	// We need a StorageClass with expansion support
@@ -352,13 +350,8 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	}
 
 	// Get threshold from volume policy
-	var threshold float64
-	if len(pvca.Spec.VolumePolicies) == 0 {
-		return false, errors.New("no volume policies configured")
-	}
-	// Currently only one policy is supported
-	policy := pvca.Spec.VolumePolicies[0]
-	threshold = 100.0 - float64(*policy.ScaleUp.UtilizationThresholdPercent)
+	// Currently only one policy is supported and is enforced by the CRD schema
+	threshold := 100.0 - float64(*policy.ScaleUp.UtilizationThresholdPercent)
 
 	// VolumeMode should be Filesystem
 	if pvcObj.Spec.VolumeMode == nil {
