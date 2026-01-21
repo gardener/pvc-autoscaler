@@ -293,11 +293,6 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, common.ErrNoMetrics
 	}
 
-	// Validate the spec
-	if err := r.validatePVCA(pvca); err != nil {
-		return false, err
-	}
-
 	// Validate the PVC itself against the spec
 	currStatusSize := pvcObj.Status.Capacity.Storage()
 	if currStatusSize.IsZero() {
@@ -411,40 +406,4 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	default:
 		return false, nil
 	}
-}
-
-// validatePVCA sanity checks the spec in order to ensure it contains valid
-// values. Returns nil if the spec is valid, and non-nil error otherwise.
-func (*Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
-	if len(obj.Spec.VolumePolicies) == 0 {
-		return errors.New("no volume policies configured")
-	}
-
-	for i, policy := range obj.Spec.VolumePolicies {
-		if policy.MaxCapacity.IsZero() {
-			return fmt.Errorf("volume policy %d: invalid max capacity: %w", i, common.ErrNoMaxCapacity)
-		}
-
-		if !policy.MinCapacity.IsZero() && policy.MinCapacity.Cmp(policy.MaxCapacity) > 0 {
-			return fmt.Errorf("volume policy %d: min capacity cannot be greater than max capacity", i)
-		}
-
-		if *policy.ScaleUp.UtilizationThresholdPercent <= 0 || *policy.ScaleUp.UtilizationThresholdPercent > 100 {
-			return fmt.Errorf("volume policy %d: utilization threshold percent must be between 1 and 100", i)
-		}
-
-		if *policy.ScaleUp.StepPercent <= 0 || *policy.ScaleUp.StepPercent > 100 {
-			return fmt.Errorf("volume policy %d: step percent must be between 1 and 100", i)
-		}
-
-		if policy.ScaleUp.MinStepAbsolute.IsZero() {
-			return fmt.Errorf("volume policy %d: min step absolute must be greater than 0", i)
-		}
-
-		if policy.ScaleUp.CooldownDuration.Duration <= 0 {
-			return fmt.Errorf("volume policy %d: cooldown duration must be greater than 0", i)
-		}
-	}
-
-	return nil
 }
