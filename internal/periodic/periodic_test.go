@@ -126,7 +126,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -170,7 +170,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -223,7 +223,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -267,7 +267,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -336,7 +336,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -416,7 +416,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -483,7 +483,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -543,7 +543,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -595,7 +595,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -656,7 +656,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -708,7 +708,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -769,7 +769,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -827,7 +827,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -909,7 +909,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -959,7 +959,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -1042,7 +1042,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: resource.MustParse("1Gi"),
+					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
 					ScaleUp: v1alpha1.ScaleUpPolicy{
 						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),

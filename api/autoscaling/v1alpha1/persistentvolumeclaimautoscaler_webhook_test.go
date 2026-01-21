@@ -32,7 +32,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					},
 					VolumePolicies: []VolumePolicy{
 						{
-							MinCapacity: resource.MustParse("1Gi"),
+							MinCapacity: ptr.To(resource.MustParse("1Gi")),
 							MaxCapacity: resource.MustParse("5Gi"),
 							ScaleUp: ScaleUpPolicy{
 								MinStepAbsolute:  resource.MustParse("1Gi"),
@@ -67,7 +67,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					},
 					VolumePolicies: []VolumePolicy{
 						{
-							MinCapacity: resource.MustParse("1Gi"),
+							MinCapacity: ptr.To(resource.MustParse("1Gi")),
 							MaxCapacity: resource.MustParse("5Gi"),
 							ScaleUp: ScaleUpPolicy{
 								UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
@@ -176,7 +176,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 					},
 					VolumePolicies: []VolumePolicy{
 						{
-							MinCapacity: resource.MustParse("10Gi"),
+							MinCapacity: ptr.To(resource.MustParse("10Gi")),
 							MaxCapacity: resource.MustParse("5Gi"),
 							ScaleUp: ScaleUpPolicy{
 								UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
