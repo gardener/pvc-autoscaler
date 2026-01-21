@@ -138,7 +138,6 @@ spec:
                       type: object
                   required:
                   - maxCapacity
-                  - minCapacity
                   - scaleUp
                   type: object
                   x-kubernetes-validations:
