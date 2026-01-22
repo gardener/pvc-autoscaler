@@ -20,7 +20,7 @@ type ScaleUpPolicy struct {
 	// When the used space reaches or exceeds this threshold, a scale-up is triggered.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
-	// +kubebuilder:default=90
+	// +kubebuilder:default=80
 	// +optional
 	UtilizationThresholdPercent *int `json:"utilizationThresholdPercent,omitempty"`
 
@@ -44,7 +44,7 @@ type ScaleUpPolicy struct {
 }
 
 // VolumePolicy defines the autoscaling policy for a specific PVC
-// +kubebuilder:validation:XValidation:rule="!quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))",message="maxCapacity must be >= minCapacity"
+// +kubebuilder:validation:XValidation:rule="!has(self.minCapacity) || !quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))",message="maxCapacity must be >= minCapacity"
 type VolumePolicy struct {
 	// MinCapacity specifies the minimum capacity for the PVC.
 	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).isGreaterThan(quantity('0'))",message="minCapacity must be > 0 if specified"

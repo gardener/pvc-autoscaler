@@ -127,7 +127,7 @@ spec:
                           minimum: 1
                           type: integer
                         utilizationThresholdPercent:
-                          default: 90
+                          default: 80
                           description: |-
                             UtilizationThresholdPercent specifies the threshold percentage for used space.
                             When the used space reaches or exceeds this threshold, a scale-up is triggered.
@@ -140,7 +140,7 @@ spec:
                   type: object
                   x-kubernetes-validations:
                   - message: maxCapacity must be >= minCapacity
-                    rule: '!quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))'
+                    rule: '!has(self.minCapacity) || !quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))'
                 maxItems: 1
                 minItems: 1
                 type: array
