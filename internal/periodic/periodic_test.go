@@ -638,7 +638,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			event := <-eventRecorder.Events
-			wantEvent := `Warning FreeSpaceThresholdReached free space (9.00%) is less than the configured threshold (10.00%)`
+			wantEvent := `Warning FreeSpaceThresholdReached free space (9.00%) is less than the configured threshold (20.00%)`
 			Expect(event).To(Equal(wantEvent))
 		})
 
@@ -751,7 +751,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).ToNot(HaveOccurred())
 
 			event := <-eventRecorder.Events
-			wantEvent := `Warning FreeInodesThresholdReached free inodes (9.00%) are less than the configured threshold (10.00%)`
+			wantEvent := `Warning FreeInodesThresholdReached free inodes (9.00%) are less than the configured threshold (20.00%)`
 			Expect(event).To(Equal(wantEvent))
 		})
 

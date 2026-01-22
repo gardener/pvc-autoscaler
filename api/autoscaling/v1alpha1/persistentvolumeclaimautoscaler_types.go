@@ -33,12 +33,13 @@ type ScaleUpPolicy struct {
 
 	// MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
 	// This ensures that the capacity increase is at least this amount, regardless of the percentage.
-	// +optional
+	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).isGreaterThan(quantity('0'))",message="minStepAbsolute must be > 0 if specified"
 	// +kubebuilder:default="1Gi"
+	// +optional
 	MinStepAbsolute *resource.Quantity `json:"minStepAbsolute,omitempty"`
 
 	// CooldownDuration specifies the duration to wait before another scale-up operation.
-	// +kubebuilder:validation:XValidation:rule="duration(self) >= duration('0s')",message="cooldownDuration must be >= 0s"
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }

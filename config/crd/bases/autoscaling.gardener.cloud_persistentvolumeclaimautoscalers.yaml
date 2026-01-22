@@ -107,8 +107,8 @@ spec:
                             wait before another scale-up operation.
                           type: string
                           x-kubernetes-validations:
-                          - message: cooldownDuration must be >= 0s
-                            rule: duration(self) >= duration('0s')
+                          - message: cooldownDuration must be > 0s
+                            rule: duration(self) > duration('0s')
                         minStepAbsolute:
                           anyOf:
                           - type: integer
@@ -119,6 +119,9 @@ spec:
                             This ensures that the capacity increase is at least this amount, regardless of the percentage.
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
+                          x-kubernetes-validations:
+                          - message: minStepAbsolute must be > 0 if specified
+                            rule: self == null || quantity(self).isGreaterThan(quantity('0'))
                         stepPercent:
                           default: 10
                           description: StepPercent specifies the percentage increase
