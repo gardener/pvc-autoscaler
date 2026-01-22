@@ -37,7 +37,7 @@ const (
 
 	// DefaultThresholdValue is the default threshold value, if not
 	// specified for a PVC object.
-	DefaultThresholdValue = 90
+	DefaultThresholdValue = 80
 
 	// DefaultIncreaseByValue is the default increase-by value, if not
 	// specified for a PVC object.
