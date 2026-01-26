@@ -105,8 +105,9 @@ ci-e2e-kind:
 	./hack/ci-e2e-kind.sh
 
 .PHONY: test-cov
-test-cov: helm
-	@./hack/test-cover.sh ./cmd/... ./internal/... ./api/...
+test-cov: manifests generate fmt vet envtest
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
+		./hack/test-cover.sh ./cmd/... ./internal/... ./api/...
 
 .PHONY: test-cov-clean
 test-cov-clean:
@@ -155,7 +156,7 @@ kind-down: kind
 
 .PHONY: pvc-autoscaler-up
 pvc-autoscaler-up: skaffold kustomize kubectl helm yq
-	$(SKAFFOLD) run 
+	$(SKAFFOLD) run
 
 .PHONY: pvc-autoscaler-dev
 pvc-autoscaler-dev: skaffold kustomize kubectl helm yq
