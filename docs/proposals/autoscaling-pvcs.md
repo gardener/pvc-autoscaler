@@ -110,14 +110,14 @@ status:
     message: Recommendations have been provided for all PersistentVolumeClaims.
   persistentVolumeClaims:
   - persistentVolumeClaimName: prometheus-seed-0
-    usedSpacePercentage: "30%"
-    usedInodesPercentage: "20%"
+    usedBytesPercentage: 30
+    usedInodesPercentage: 20
     currentSize: 4Gi
     targetSize: 4Gi
     usedByPods: ["prometheus-seed-0"]
   - persistentVolumeClaimName: prometheus-seed-1
-    usedSpacePercentage: "90%"
-    usedInodesPercentage: "70%"
+    usedBytesPercentage: 90
+    usedInodesPercentage: 70
     currentSize: 3Gi
     targetSize: 4Gi
     usedByPods: ["prometheus-seed-1"]
@@ -224,22 +224,21 @@ spec:
   settings:
     persistentVolumeClaimAutoscaler:
       enabled: true
-      maxAllowed:
-        storage: 200Gi
+      maxCapacity: 200Gi
       scaleUp:
-        minStep: 4Gi
-        minCooldownDuration: 6h
+        minStepAbsolute: 4Gi
+        cooldownDuration: 6h
 ```
 
 Whether the `pvc-autoscaler` is deployed in a `Seed` cluster is determined by the `enabled` field.
 Operators can set this field to `true` on a seed-by-seed basis for gradual rollout.
 An API field was chosen instead of a feature gate to cover cases for cloud providers that might not support resizing PVCs.
 
-The `maxAllowed.storage` field determines the global maximum allowed storage that `PersistentVolumeClaims` can be scaled to.
+The `maxCapacity` field determines the maximum value that shall be used for `spec.volumePolicies[].maxCapacity` when creating `PersistentVolumeClaimAutoscaler`s.
 
-The `scaleUp.minStep` field determines the global minimum increase in GiB when scaling up `PersistentVolumeClaims`.
+The `scaleUp.minStepAbsolute` field determines the minimum value that shall be used for `spec.volumePolicies[].scaleUp.minStepAbsolute` when creating `PersistentVolumeClaimAutoscaler`s.
 
-The `scaleUp.minCooldownDuration` field determines the global minimum cooldown duration between `PersistentVolumeClaims` scale ups.
+The `scaleUp.cooldownDuration` field determines the minimum value that shall be used for `spec.volumePolicies[].scaleUp.cooldownDuration` when creating `PersistentVolumeClaimAutoscaler`s.
 
 When `pvc-autoscaler` is enabled, initial sizes will be reduced from current defaults for newly created volumes.
 The new sizes will be determined by examining the storage usage of observability components across all current `Shoot` and `Seed` clusters.
