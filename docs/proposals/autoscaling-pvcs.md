@@ -76,25 +76,18 @@ spec:
     kind: Prometheus
     name: seed
   volumeClaimPolicies:
-  - minCapacity: 2Gi
+  - minCapacity: 2Gi # only necessary if support for downscaling is added at a later date
     maxCapacity: 5Gi
     match: # if this field is omitted, the configured policy is used for all PVCs
      nameRegex: ".*" # use this policy only for PVCs which have a name that matches the provided regex
-   # selector: # optional label based selector, that can be used when PVCs are created with labels
-   #   matchLabels:
-   #     foo: bar
-   #   matchExpressions:
-   #     key: foo
-   #     operator: In
-   #     values: ["bar"]
     scaleUp:
       cooldownDuration: 180s
       stabilizationWindowDuration: 3000s
       thresholdPercent: 80
       stepPercent: 25
       minStepAbsolute: 1Gi
-      strategy: InPlace | RestartPodsIfNecessary | Off
-    scaleDown: # the scaleDown section is shown as an example, due to the complex implementation it will only be added if enough demand for it is present
+      strategy: InPlace | EvictPodsIfNecessary | Off
+    scaleDown: # the scaleDown section is given as an example, due to the complex implementation it will only be added if enough demand for it is present
       cooldownDuration: 180s
       stabilizationWindowDuration: 3000s
       thresholdPercent: 60
@@ -103,12 +96,18 @@ spec:
       strategy: Rsync | OnVolumeDeletion | Off
 status:
   conditions:
-  - type: PersistentVolumeClaimsScaled
-    status: "Progressing"
+  - type: Resizing
+    status: "True"
+    Reason: ResizeInProgress
     lastTransitionTime: "2025-08-07T11:59:54Z"
     message: |
-      Some PersistentVolumeClaims have not been scaled:
-      - PVC prometheus-seed-1 is being scaled due to passing inodes threshold. Current size 3Gi does not match target size 4Gi.
+      Some PersistentVolumeClaims are being resized:
+      - PVC prometheus-seed-1 is being resized due to insufficient inodes.
+  - type: RecommendationsAvailable
+    status: "True"
+    Reason: RecommendationsProvided
+    lastTransitionTime: "2025-08-07T11:59:54Z"
+    message: Recommendations have been provided for all PersistentVolumeClaims.
   persistentVolumeClaims:
   - persistentVolumeClaimName: prometheus-seed-0
     usedSpacePercentage: "30%"
@@ -212,13 +211,40 @@ In this initial iteration, pvc-autoscaler scales two categories of `Vali` and `P
 The `Vali` and `Prometheus` component deployers (part of `gardenlet`'s `Shoot` reconciliation flow) create `PersistentVolumeClaimAutoscaler` resources for their respective workloads.
 The `pvc-autoscaler` discovers and scales PVCs for both `Shoot`-level and `Seed`-level observability components.
 
-Whether the `pvc-autoscaler` is deployed in a `Seed` cluster is determined by a new boolean field in the `Seed` API, which is disabled by default.
-Operators can set the field to `true` on a seed-by-seed basis for gradual rollout.
+The `Seed` API is extended with a new field - `spec.settings.persistentVolumeClaimAutoscaler`, which contains settings for the `pvc-autoscaler` deployed in the `Seed`.
+
+**Proposed change to `Seed` API:**
+```yaml
+apiVersion: core.gardener.cloud/v1beta1
+kind: Seed
+metadata:
+  name: my-seed
+spec:
+  ...
+  settings:
+    persistentVolumeClaimAutoscaler:
+      enabled: true
+      maxAllowed:
+        storage: 200Gi
+      scaleUp:
+        minStep: 4Gi
+        minCooldownDuration: 6h
+```
+
+Whether the `pvc-autoscaler` is deployed in a `Seed` cluster is determined by the `enabled` field.
+Operators can set this field to `true` on a seed-by-seed basis for gradual rollout.
 An API field was chosen instead of a feature gate to cover cases for cloud providers that might not support resizing PVCs.
+
+The `maxAllowed.storage` field determines the global maximum allowed storage that `PersistentVolumeClaims` can be scaled to.
+
+The `scaleUp.minStep` field determines the global minimum increase in GiB when scaling up `PersistentVolumeClaims`.
+
+The `scaleUp.minCooldownDuration` field determines the global minimum cooldown duration between `PersistentVolumeClaims` scale ups.
 
 When `pvc-autoscaler` is enabled, initial sizes will be reduced from current defaults for newly created volumes.
 The new sizes will be determined by examining the storage usage of observability components across all current `Shoot` and `Seed` clusters.
 This approach enables efficient resource utilization while allowing growth as needed.
+Note that initial sizes will not be lower than what is specified in the `spec.volume.minimumSize` field in the `Seed`.
 
 ## Impact and Alternatives
 
