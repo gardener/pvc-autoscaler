@@ -79,7 +79,7 @@ spec:
   - minCapacity: 2Gi # only necessary if support for downscaling is added at a later date
     maxCapacity: 5Gi
     match: # if this field is omitted, the configured policy is used for all PVCs
-     nameRegex: ".*" # use this policy only for PVCs which have a name that matches the provided regex
+      nameRegex: ".*" # use this policy only for PVCs which have a name that matches the provided regex
     scaleUp:
       cooldownDuration: 180s
       stabilizationWindowDuration: 3000s
