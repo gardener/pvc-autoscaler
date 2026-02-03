@@ -72,7 +72,7 @@ metadata:
   name: prometheus-seed
 spec:
   targetRef:
-    apiVersion: apps/v1
+    apiVersion: monitoring.coreos.com/v1
     kind: Prometheus
     name: seed
   volumeClaimPolicies:
