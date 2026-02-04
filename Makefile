@@ -66,22 +66,11 @@ help: ## Display this help.
 
 ##@ Development
 
-.PHONY: manifests
-manifests: controller-gen  ## Generate WebhookConfiguration, ClusterRole and CRD objects.
-	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
-
 .PHONY: generate
-generate: controller-gen ## Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
+generate: controller-gen ## Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations. Also generates WebhookConfiguration, ClusterRole and CRD objects.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
+	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	$(MAKE) format
-
-.PHONY: fmt
-fmt:  ## Run go fmt against code.
-	go fmt ./...
-
-.PHONY: vet
-vet:  ## Run go vet against code.
-	go vet ./...
 
 .PHONY: sast
 sast: gosec
@@ -92,7 +81,7 @@ sast-report: gosec
 	@bash $(SAST) --gosec-report true
 
 .PHONY: test
-test: manifests generate fmt vet envtest  ## Run tests.
+test: generate envtest  ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 		go test -v -race -timeout=2m $$(go list ./... | grep -v -E 'test/e2e|test/utils|/cmd')
 
@@ -105,7 +94,7 @@ ci-e2e-kind:
 	./hack/ci-e2e-kind.sh
 
 .PHONY: test-cov
-test-cov: manifests generate fmt vet envtest
+test-cov: generate envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 		./hack/test-cover.sh ./cmd/... ./internal/... ./api/...
 
@@ -183,11 +172,11 @@ minikube-load-image: minikube docker-build  ## Load the operator image into the 
 ##@ Build
 
 .PHONY: build
-build: manifests generate fmt vet ## Build manager binary.
+build: generate ## Build manager binary.
 	go build -o bin/manager cmd/main.go
 
 .PHONY: run
-run: manifests generate fmt vet ## Run a controller from your host.
+run: generate ## Run a controller from your host.
 	go run ./cmd/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
@@ -219,7 +208,7 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	rm Dockerfile.cross
 
 .PHONY: build-installer
-build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+build-installer: generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
 	echo "---" > dist/install.yaml  # Add a document separator before appending
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:latest
@@ -232,15 +221,15 @@ ifndef ignore-not-found
 endif
 
 .PHONY: install
-install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+install: generate kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
 
 .PHONY: uninstall
-uninstall: manifests kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
+uninstall: generate kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
-deploy: manifests kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
+deploy: generate kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:${IMAGE_TAG}
 	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
 
