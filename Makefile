@@ -70,6 +70,7 @@ help: ## Display this help.
 generate: controller-gen ## Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations. Also generates WebhookConfiguration, ClusterRole and CRD objects.
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	$(MAKE) format
 
 .PHONY: sast
 sast: gosec
