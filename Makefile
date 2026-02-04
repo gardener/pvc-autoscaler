@@ -94,7 +94,7 @@ ci-e2e-kind:
 	./hack/ci-e2e-kind.sh
 
 .PHONY: test-cov
-test-cov: manifests generate fmt vet envtest
+test-cov: generate envtest
 	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" \
 		./hack/test-cover.sh ./cmd/... ./internal/... ./api/...
 
