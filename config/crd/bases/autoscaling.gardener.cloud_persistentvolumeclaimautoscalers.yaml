@@ -45,9 +45,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              PersistentVolumeClaimAutoscalerSpec defines the desired state of
-              PersistentVolumeClaimAutoscaler
+            description: PersistentVolumeClaimAutoscalerSpec defines the desired state
+              of the PersistentVolumeClaimAutoscaler.
             properties:
               targetRef:
                 description: |-
@@ -81,30 +80,21 @@ spec:
                       - type: string
                       description: |-
                         MaxCapacity specifies the maximum capacity up to which a PVC is
-                        allowed to be extended.
+                        allowed to be extended. The max capacity is specified as a
+                        [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       x-kubernetes-int-or-string: true
                       x-kubernetes-validations:
                       - message: maxCapacity must be > 0
                         rule: quantity(self).isGreaterThan(quantity('0'))
-                    minCapacity:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      description: MinCapacity specifies the minimum capacity for
-                        the PVC.
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
-                      x-kubernetes-validations:
-                      - message: minCapacity must be > 0 if specified
-                        rule: self == null || quantity(self).isGreaterThan(quantity('0'))
                     scaleUp:
                       default: {}
                       description: ScaleUp defines the policy for scaling up the PVC.
                       properties:
                         cooldownDuration:
-                          description: CooldownDuration specifies the duration to
-                            wait before another scale-up operation.
+                          description: |-
+                            This field is currenntly not used (NOOP), but will be implemented at a later stage.
+                            CooldownDuration specifies the duration to wait before another scale-up operation.
                           type: string
                           x-kubernetes-validations:
                           - message: cooldownDuration must be > 0s
@@ -120,12 +110,13 @@ spec:
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
                           x-kubernetes-validations:
-                          - message: minStepAbsolute must be > 0 if specified
-                            rule: self == null || quantity(self).isGreaterThan(quantity('0'))
+                          - message: minStepAbsolute must be > 1 if specified
+                            rule: self == null || quantity(self).compareTo(quantity('1Gi'))
+                              >= 0
                         stepPercent:
                           default: 10
-                          description: StepPercent specifies the percentage increase
-                            for the PVC capacity during scale-up.
+                          description: StepPercent specifies the percentage by which
+                            to change the PVC storage capacity when scaling.
                           maximum: 100
                           minimum: 1
                           type: integer
@@ -133,7 +124,7 @@ spec:
                           default: 80
                           description: |-
                             UtilizationThresholdPercent specifies the threshold percentage for used space.
-                            When the used space reaches or exceeds this threshold, a scale-up is triggered.
+                            When the used space or inodes exceed this threshold, a scale-up is triggered.
                           maximum: 100
                           minimum: 1
                           type: integer
@@ -141,9 +132,6 @@ spec:
                   required:
                   - maxCapacity
                   type: object
-                  x-kubernetes-validations:
-                  - message: maxCapacity must be >= minCapacity
-                    rule: '!has(self.minCapacity) || !quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))'
                 maxItems: 1
                 minItems: 1
                 type: array
