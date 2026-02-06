@@ -296,7 +296,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	// Validate the PVC itself against the spec
 	currStatusSize := pvcObj.Status.Capacity.Storage()
 	if currStatusSize.IsZero() {
-		return false, fmt.Errorf(".status.capacity.storage is invalid: %s, status: %v", currStatusSize.String(), pvcObj.Status.Capacity)
+		return false, fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
 	}
 
 	// Only one volume policy is supported currently

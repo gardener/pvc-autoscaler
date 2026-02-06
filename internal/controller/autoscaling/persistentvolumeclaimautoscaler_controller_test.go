@@ -133,14 +133,13 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleUp: v1alpha1.ScaleUpPolicy{
-						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
-						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
 						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
 						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
-					},
+					}),
 				},
 			}
 
@@ -206,14 +205,13 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleUp: v1alpha1.ScaleUpPolicy{
-						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
-						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
 						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
 						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
-					},
+					}),
 				},
 			}
 
@@ -279,14 +277,13 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleUp: v1alpha1.ScaleUpPolicy{
-						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
-						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
 						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
 						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
-					},
+					}),
 				},
 			}
 
@@ -342,14 +339,13 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleUp: v1alpha1.ScaleUpPolicy{
-						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
-						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
 						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
 						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
-					},
+					}),
 				},
 			}
 
@@ -412,14 +408,13 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("5Gi"),
-					ScaleUp: v1alpha1.ScaleUpPolicy{
-						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
-						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
 						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
 						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
-					},
+					}),
 				},
 			}
 
@@ -480,14 +475,13 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					MinCapacity: ptr.To(resource.MustParse("1Gi")),
 					MaxCapacity: resource.MustParse("3Gi"),
-					ScaleUp: v1alpha1.ScaleUpPolicy{
-						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdValue),
-						StepPercent:                 ptr.To(common.DefaultIncreaseByValue),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
 						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
 						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
-					},
+					}),
 				},
 			}
 

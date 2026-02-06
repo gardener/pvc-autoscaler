@@ -14,17 +14,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ScaleUpPolicy defines the policy for scaling up a PVC
-type ScaleUpPolicy struct {
+// ScalingRules defines the policy for scaling a PVC.
+type ScalingRules struct {
 	// UtilizationThresholdPercent specifies the threshold percentage for used space.
-	// When the used space reaches or exceeds this threshold, a scale-up is triggered.
+	// When the used space or inodes exceed this threshold, a scale-up is triggered.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=80
 	// +optional
 	UtilizationThresholdPercent *int `json:"utilizationThresholdPercent,omitempty"`
 
-	// StepPercent specifies the percentage increase for the PVC capacity during scale-up.
+	// StepPercent specifies the percentage by which to change the PVC storage capacity when scaling.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=10
@@ -33,11 +33,12 @@ type ScaleUpPolicy struct {
 
 	// MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
 	// This ensures that the capacity increase is at least this amount, regardless of the percentage.
-	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).isGreaterThan(quantity('0'))",message="minStepAbsolute must be > 0 if specified"
+	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).compareTo(quantity('1Gi')) >= 0",message="minStepAbsolute must be > 1 if specified"
 	// +kubebuilder:default="1Gi"
 	// +optional
 	MinStepAbsolute *resource.Quantity `json:"minStepAbsolute,omitempty"`
 
+	// This field is currenntly not used (NOOP), but will be implemented at a later stage.
 	// CooldownDuration specifies the duration to wait before another scale-up operation.
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
 	// +optional
@@ -45,26 +46,20 @@ type ScaleUpPolicy struct {
 }
 
 // VolumePolicy defines the autoscaling policy for a specific PVC
-// +kubebuilder:validation:XValidation:rule="!has(self.minCapacity) || !quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))",message="maxCapacity must be >= minCapacity"
 type VolumePolicy struct {
-	// MinCapacity specifies the minimum capacity for the PVC.
-	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).isGreaterThan(quantity('0'))",message="minCapacity must be > 0 if specified"
-	// +optional
-	MinCapacity *resource.Quantity `json:"minCapacity,omitempty"`
-
 	// MaxCapacity specifies the maximum capacity up to which a PVC is
-	// allowed to be extended.
+	// allowed to be extended. The max capacity is specified as a
+	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
 	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="maxCapacity must be > 0"
 	MaxCapacity resource.Quantity `json:"maxCapacity"`
 
 	// ScaleUp defines the policy for scaling up the PVC.
 	// +kubebuilder:default:={}
 	// +optional
-	ScaleUp ScaleUpPolicy `json:"scaleUp,omitempty"`
+	ScaleUp *ScalingRules `json:"scaleUp,omitempty"`
 }
 
-// PersistentVolumeClaimAutoscalerSpec defines the desired state of
-// PersistentVolumeClaimAutoscaler
+// PersistentVolumeClaimAutoscalerSpec defines the desired state of the PersistentVolumeClaimAutoscaler.
 type PersistentVolumeClaimAutoscalerSpec struct {
 	// TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
 	// whose PVCs will be managed by the autoscaler.

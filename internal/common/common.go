@@ -35,13 +35,13 @@ const (
 	// ControllerName is the name of the controller
 	ControllerName = "pvc_autoscaler"
 
-	// DefaultThresholdValue is the default threshold value, if not
+	// DefaultThresholdPercent is the default threshold value, if not
 	// specified for a PVC object.
-	DefaultThresholdValue = 80
+	DefaultThresholdPercent = 80
 
-	// DefaultIncreaseByValue is the default increase-by value, if not
+	// DefaultStepPercent is the default increase-by value, if not
 	// specified for a PVC object.
-	DefaultIncreaseByValue = 10
+	DefaultStepPercent = 10
 
 	// ScalingResolutionBytes is the smallest possible step. Any storage
 	// request set by the autoscaler is guaranteed to be divisible by that
