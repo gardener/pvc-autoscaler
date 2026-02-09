@@ -14,10 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ScalingRules defines the policy for scaling a PVC.
+// ScalingRules defines the rules for scaling a PVC.
 type ScalingRules struct {
-	// UtilizationThresholdPercent specifies the threshold percentage for used space.
-	// When the used space or inodes exceed this threshold, a scale-up is triggered.
+	// UtilizationThresholdPercent specifies the threshold percentage for used space and inodes.
+	// When the used space or inodes passes this threshold, a the PVC is scaled.
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=80
@@ -31,15 +31,15 @@ type ScalingRules struct {
 	// +optional
 	StepPercent *int `json:"stepPercent,omitempty"`
 
-	// MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
-	// This ensures that the capacity increase is at least this amount, regardless of the percentage.
+	// MinStepAbsolute specifies the minimum absolute change in capacity during scaling.
+	// This ensures that the change in capacity is at least this amount, regardless of the percentage.
 	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).compareTo(quantity('1Gi')) >= 0",message="minStepAbsolute must be > 1 if specified"
 	// +kubebuilder:default="1Gi"
 	// +optional
 	MinStepAbsolute *resource.Quantity `json:"minStepAbsolute,omitempty"`
 
 	// This field is currenntly not used (NOOP), but will be implemented at a later stage.
-	// CooldownDuration specifies the duration to wait before another scale-up operation.
+	// CooldownDuration specifies the duration to wait before another scaling operation.
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
@@ -53,7 +53,7 @@ type VolumePolicy struct {
 	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="maxCapacity must be > 0"
 	MaxCapacity resource.Quantity `json:"maxCapacity"`
 
-	// ScaleUp defines the policy for scaling up the PVC.
+	// ScaleUp defines the rules for scaling up the PVC.
 	// +kubebuilder:default:={}
 	// +optional
 	ScaleUp *ScalingRules `json:"scaleUp,omitempty"`

@@ -89,12 +89,12 @@ spec:
                         rule: quantity(self).isGreaterThan(quantity('0'))
                     scaleUp:
                       default: {}
-                      description: ScaleUp defines the policy for scaling up the PVC.
+                      description: ScaleUp defines the rules for scaling up the PVC.
                       properties:
                         cooldownDuration:
                           description: |-
                             This field is currenntly not used (NOOP), but will be implemented at a later stage.
-                            CooldownDuration specifies the duration to wait before another scale-up operation.
+                            CooldownDuration specifies the duration to wait before another scaling operation.
                           type: string
                           x-kubernetes-validations:
                           - message: cooldownDuration must be > 0s
@@ -105,8 +105,8 @@ spec:
                           - type: string
                           default: 1Gi
                           description: |-
-                            MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
-                            This ensures that the capacity increase is at least this amount, regardless of the percentage.
+                            MinStepAbsolute specifies the minimum absolute change in capacity during scaling.
+                            This ensures that the change in capacity is at least this amount, regardless of the percentage.
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
                           x-kubernetes-validations:
@@ -123,8 +123,8 @@ spec:
                         utilizationThresholdPercent:
                           default: 80
                           description: |-
-                            UtilizationThresholdPercent specifies the threshold percentage for used space.
-                            When the used space or inodes exceed this threshold, a scale-up is triggered.
+                            UtilizationThresholdPercent specifies the threshold percentage for used space and inodes.
+                            When the used space or inodes passes this threshold, a the PVC is scaled.
                           maximum: 100
                           minimum: 1
                           type: integer
