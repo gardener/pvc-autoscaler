@@ -29,19 +29,6 @@ type PersistentVolumeClaimAutoscaler struct {
 	Status PersistentVolumeClaimAutoscalerStatus `json:"status,omitempty"`
 }
 
-// SetCondition sets the given [metav1.Condition] for the object.
-func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, klient client.Client, condition metav1.Condition) error {
-	patch := client.MergeFrom(obj.DeepCopy())
-	conditions := obj.Status.Conditions
-	if len(conditions) == 0 {
-		conditions = make([]metav1.Condition, 0)
-	}
-	meta.SetStatusCondition(&conditions, condition)
-	obj.Status.Conditions = conditions
-
-	return klient.Status().Patch(ctx, obj, patch)
-}
-
 // +kubebuilder:object:root=true
 
 // PersistentVolumeClaimAutoscalerList contains a list of PersistentVolumeClaimAutoscaler
@@ -148,4 +135,17 @@ type ScalingRules struct {
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
+}
+
+// SetCondition sets the given [metav1.Condition] for the object.
+func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, klient client.Client, condition metav1.Condition) error {
+	patch := client.MergeFrom(obj.DeepCopy())
+	conditions := obj.Status.Conditions
+	if len(conditions) == 0 {
+		conditions = make([]metav1.Condition, 0)
+	}
+	meta.SetStatusCondition(&conditions, condition)
+	obj.Status.Conditions = conditions
+
+	return klient.Status().Patch(ctx, obj, patch)
 }
