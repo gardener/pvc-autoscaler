@@ -59,7 +59,10 @@ spec:
   targetRef:
     apiVersion: v1
     kind: PersistentVolumeClaim
-    name: vali-vali-0
-  threshold: "20%"      # Trigger scaling when free space < 20%
-  increaseBy: "10%"     # Increase capacity by 10%
-  maxCapacity: 200Gi      # Maximum allowed size
+    name: vali-vali-0    
+  volumePolicies:
+  - maxCapacity: 200Gi                    # Maximum allowed size
+    scaleUp:
+      utilizationThresholdPercent: 80     # Trigger scaling when used space > 80%
+      stepPercent: 10                     # Increase capacity by 10%
+      minStepAbsolute: 1Gi                # Minimum increase size

@@ -6,10 +6,13 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: persistentvolumeclaimautoscaler-sample
 spec:
-  increaseBy: "10%"
-  threshold: "20%"
-  maxCapacity: 5Gi
   targetRef:
     apiVersion: v1
     kind: PersistentVolumeClaim
     name: test-pvc-1
+  volumePolicies:
+  - maxCapacity: 3Gi
+    scaleUp:
+      utilizationThresholdPercent: 80
+      stepPercent: 10
+      minStepAbsolute: 1Gi
