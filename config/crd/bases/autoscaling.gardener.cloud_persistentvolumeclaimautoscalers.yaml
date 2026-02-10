@@ -124,7 +124,7 @@ spec:
                           default: 80
                           description: |-
                             UtilizationThresholdPercent specifies the threshold percentage for used space and inodes.
-                            When the used space or inodes passes this threshold, a the PVC is scaled.
+                            When the used space or inodes passes this threshold, the PVC is scaled.
                           maximum: 100
                           minimum: 1
                           type: integer
