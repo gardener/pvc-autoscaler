@@ -20,15 +20,6 @@ spec:
     - jsonPath: .spec.targetRef.name
       name: Target
       type: string
-    - jsonPath: .spec.increaseBy
-      name: Increase By
-      type: string
-    - jsonPath: .spec.threshold
-      name: Threshold
-      type: string
-    - jsonPath: .spec.maxCapacity
-      name: Max Capacity
-      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -54,29 +45,13 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              PersistentVolumeClaimAutoscalerSpec defines the desired state of
-              PersistentVolumeClaimAutoscaler
+            description: PersistentVolumeClaimAutoscalerSpec defines the desired state
+              of the PersistentVolumeClaimAutoscaler.
             properties:
-              increaseBy:
-                description: |-
-                  IncreaseBy specifies an increase by percentage value (e.g. 10%, 20%,
-                  etc.) by which the Persistent Volume Claim storage will be resized.
-                type: string
-              maxCapacity:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  MaxCapacity specifies the maximum capacity up to which a PVC is
-                  allowed to be extended. The max capacity is specified as a
-                  [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               targetRef:
                 description: |-
-                  TargetRef specifies the reference to the PVC which will be
-                  managed by the controller.
+                  TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
+                  whose PVCs will be managed by the autoscaler.
                 properties:
                   apiVersion:
                     description: apiVersion is the API version of the referent
@@ -92,13 +67,77 @@ spec:
                 - name
                 type: object
                 x-kubernetes-map-type: atomic
-              threshold:
-                description: |-
-                  Threshold specifies the threshold value in percentage (e.g. 10%, 20%,
-                  etc.) for the PVC. Once the available capacity (free space) for the
-                  PVC reaches or drops below the specified threshold this will trigger
-                  a resize operation by the controller.
-                type: string
+              volumePolicies:
+                description: VolumePolicies defines a list of policies for autoscaling
+                  PVCs.
+                items:
+                  description: VolumePolicy defines the autoscaling policy for a specific
+                    PVC
+                  properties:
+                    maxCapacity:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: |-
+                        MaxCapacity specifies the maximum capacity up to which a PVC is
+                        allowed to be extended. The max capacity is specified as a
+                        [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                      x-kubernetes-validations:
+                      - message: maxCapacity must be > 0
+                        rule: quantity(self).isGreaterThan(quantity('0'))
+                    scaleUp:
+                      default: {}
+                      description: ScaleUp defines the rules for scaling up the PVC.
+                      properties:
+                        cooldownDuration:
+                          description: |-
+                            This field is currenntly not used (NOOP), but will be implemented at a later stage.
+                            CooldownDuration specifies the duration to wait before another scaling operation.
+                          type: string
+                          x-kubernetes-validations:
+                          - message: cooldownDuration must be > 0s
+                            rule: duration(self) > duration('0s')
+                        minStepAbsolute:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          default: 1Gi
+                          description: |-
+                            MinStepAbsolute specifies the minimum absolute change in capacity during scaling.
+                            This ensures that the change in capacity is at least this amount, regardless of the percentage.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                          x-kubernetes-validations:
+                          - message: minStepAbsolute must be > 1 if specified
+                            rule: self == null || quantity(self).compareTo(quantity('1Gi'))
+                              >= 0
+                        stepPercent:
+                          default: 10
+                          description: StepPercent specifies the percentage by which
+                            to change the PVC storage capacity when scaling.
+                          maximum: 100
+                          minimum: 1
+                          type: integer
+                        utilizationThresholdPercent:
+                          default: 80
+                          description: |-
+                            UtilizationThresholdPercent specifies the threshold percentage for used space and inodes.
+                            When the used space or inodes passes this threshold, the PVC is scaled.
+                          maximum: 100
+                          minimum: 1
+                          type: integer
+                      type: object
+                  required:
+                  - maxCapacity
+                  type: object
+                maxItems: 1
+                minItems: 1
+                type: array
+            required:
+            - targetRef
+            - volumePolicies
             type: object
           status:
             description: |-

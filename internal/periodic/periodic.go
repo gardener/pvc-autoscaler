@@ -293,19 +293,16 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, common.ErrNoMetrics
 	}
 
-	// Validate the spec
-	if err := r.validatePVCA(pvca); err != nil {
-		return false, err
-	}
-
 	// Validate the PVC itself against the spec
 	currStatusSize := pvcObj.Status.Capacity.Storage()
 	if currStatusSize.IsZero() {
 		return false, fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
 	}
 
-	if pvca.Spec.MaxCapacity.Value() < currStatusSize.Value() {
-		return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", pvca.Spec.MaxCapacity.String(), currStatusSize.String())
+	// Only one volume policy is supported currently
+	policy := pvca.Spec.VolumePolicies[0]
+	if policy.MaxCapacity.Value() < currStatusSize.Value() {
+		return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
 	}
 
 	// We need a StorageClass with expansion support
@@ -324,7 +321,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, ErrStorageClassDoesNotSupportExpansion
 	}
 
-	// Detect whether the metrics source is reporting stale data.  Stale
+	// Detect whether the metrics source is reporting stale data. Stale
 	// metrics data would be when the volume info metrics reported by the
 	// metrics source are deviate from the current PVC size indicated by
 	// `.status.capacity.storage'
@@ -352,10 +349,9 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, common.ErrNoMetrics
 	}
 
-	threshold, err := utils.ParsePercentage(pvca.Spec.Threshold)
-	if err != nil {
-		return false, fmt.Errorf("cannot parse threshold: %w", err)
-	}
+	// Get threshold from volume policy
+	// Currently only one policy is supported and is enforced by the CRD schema
+	threshold := 100.0 - float64(*policy.ScaleUp.UtilizationThresholdPercent)
 
 	// VolumeMode should be Filesystem
 	if pvcObj.Spec.VolumeMode == nil {
@@ -403,30 +399,4 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	default:
 		return false, nil
 	}
-}
-
-// validatePVCA sanity checks the spec in order to ensure it contains valid
-// values. Returns nil if the spec is valid, and non-nil error otherwise.
-func (*Runner) validatePVCA(obj *v1alpha1.PersistentVolumeClaimAutoscaler) error {
-	threshold, err := utils.ParsePercentage(obj.Spec.Threshold)
-	if err != nil {
-		return fmt.Errorf("cannot parse threshold: %w", err)
-	}
-	if threshold == 0.0 {
-		return fmt.Errorf("invalid threshold: %w", common.ErrZeroPercentage)
-	}
-
-	if obj.Spec.MaxCapacity.IsZero() {
-		return fmt.Errorf("invalid max capacity: %w", common.ErrNoMaxCapacity)
-	}
-
-	increaseBy, err := utils.ParsePercentage(obj.Spec.IncreaseBy)
-	if err != nil {
-		return fmt.Errorf("cannot parse increase-by value: %w", err)
-	}
-	if increaseBy == 0.0 {
-		return fmt.Errorf("invalid increase-by: %w", common.ErrZeroPercentage)
-	}
-
-	return nil
 }

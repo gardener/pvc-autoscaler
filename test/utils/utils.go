@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
-	"github.com/gardener/pvc-autoscaler/internal/common"
 )
 
 const (
@@ -85,17 +84,15 @@ func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 	k8sClient client.Client,
 	name string,
 	targetRef autoscalingv1.CrossVersionObjectReference,
-	maxCapacity string) (*v1alpha1.PersistentVolumeClaimAutoscaler, error) {
+	volumePolicies []v1alpha1.VolumePolicy) (*v1alpha1.PersistentVolumeClaimAutoscaler, error) {
 	obj := &v1alpha1.PersistentVolumeClaimAutoscaler{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
 		Spec: v1alpha1.PersistentVolumeClaimAutoscalerSpec{
-			IncreaseBy:  common.DefaultIncreaseByValue,
-			Threshold:   common.DefaultThresholdValue,
-			MaxCapacity: resource.MustParse(maxCapacity),
-			TargetRef:   targetRef,
+			VolumePolicies: volumePolicies,
+			TargetRef:      targetRef,
 		},
 	}
 

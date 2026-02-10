@@ -191,91 +191,84 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 	}
 
-	// Calculate the new size
-	increaseBy, err := utils.ParsePercentage(pvca.Spec.IncreaseBy)
-	if err != nil {
-		eerr := fmt.Errorf("cannot parse increase-by value: %w", err)
-		condition := metav1.Condition{
-			Type:    utils.ConditionTypeHealthy,
-			Status:  metav1.ConditionUnknown,
-			Reason:  "Reconciling",
-			Message: eerr.Error(),
+	// Loop through volume policies. Currently only one policy is supported,
+	// but this structure allows for better readability and future expansion.
+	var condition metav1.Condition
+	for _, policy := range pvca.Spec.VolumePolicies {
+		// Calculate the new size
+		stepPercent := float64(*policy.ScaleUp.StepPercent)
+		increment := math.Max(float64(currSpecSize.Value())*(stepPercent/100.0), float64(policy.ScaleUp.MinStepAbsolute.Value()))
+		newSizeBytes := int64(math.Ceil((float64(currSpecSize.Value())+increment)/1073741824)) * 1073741824
+		newSize := resource.NewQuantity(newSizeBytes, resource.BinarySI)
+
+		// Check that we've got a valid new size. If we end up in any of these
+		// cases below, it pretty much means the logic is broken, so we don't
+		// want to retry any of them.
+		cmp := newSize.Cmp(*currSpecSize)
+		switch cmp {
+		case 0:
+			logger.Info("new and current size are the same")
+
+			return ctrl.Result{}, nil
+		case -1:
+			logger.Info("new size is less than current")
+
+			return ctrl.Result{}, nil
 		}
 
-		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
-	}
+		// We don't want to exceed the max capacity
+		if newSize.Value() > policy.MaxCapacity.Value() {
+			r.eventRecorder.Eventf(
+				pvcObj,
+				corev1.EventTypeWarning,
+				"MaxCapacityReached",
+				"max capacity (%s) has been reached, will not resize",
+				policy.MaxCapacity.String(),
+			)
+			logger.Info("max capacity reached")
+			metrics.MaxCapacityReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
+			condition = metav1.Condition{
+				Type:    utils.ConditionTypeHealthy,
+				Status:  metav1.ConditionFalse,
+				Reason:  "Reconciling",
+				Message: "Max capacity reached",
+			}
 
-	increment := float64(currSpecSize.Value()) * (increaseBy / 100.0)
-	newSizeBytes := int64(math.Ceil((float64(currSpecSize.Value())+increment)/1073741824)) * 1073741824
-	newSize := resource.NewQuantity(newSizeBytes, resource.BinarySI)
+			return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
+		}
 
-	// Check that we've got a valid new size. If we end up in any of these
-	// cases below, it pretty much means the logic is broken, so we don't
-	// want to retry any of them.
-	cmp := newSize.Cmp(*currSpecSize)
-	switch cmp {
-	case 0:
-		logger.Info("new and current size are the same")
-
-		return ctrl.Result{}, nil
-	case -1:
-		logger.Info("new size is less than current")
-
-		return ctrl.Result{}, nil
-	}
-
-	// We don't want to exceed the max capacity
-	if newSize.Value() > pvca.Spec.MaxCapacity.Value() {
+		// And finally we should be good to resize now
+		logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", newSize.String())
+		metrics.ResizedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
 		r.eventRecorder.Eventf(
 			pvcObj,
-			corev1.EventTypeWarning,
-			"MaxCapacityReached",
-			"max capacity (%s) has been reached, will not resize",
-			pvca.Spec.MaxCapacity.String(),
+			corev1.EventTypeNormal,
+			"ResizingStorage",
+			"resizing storage from %s to %s",
+			currSpecSize.String(),
+			newSize.String(),
 		)
-		logger.Info("max capacity reached")
-		metrics.MaxCapacityReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
-		condition := metav1.Condition{
+
+		// Update PVC and PVCA resources
+		pvcPatch := client.MergeFrom(pvcObj.DeepCopy())
+		pvcObj.Spec.Resources.Requests[corev1.ResourceStorage] = *newSize
+		if err := r.client.Patch(ctx, pvcObj, pvcPatch); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+		pvca.Status.PrevSize = *currStatusSize
+		pvca.Status.NewSize = *newSize
+		if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
+			return ctrl.Result{}, err
+		}
+
+		condition = metav1.Condition{
 			Type:    utils.ConditionTypeHealthy,
 			Status:  metav1.ConditionFalse,
 			Reason:  "Reconciling",
-			Message: "Max capacity reached",
+			Message: fmt.Sprintf("Resizing from %s to %s", currSpecSize.String(), newSize.String()),
 		}
-
-		return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
-	}
-
-	// And finally we should be good to resize now
-	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", newSize.String())
-	metrics.ResizedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
-	r.eventRecorder.Eventf(
-		pvcObj,
-		corev1.EventTypeNormal,
-		"ResizingStorage",
-		"resizing storage from %s to %s",
-		currSpecSize.String(),
-		newSize.String(),
-	)
-
-	// Update PVC and PVCA resources
-	pvcPatch := client.MergeFrom(pvcObj.DeepCopy())
-	pvcObj.Spec.Resources.Requests[corev1.ResourceStorage] = *newSize
-	if err := r.client.Patch(ctx, pvcObj, pvcPatch); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-	pvca.Status.PrevSize = *currStatusSize
-	pvca.Status.NewSize = *newSize
-	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	condition := metav1.Condition{
-		Type:    utils.ConditionTypeHealthy,
-		Status:  metav1.ConditionFalse,
-		Reason:  "Reconciling",
-		Message: fmt.Sprintf("Resizing from %s to %s", currSpecSize.String(), newSize.String()),
 	}
 
 	return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)

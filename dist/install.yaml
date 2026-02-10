@@ -44,15 +44,6 @@ spec:
     - jsonPath: .spec.targetRef.name
       name: Target
       type: string
-    - jsonPath: .spec.increaseBy
-      name: Increase By
-      type: string
-    - jsonPath: .spec.threshold
-      name: Threshold
-      type: string
-    - jsonPath: .spec.maxCapacity
-      name: Max Capacity
-      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -82,44 +73,106 @@ spec:
               PersistentVolumeClaimAutoscalerSpec defines the desired state of
               PersistentVolumeClaimAutoscaler
             properties:
-              increaseBy:
-                description: |-
-                  IncreaseBy specifies an increase by percentage value (e.g. 10%, 20%,
-                  etc.) by which the Persistent Volume Claim storage will be resized.
-                type: string
-              maxCapacity:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  MaxCapacity specifies the maximum capacity up to which a PVC is
-                  allowed to be extended. The max capacity is specified as a
-                  [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               targetRef:
                 description: |-
-                  TargetRef specifies the reference to the PVC which will be
-                  managed by the controller.
+                  TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
+                  whose PVCs will be managed by the autoscaler.
                 properties:
-                  name:
-                    default: ""
-                    description: |-
-                      Name of the referent.
-                      This field is effectively required, but due to backwards compatibility is
-                      allowed to be empty. Instances of this type with an empty value here are
-                      almost certainly wrong.
-                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                  apiVersion:
+                    description: apiVersion is the API version of the referent
                     type: string
+                  kind:
+                    description: 'kind is the kind of the referent; More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+                    type: string
+                  name:
+                    description: 'name is the name of the referent; More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names'
+                    type: string
+                required:
+                - kind
+                - name
                 type: object
                 x-kubernetes-map-type: atomic
-              threshold:
-                description: |-
-                  Threshold specifies the threshold value in percentage (e.g. 10%, 20%,
-                  etc.) for the PVC. Once the available capacity (free space) for the
-                  PVC reaches or drops below the specified threshold this will trigger
-                  a resize operation by the controller.
-                type: string
+              volumePolicies:
+                description: VolumePolicies defines a list of policies for autoscaling
+                  PVCs.
+                items:
+                  description: VolumePolicy defines the autoscaling policy for a specific
+                    PVC
+                  properties:
+                    maxCapacity:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: |-
+                        MaxCapacity specifies the maximum capacity up to which a PVC is
+                        allowed to be extended.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                      x-kubernetes-validations:
+                      - message: maxCapacity must be > 0
+                        rule: quantity(self).isGreaterThan(quantity('0'))
+                    minCapacity:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: MinCapacity specifies the minimum capacity for
+                        the PVC.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                      x-kubernetes-validations:
+                      - message: minCapacity must be > 0
+                        rule: quantity(self).isGreaterThan(quantity('0'))
+                    scaleUp:
+                      description: ScaleUp defines the policy for scaling up the PVC.
+                      properties:
+                        cooldownDuration:
+                          description: CooldownDuration specifies the duration to
+                            wait before another scale-up operation.
+                          type: string
+                          x-kubernetes-validations:
+                          - message: cooldownDuration must be greater than 0
+                            rule: duration(self) > duration('0s')
+                        minStepAbsolute:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: |-
+                            MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
+                            This ensures that the capacity increase is at least this amount, regardless of the percentage.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        stepPercent:
+                          default: 10
+                          description: StepPercent specifies the percentage increase
+                            for the PVC capacity during scale-up.
+                          maximum: 100
+                          minimum: 1
+                          type: integer
+                        utilizationThresholdPercent:
+                          default: 90
+                          description: |-
+                            UtilizationThresholdPercent specifies the threshold percentage for used space.
+                            When the used space reaches or exceeds this threshold, a scale-up is triggered.
+                          maximum: 100
+                          minimum: 1
+                          type: integer
+                      required:
+                      - cooldownDuration
+                      - minStepAbsolute
+                      type: object
+                  required:
+                  - maxCapacity
+                  - scaleUp
+                  type: object
+                  x-kubernetes-validations:
+                  - message: maxCapacity must be >= minCapacity
+                    rule: '!quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))'
+                maxItems: 1
+                minItems: 1
+                type: array
+            required:
+            - targetRef
+            - volumePolicies
             type: object
           status:
             description: |-
@@ -513,6 +566,235 @@ subjects:
   namespace: pvc-autoscaler-system
 ---
 apiVersion: v1
+data:
+  metrics.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Fake available bytes in volumes
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="monitoring",persistentvolumeclaim="vali-vali-0",type="fake"} 1073741824
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="vali-vali-0-test-sts-0",type="fake"} 1073741824
+    kubelet_volume_stats_available_bytes{namespace="default",persistentvolumeclaim="test-pvc-2",type="fake"} 4294967296
+
+    # HELP kubelet_volume_stats_capacity_bytes Fake capacity bytes of volumes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="monitoring",persistentvolumeclaim="vali-vali-0",type="fake"} 107374182400
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="vali-vali-0-test-sts-0",type="fake"} 107374182400
+    kubelet_volume_stats_capacity_bytes{namespace="default",persistentvolumeclaim="test-pvc-2",type="fake"} 53687091200
+
+    # HELP kubelet_volume_stats_inodes_free Fake free inodes in volumes
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="monitoring",persistentvolumeclaim="vali-vali-0",type="fake"} 65536
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="vali-vali-0-test-sts-0",type="fake"} 65536
+    kubelet_volume_stats_inodes_free{namespace="default",persistentvolumeclaim="test-pvc-2",type="fake"} 262144
+
+    # HELP kubelet_volume_stats_inodes Fake total inodes in volumes
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="monitoring",persistentvolumeclaim="vali-vali-0",type="fake"} 655360
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="vali-vali-0-test-sts-0",type="fake"} 655360
+    kubelet_volume_stats_inodes{namespace="default",persistentvolumeclaim="test-pvc-2",type="fake"} 327680
+  nginx.conf: "events {\n    worker_connections 1024;\n}\n\nhttp {\n    server {\n
+    \       listen 8080;\n        \n        # Serve static fake Prometheus metrics
+    from file\n        location /metrics {\n            add_header Content-Type text/plain;\n
+    \           alias /etc/nginx/metrics.txt;\n        }\n        \n        # Health
+    check endpoint\n        location /health {\n            add_header Content-Type
+    text/plain;\n            return 200 'OK';\n        }\n    }\n}"
+  pod_bytes_high_1Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 129023424
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 65536
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 65536
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_bytes_high_1Gi{stage="2",description="bytes_high"} 1
+  pod_bytes_high_2Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 260046848
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 2147483648
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 131000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 131000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_bytes_high_2Gi{stage="4",description="bytes_high"} 1
+  pod_bytes_high_3Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 0
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 3221225472
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 196000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 196000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_bytes_high_3Gi{stage="6",description="bytes_high"} 1
+  pod_bytes_low_1Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 65536
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 65536
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_bytes_low_1Gi{stage="1",description="bytes_low"} 1
+  pod_bytes_low_2Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 1203765248
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 2147483648
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 131000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 131000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_bytes_low_2Gi{stage="3",description="bytes_low"} 1
+  pod_bytes_low_3Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 1333788672
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 3221225472
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 196000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-1",type="fake"} 196000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_bytes_low_3Gi{stage="5",description="bytes_low"} 1
+  pod_inode_high_1Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 5536
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 65536
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_inode_high_1Gi{stage="8",description="inode_high"} 1
+  pod_inode_high_2Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 2147483648
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 2147483648
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 11000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 131000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_inode_high_2Gi{stage="10",description="inode_high"} 1
+  pod_inode_high_3Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 3221225472
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 3221225472
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 0
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 196000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_inode_high_3Gi{stage="12",description="inode_high"} 1
+  pod_inode_low_1Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 65536
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 65536
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_inode_low_1Gi{stage="7",description="inode_low"} 1
+  pod_inode_low_2Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 2147483648
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 2147483648
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 71000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 131000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_inode_low_2Gi{stage="9",description="inode_low"} 1
+  pod_inode_low_3Gi.txt: |-
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 3221225472
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 3221225472
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 76000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-2",type="fake"} 196000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_inode_low_3Gi{stage="11",description="inode_low"} 1
+kind: ConfigMap
+metadata:
+  name: pvc-autoscaler-minimal-fake-metrics-config-b7f56kmbbb
+  namespace: pvc-autoscaler-system
+---
+apiVersion: v1
 kind: Service
 metadata:
   labels:
@@ -537,6 +819,24 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  annotations:
+    networking.resources.monitoringer.cloud/from-all-seed-scrape-targets-allowed-ports: '[{"protocol":"TCP","port":8080}]'
+  labels:
+    app: minimal-fake-metrics-server
+  name: pvc-autoscaler-minimal-fake-metrics-server
+  namespace: pvc-autoscaler-system
+spec:
+  ports:
+  - name: metrics
+    port: 8080
+    targetPort: 8080
+  selector:
+    app: minimal-fake-metrics-server
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
   labels:
     app.kubernetes.io/managed-by: kustomize
     app.kubernetes.io/name: pvc-autoscaler
@@ -549,6 +849,19 @@ spec:
     targetPort: 9443
   selector:
     control-plane: controller-manager
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-autoscaler-metrics-test
+  namespace: pvc-autoscaler-system
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  volumeMode: Filesystem
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -581,9 +894,11 @@ spec:
         - --metrics-bind-address=127.0.0.1:8080
         - --leader-elect
         - --interval=30s
-        - --prometheus-address=http://prometheus-k8s.monitoring.svc.cluster.local:9090
-        command:
-        - /manager
+        - --prometheus-address=http://kind-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090
+        - --metrics-available-bytes-query=kubelet_volume_stats_available_bytes{type="fake"}
+        - --metrics-capacity-bytes-query=kubelet_volume_stats_capacity_bytes{type="fake"}
+        - --metrics-available-inodes-query=kubelet_volume_stats_inodes_free{type="fake"}
+        - --metrics-capacity-inodes-query=kubelet_volume_stats_inodes{type="fake"}
         image: europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler:latest
         livenessProbe:
           httpGet:
@@ -651,6 +966,130 @@ spec:
           defaultMode: 420
           secretName: webhook-server-cert
 ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: minimal-fake-metrics-server
+  name: pvc-autoscaler-minimal-fake-metrics-server
+  namespace: pvc-autoscaler-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minimal-fake-metrics-server
+  template:
+    metadata:
+      annotations:
+        fake-metrics.pvc-autoscaler.io/stage: pod_bytes_low_1Gi
+      labels:
+        app: minimal-fake-metrics-server
+    spec:
+      containers:
+      - image: nginx:alpine
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        name: nginx
+        ports:
+        - containerPort: 8080
+          name: metrics
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        volumeMounts:
+        - mountPath: /etc/nginx/nginx.conf
+          name: config
+          subPath: nginx.conf
+        - mountPath: /etc/nginx
+          name: nginx-served-metrics
+      initContainers:
+      - command:
+        - /bin/sh
+        - -c
+        - "echo \"Waiting for metrics-test-pod...\"\nchroot /host kubectl wait --for=condition=Ready
+          --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod
+          --kubeconfig=/etc/kubernetes/admin.conf\n\necho \"Starting kubelet_volume_stats_*
+          metrics validation...\"\nnode_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}'
+          --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)\nmetrics_path=\"/api/v1/nodes/${node_name}/proxy/metrics\"\n\n#
+          Retry logic: try every 10 seconds for up to 3 minutes\nmax_attempts=18\nattempt=1\nsuccess=false\n\nwhile
+          [ $attempt -le $max_attempts ]; do\n  echo \"Attempt $attempt/$max_attempts:
+          Fetching kubelet metrics...\"\n  \n  output=$(chroot /host kubectl get --raw
+          \"${metrics_path}\" --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)\n
+          \ exit_status=$?\n  \n  if [ $exit_status -eq 0 ]; then\n    echo \"Successfully
+          accessed kubelet metrics endpoint\"\n    if echo \"${output}\" | grep -q
+          \"kubelet_volume_stats_\"; then\n      echo \"kubelet_volume_stats_* metrics
+          found:\"\n      echo \"${output}\" | grep \"kubelet_volume_stats_\"\n      success=true\n
+          \     break\n    else\n      echo \"kubelet_volume_stats_* metrics NOT found
+          in response\"\n    fi\n  else\n    echo \"Cannot access kubelet metrics
+          endpoint (exit code: $exit_status)\"\n  fi\n  \n  echo \"Waiting 10 seconds
+          before next attempt...\"\n  sleep 10\n  attempt=$((attempt + 1))\ndone\n\nif
+          [ \"$success\" = \"false\" ]; then\n  echo \"ERROR: Failed to find kubelet_volume_stats_*
+          metrics after 3 minutes\"\n  exit 1\nfi\n\necho \"kubelet_volume_stats_*
+          metrics validation completed successfully\"\n"
+        image: busybox:latest
+        name: metrics-verifier
+        securityContext:
+          privileged: true
+        volumeMounts:
+        - mountPath: /host
+          name: host-root
+          readOnly: true
+      - command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Multi-stage fake metrics server initializing..."
+
+          # Get stage from downward API environment variable
+          STAGE_FILE="${METRICS_STAGE}.txt"
+
+          echo "Selected stage: ${METRICS_STAGE}"
+          echo "Looking for file: ${STAGE_FILE}"
+
+          # Check if the stage file exists
+          if [ -f "/config/${STAGE_FILE}" ]; then
+            echo "Found stage file: ${STAGE_FILE}"
+            cp "/config/${STAGE_FILE}" "/etc/nginx/metrics.txt"
+          else
+            echo "ERROR: Stage file ${STAGE_FILE} not found"
+            echo "Available stages:"
+            ls -la /config/stage*.txt || true
+            exit 1
+          fi
+
+          echo "Stage selection completed. Current stage: ${METRICS_STAGE}"
+          echo "Content preview:"
+          cat "/etc/nginx/metrics.txt"
+        env:
+        - name: METRICS_STAGE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.annotations['fake-metrics.pvc-autoscaler.io/stage']
+        image: busybox:latest
+        name: stage-selector
+        volumeMounts:
+        - mountPath: /config
+          name: config
+        - mountPath: /etc/nginx
+          name: nginx-served-metrics
+      volumes:
+      - configMap:
+          name: pvc-autoscaler-minimal-fake-metrics-config-b7f56kmbbb
+        name: config
+      - emptyDir: {}
+        name: nginx-served-metrics
+      - hostPath:
+          path: /
+          type: Directory
+        name: host-root
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -683,36 +1122,86 @@ metadata:
 spec:
   selfSigned: {}
 ---
-apiVersion: admissionregistration.k8s.io/v1
-kind: MutatingWebhookConfiguration
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
 metadata:
-  annotations:
-    cert-manager.io/inject-ca-from: pvc-autoscaler-system/pvc-autoscaler-serving-cert
   labels:
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/created-by: pvc-autoscaler
+    app.kubernetes.io/instance: controller-manager-metrics-monitor
     app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: pvc-autoscaler
-  name: pvc-autoscaler-mutating-webhook-configuration
-webhooks:
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: pvc-autoscaler-webhook-service
-      namespace: pvc-autoscaler-system
-      path: /mutate-autoscaling-gardener-cloud-v1alpha1-persistentvolumeclaimautoscaler
-  failurePolicy: Fail
-  name: mpersistentvolumeclaimautoscaler.kb.io
-  rules:
-  - apiGroups:
-    - autoscaling.gardener.cloud
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - persistentvolumeclaimautoscalers
-  sideEffects: None
+    app.kubernetes.io/name: servicemonitor
+    app.kubernetes.io/part-of: pvc-autoscaler
+    control-plane: controller-manager
+  name: pvc-autoscaler-controller-manager-metrics-monitor
+  namespace: pvc-autoscaler-system
+spec:
+  endpoints:
+  - bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+    path: /metrics
+    port: https
+    scheme: https
+    tlsConfig:
+      insecureSkipVerify: true
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app: minimal-fake-metrics-server
+    release: kind-prometheus
+  name: pvc-autoscaler-minimal-fake-metrics-server
+  namespace: pvc-autoscaler-system
+spec:
+  endpoints:
+  - honorLabels: false
+    interval: 30s
+    metricRelabelings:
+    - action: keep
+      regex: kubelet_volume_stats_.*
+      sourceLabels:
+      - __name__
+    - action: keep
+      regex: fake
+      sourceLabels:
+      - type
+    path: /metrics
+    port: metrics
+    relabelings:
+    - replacement: fake-metrics-server
+      targetLabel: instance
+    - replacement: fake-kubelet-metrics
+      targetLabel: job
+    scrapeTimeout: 30s
+  selector:
+    matchLabels:
+      app: minimal-fake-metrics-server
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: metrics-test-pod
+  name: pvc-autoscaler-metrics-test-pod
+  namespace: pvc-autoscaler-system
+spec:
+  containers:
+  - command:
+    - sleep
+    - infinity
+    image: busybox:latest
+    name: metrics-test-container
+    volumeMounts:
+    - mountPath: /data
+      name: data-volume
+  restartPolicy: Always
+  volumes:
+  - name: data-volume
+    persistentVolumeClaim:
+      claimName: pvc-autoscaler-metrics-test
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration

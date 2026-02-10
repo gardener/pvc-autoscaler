@@ -14,27 +14,45 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// PersistentVolumeClaimAutoscalerSpec defines the desired state of
-// PersistentVolumeClaimAutoscaler
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=pvca
+// +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetRef.name`
+
+// PersistentVolumeClaimAutoscaler is the Schema for the
+// persistentvolumeclaimautoscalers API
+type PersistentVolumeClaimAutoscaler struct {
+	metav1.TypeMeta   `json:",inline"`            // nolint:revive
+	metav1.ObjectMeta `json:"metadata,omitempty"` // nolint:revive
+
+	Spec   PersistentVolumeClaimAutoscalerSpec   `json:"spec,omitempty"`
+	Status PersistentVolumeClaimAutoscalerStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// PersistentVolumeClaimAutoscalerList contains a list of PersistentVolumeClaimAutoscaler
+type PersistentVolumeClaimAutoscalerList struct {
+	metav1.TypeMeta `json:",inline"` // nolint:revive
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	Items []PersistentVolumeClaimAutoscaler `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&PersistentVolumeClaimAutoscaler{}, &PersistentVolumeClaimAutoscalerList{})
+}
+
+// PersistentVolumeClaimAutoscalerSpec defines the desired state of the PersistentVolumeClaimAutoscaler.
 type PersistentVolumeClaimAutoscalerSpec struct {
-	// IncreaseBy specifies an increase by percentage value (e.g. 10%, 20%,
-	// etc.) by which the Persistent Volume Claim storage will be resized.
-	IncreaseBy string `json:"increaseBy,omitempty"`
+	// TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
+	// whose PVCs will be managed by the autoscaler.
+	TargetRef autoscalingv1.CrossVersionObjectReference `json:"targetRef"`
 
-	// Threshold specifies the threshold value in percentage (e.g. 10%, 20%,
-	// etc.) for the PVC. Once the available capacity (free space) for the
-	// PVC reaches or drops below the specified threshold this will trigger
-	// a resize operation by the controller.
-	Threshold string `json:"threshold,omitempty"`
-
-	// MaxCapacity specifies the maximum capacity up to which a PVC is
-	// allowed to be extended. The max capacity is specified as a
-	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
-	MaxCapacity resource.Quantity `json:"maxCapacity,omitempty"`
-
-	// TargetRef specifies the reference to the PVC which will be
-	// managed by the controller.
-	TargetRef autoscalingv1.CrossVersionObjectReference `json:"targetRef,omitempty"`
+	// VolumePolicies defines a list of policies for autoscaling PVCs.
+	// +kubebuilder:validation:MinItems=1
+	// +kubebuilder:validation:MaxItems=1
+	VolumePolicies []VolumePolicy `json:"volumePolicies"`
 }
 
 // PersistentVolumeClaimAutoscalerStatus defines the observed state of
@@ -74,22 +92,49 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// +kubebuilder:object:root=true
-// +kubebuilder:subresource:status
-// +kubebuilder:resource:shortName=pvca
-// +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetRef.name`
-// +kubebuilder:printcolumn:name="Increase By",type=string,JSONPath=`.spec.increaseBy`
-// +kubebuilder:printcolumn:name="Threshold",type=string,JSONPath=`.spec.threshold`
-// +kubebuilder:printcolumn:name="Max Capacity",type=string,JSONPath=`.spec.maxCapacity`
+// VolumePolicy defines the autoscaling policy for a specific PVC
+type VolumePolicy struct {
+	// MaxCapacity specifies the maximum capacity up to which a PVC is
+	// allowed to be extended. The max capacity is specified as a
+	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
+	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="maxCapacity must be > 0"
+	MaxCapacity resource.Quantity `json:"maxCapacity"`
 
-// PersistentVolumeClaimAutoscaler is the Schema for the
-// persistentvolumeclaimautoscalers API
-type PersistentVolumeClaimAutoscaler struct {
-	metav1.TypeMeta   `json:",inline"`            // nolint:revive
-	metav1.ObjectMeta `json:"metadata,omitempty"` // nolint:revive
+	// ScaleUp defines the rules for scaling up the PVC.
+	// +kubebuilder:default:={}
+	// +optional
+	ScaleUp *ScalingRules `json:"scaleUp,omitempty"`
+}
 
-	Spec   PersistentVolumeClaimAutoscalerSpec   `json:"spec,omitempty"`
-	Status PersistentVolumeClaimAutoscalerStatus `json:"status,omitempty"`
+// ScalingRules defines the rules for scaling a PVC.
+type ScalingRules struct {
+	// UtilizationThresholdPercent specifies the threshold percentage for used space and inodes.
+	// When the used space or inodes passes this threshold, the PVC is scaled.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=80
+	// +optional
+	UtilizationThresholdPercent *int `json:"utilizationThresholdPercent,omitempty"`
+
+	// StepPercent specifies the percentage by which to change the PVC storage capacity when scaling.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=10
+	// +optional
+	StepPercent *int `json:"stepPercent,omitempty"`
+
+	// MinStepAbsolute specifies the minimum absolute change in capacity during scaling.
+	// This ensures that the change in capacity is at least this amount, regardless of the percentage.
+	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).compareTo(quantity('1Gi')) >= 0",message="minStepAbsolute must be > 1 if specified"
+	// +kubebuilder:default="1Gi"
+	// +optional
+	MinStepAbsolute *resource.Quantity `json:"minStepAbsolute,omitempty"`
+
+	// This field is currenntly not used (NOOP), but will be implemented at a later stage.
+	// CooldownDuration specifies the duration to wait before another scaling operation.
+	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
+	// +optional
+	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }
 
 // SetCondition sets the given [metav1.Condition] for the object.
@@ -103,18 +148,4 @@ func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, kl
 	obj.Status.Conditions = conditions
 
 	return klient.Status().Patch(ctx, obj, patch)
-}
-
-// +kubebuilder:object:root=true
-
-// PersistentVolumeClaimAutoscalerList contains a list of PersistentVolumeClaimAutoscaler
-type PersistentVolumeClaimAutoscalerList struct {
-	metav1.TypeMeta `json:",inline"` // nolint:revive
-	metav1.ListMeta `json:"metadata,omitempty"`
-
-	Items []PersistentVolumeClaimAutoscaler `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&PersistentVolumeClaimAutoscaler{}, &PersistentVolumeClaimAutoscalerList{})
 }
