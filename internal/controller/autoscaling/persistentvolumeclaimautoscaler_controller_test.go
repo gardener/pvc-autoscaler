@@ -8,6 +8,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -26,7 +27,6 @@ import (
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	controller "github.com/gardener/pvc-autoscaler/internal/controller/autoscaling"
-	"github.com/gardener/pvc-autoscaler/internal/utils"
 	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 )
 
@@ -42,15 +42,15 @@ func newReconciler() (*controller.PersistentVolumeClaimAutoscalerReconciler, err
 	return reconciler, err
 }
 
-// getHealthyCondition gets and returns the [utils.ConditionTypeHealthy] status
+// getResizingCondition gets and returns the [utils.ConditionTypeResizing] status
 // condition for the given PVC Autoscaler resource.
-func getHealthyCondition(ctx context.Context, c client.Client, key client.ObjectKey) (*metav1.Condition, error) {
+func getResizingCondition(ctx context.Context, c client.Client, key client.ObjectKey) (*metav1.Condition, error) {
 	obj := &v1alpha1.PersistentVolumeClaimAutoscaler{}
 	if err := c.Get(ctx, key, obj); err != nil {
 		return nil, err
 	}
 
-	return meta.FindStatusCondition(obj.Status.Conditions, utils.ConditionTypeHealthy), nil
+	return meta.FindStatusCondition(obj.Status.Conditions, string(v1alpha1.ConditionTypeResizing)), nil
 }
 
 var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
@@ -154,6 +154,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
+			// Set FreeSpacePercentage below threshold to trigger storage threshold reason
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.FreeSpacePercentage = "5%"
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
 			// We should see this PVC being skipped because it is resizing
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvca)}
 			reconciler, err := newReconciler()
@@ -167,18 +172,19 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("resize has been started"))
 
 			// Check status condition
-			condition, err := getHealthyCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(condition).NotTo(BeNil())
-			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(condition.Reason).To(Equal("Reconciling"))
-			Expect(condition.Message).To(Equal("Resize has been started"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(controller.ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("resize has been started"))
+			Expect(condition.Message).To(ContainSubstring("storage threshold"))
 		})
 
 		It("should skip reconcile if filesystem resize is pending", func() {
@@ -226,6 +232,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
+			// Set FreeInodesPercentage below threshold to trigger inodes threshold reason
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.FreeInodesPercentage = "5%"
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
 			// We should see this PVC being skipped because the filesystem resize is pending
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvca)}
 			reconciler, err := newReconciler()
@@ -239,18 +250,19 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("filesystem resize is pending"))
 
 			// Check status condition
-			condition, err := getHealthyCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(condition).NotTo(BeNil())
-			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(condition.Reason).To(Equal("Reconciling"))
-			Expect(condition.Message).To(Equal("File system resize is pending"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(controller.ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("file system resize is pending"))
+			Expect(condition.Message).To(ContainSubstring("inodes threshold"))
 		})
 
 		It("should skip reconcile if volume is being modified", func() {
@@ -298,6 +310,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
+			// Set FreeSpacePercentage below threshold to trigger storage threshold reason
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.FreeSpacePercentage = "5%"
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
 			// We should see this PVC being skipped because the volume is being modified
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvca)}
 			reconciler, err := newReconciler()
@@ -311,18 +328,19 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("volume is being modified"))
 
 			// Check status condition
-			condition, err := getHealthyCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(condition).NotTo(BeNil())
-			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(condition.Reason).To(Equal("Reconciling"))
-			Expect(condition.Message).To(Equal("Volume is being modified"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(controller.ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("volume is being modified"))
+			Expect(condition.Message).To(ContainSubstring("storage threshold"))
 		})
 
 		It("should skip reconcile if pvc is still being resized", func() {
@@ -362,6 +380,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.PrevSize = resource.MustParse("1Gi")
+			pvca.Status.FreeInodesPercentage = "5%" // Set below threshold to trigger inodes threshold reason
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because current
@@ -379,18 +398,19 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("persistent volume claim is still being resized"))
 
 			// Check status condition
-			condition, err := getHealthyCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(condition).NotTo(BeNil())
-			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(condition.Reason).To(Equal("Reconciling"))
-			Expect(condition.Message).To(Equal("Persistent volume claim is still being resized"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(controller.ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("persistent volume claim is still being resized"))
+			Expect(condition.Message).To(ContainSubstring("inodes threshold"))
 		})
 
 		It("should successfully resize the pvc autoscaler resource", func() {
@@ -441,7 +461,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(buf.String()).To(ContainSubstring("resizing persistent volume claim"))
 
@@ -452,12 +472,12 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(increasedCapacity))
 
 			// Check status condition
-			condition, err := getHealthyCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(condition).NotTo(BeNil())
-			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(condition.Reason).To(Equal("Reconciling"))
-			Expect(condition.Message).To(Equal("Resizing from 1Gi to 2Gi"))
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(controller.ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("resizing from 1Gi to 2Gi"))
 		})
 
 		It("should not resize if max capacity has been reached", func() {
@@ -509,7 +529,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// First resize
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
 			Expect(err).NotTo(HaveOccurred())
 
 			wantLog := `"resizing persistent volume claim","pvc":"pvc-max-capacity-reached","from":"1Gi","to":"2Gi"}`
@@ -529,7 +549,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// Reconcile for the second time
 			result, err = reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{}))
+			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
 			Expect(err).NotTo(HaveOccurred())
 
 			wantLog = `"resizing persistent volume claim","pvc":"pvc-max-capacity-reached","from":"2Gi","to":"3Gi"}`
@@ -553,12 +573,12 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(buf.String()).To(ContainSubstring("max capacity reached"))
 
 			// Check status condition
-			condition, err := getHealthyCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(condition).NotTo(BeNil())
 			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
-			Expect(condition.Reason).To(Equal("Reconciling"))
-			Expect(condition.Message).To(Equal("Max capacity reached"))
+			Expect(condition.Reason).To(Equal(controller.ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("max capacity reached"))
 		})
 	})
 })
