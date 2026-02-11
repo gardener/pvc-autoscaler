@@ -12,10 +12,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ConditionTypeHealthy represents the type of the condition to represent
-// healthy state for the PVC Autoscaler.
-const ConditionTypeHealthy = "Healthy"
-
 // ErrBadPercentageValue is an error which is returned when attempting to parse
 // a bad percentage value.
 var ErrBadPercentageValue = errors.New("bad percentage value")
