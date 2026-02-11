@@ -42,7 +42,7 @@ function _test_consume_space_and_resize() {
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_1Gi
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
   kubectl wait "pvca/${_pvca_name}" \
-          --for condition= RecommendationAvailable \
+          --for condition=RecommendationAvailable \
           --namespace "${_namespace}" \
           --timeout 10m
 
@@ -65,7 +65,7 @@ function _test_consume_space_and_resize() {
 
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
   kubectl wait "pvca/${_pvca_name}" \
-          --for condition= RecommendationAvailable \
+          --for condition=RecommendationAvailable \
           --namespace "${_namespace}" \
           --timeout 10m
 
@@ -126,7 +126,7 @@ function _test_consume_inodes_and_resize() {
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_inode_low_1Gi
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
   kubectl wait "pvca/${_pvca_name}" \
-          --for condition= RecommendationAvailable \
+          --for condition=RecommendationAvailable \
           --namespace "${_namespace}" \
           --timeout 10m
 
@@ -150,7 +150,7 @@ function _test_consume_inodes_and_resize() {
 
   _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
   kubectl wait "pvca/${_pvca_name}" \
-          --for condition= RecommendationAvailable \
+          --for condition=RecommendationAvailable \
           --namespace "${_namespace}" \
           --timeout 10m
 

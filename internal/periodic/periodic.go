@@ -210,6 +210,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 			if err := item.SetCondition(ctx, r.client, condition); err != nil {
 				logger.Info("failed to update status condition", "reason", err.Error())
 			}
+
 			continue
 		}
 

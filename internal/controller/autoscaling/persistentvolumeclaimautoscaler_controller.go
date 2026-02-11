@@ -38,7 +38,7 @@ var ErrNoStorageRequests = errors.New("no .spec.resources.requests.storage field
 // the .status.capacity.storage field.
 var ErrNoStorageStatus = errors.New("no .status.capacity.storage field")
 
-// Condition reason for the Resizing condition.
+// ReasonReconcile condition reason for the Resizing condition.
 const ReasonReconcile = "Reconcile"
 
 // PersistentVolumeClaimAutoscalerReconciler reconciles a
@@ -178,6 +178,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
 				return ctrl.Result{}, err
 			}
+
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 
@@ -193,6 +194,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
 				return ctrl.Result{}, err
 			}
+
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 
@@ -208,6 +210,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
 				return ctrl.Result{}, err
 			}
+
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 
@@ -225,6 +228,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
 				return ctrl.Result{}, err
 			}
+
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 		}
 

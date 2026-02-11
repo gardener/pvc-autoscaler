@@ -137,7 +137,7 @@ type ScalingRules struct {
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }
 
-// PVCAutoscalerConditionType are the valid conditions of
+// PersistentVolumeClaimAutoscalerConditionType are the valid conditions of
 // a PersistentVolumeClaimAutoscaler.
 type PersistentVolumeClaimAutoscalerConditionType string
 
