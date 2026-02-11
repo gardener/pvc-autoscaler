@@ -137,6 +137,19 @@ type ScalingRules struct {
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }
 
+// PVCAutoscalerConditionType are the valid conditions of
+// a PersistentVolumeClaimAutoscaler.
+type PersistentVolumeClaimAutoscalerConditionType string
+
+const (
+	// ConditionTypeRecommendationAvailable represents the type of condition
+	// indicating whether metrics have been successfully fetched and computed.
+	ConditionTypeRecommendationAvailable PersistentVolumeClaimAutoscalerConditionType = "RecommendationAvailable"
+	// ConditionTypeResizing represents the type of condition indicating the
+	// status of the resize operation.
+	ConditionTypeResizing PersistentVolumeClaimAutoscalerConditionType = "Resizing"
+)
+
 // SetCondition sets the given [metav1.Condition] for the object.
 func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, klient client.Client, condition metav1.Condition) error {
 	patch := client.MergeFrom(obj.DeepCopy())
