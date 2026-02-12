@@ -8,7 +8,6 @@ import (
 	"context"
 	"io"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -172,7 +171,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
+			Expect(result).To(Equal(ctrl.Result{}))
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("resize has been started"))
@@ -250,7 +249,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
+			Expect(result).To(Equal(ctrl.Result{}))
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("filesystem resize is pending"))
@@ -328,7 +327,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
+			Expect(result).To(Equal(ctrl.Result{}))
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("volume is being modified"))
@@ -398,7 +397,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
+			Expect(result).To(Equal(ctrl.Result{}))
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(buf.String()).To(ContainSubstring("persistent volume claim is still being resized"))
@@ -461,7 +460,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			newCtx := log.IntoContext(ctx, logger)
 
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
+			Expect(result).To(Equal(ctrl.Result{}))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(buf.String()).To(ContainSubstring("resizing persistent volume claim"))
 
@@ -529,7 +528,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// First resize
 			result, err := reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
+			Expect(result).To(Equal(ctrl.Result{}))
 			Expect(err).NotTo(HaveOccurred())
 
 			wantLog := `"resizing persistent volume claim","pvc":"pvc-max-capacity-reached","from":"1Gi","to":"2Gi"}`
@@ -549,7 +548,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// Reconcile for the second time
 			result, err = reconciler.Reconcile(newCtx, req)
-			Expect(result).To(Equal(ctrl.Result{RequeueAfter: 30 * time.Second}))
+			Expect(result).To(Equal(ctrl.Result{}))
 			Expect(err).NotTo(HaveOccurred())
 
 			wantLog = `"resizing persistent volume claim","pvc":"pvc-max-capacity-reached","from":"2Gi","to":"3Gi"}`
