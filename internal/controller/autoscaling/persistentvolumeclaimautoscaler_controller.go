@@ -186,7 +186,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 
 	// If previously recorded size is equal to the current status it means
 	// we are still waiting for the resize to complete
-	if !pvca.Status.PrevSize.IsZero() && pvca.Status.PrevSize.Equal(*currStatusSize) {
+	if pvca.Status.PrevSize.Equal(*currStatusSize) {
 		logger.Info("persistent volume claim is still being resized")
 		condition := metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
@@ -273,11 +273,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		Message: fmt.Sprintf("- %s: resizing from %s to %s due to %s", pvcObj.Name, currSpecSize.String(), newSize.String(), scalingReason),
 	}
 
-	if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-		return ctrl.Result{}, err
-	}
-
-	return ctrl.Result{}, nil
+	return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
 }
 
 // SetupWithManager sets up the controller with the Manager.

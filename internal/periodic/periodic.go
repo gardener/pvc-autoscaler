@@ -201,14 +201,16 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 			metrics.SkippedTotal.WithLabelValues(item.Namespace, item.Name, err.Error()).Inc()
-			condition := metav1.Condition{
-				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-				Status:  metav1.ConditionFalse,
-				Reason:  ReasonMetricsFetchError,
-				Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
-			}
-			if err := item.SetCondition(ctx, r.client, condition); err != nil {
-				logger.Info("failed to update status condition", "reason", err.Error())
+			if errors.Is(err, common.ErrNoMetrics) {
+				condition := metav1.Condition{
+					Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+					Status:  metav1.ConditionFalse,
+					Reason:  ReasonMetricsFetchError,
+					Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
+				}
+				if err := item.SetCondition(ctx, r.client, condition); err != nil {
+					logger.Info("failed to update status condition", "reason", err.Error())
+				}
 			}
 
 			continue
@@ -216,10 +218,8 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 
 		if ok {
 			toReconcile = append(toReconcile, item)
-		} else {
-			if err := item.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
-				logger.Info("failed to remove status condition", "reason", err.Error())
-			}
+		} else if err := item.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
+			logger.Info("failed to remove status condition", "reason", err.Error())
 		}
 
 		condition := metav1.Condition{

@@ -40,7 +40,7 @@ function _test_consume_space_and_resize() {
           --timeout 10m
 
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_1Gi
-  _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
   kubectl wait "pvca/${_pvca_name}" \
           --for condition=RecommendationAvailable \
           --namespace "${_namespace}" \
@@ -63,7 +63,7 @@ function _test_consume_space_and_resize() {
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_low_2Gi
 
-  _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
   kubectl wait "pvca/${_pvca_name}" \
           --for condition=RecommendationAvailable \
           --namespace "${_namespace}" \
@@ -90,7 +90,7 @@ function _test_consume_space_and_resize() {
   # We should remain at 3Gi
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
 
-  _msg_info "waiting for PVC Autoscaler resource to become unhealthy ..."
+  _msg_info "waiting for PVC Autoscaler resource to have false Resizing condition ..."
   kubectl wait "pvca/${_pvca_name}" \
           --for condition=Resizing=false \
           --namespace "${_namespace}" \
@@ -124,7 +124,7 @@ function _test_consume_inodes_and_resize() {
           --timeout 10m
 
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_inode_low_1Gi
-  _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
   kubectl wait "pvca/${_pvca_name}" \
           --for condition=RecommendationAvailable \
           --namespace "${_namespace}" \
@@ -148,7 +148,7 @@ function _test_consume_inodes_and_resize() {
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_inode_low_2Gi
 
-  _msg_info "waiting for PVC Autoscaler resource to become healthy ..."
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
   kubectl wait "pvca/${_pvca_name}" \
           --for condition=RecommendationAvailable \
           --namespace "${_namespace}" \
@@ -176,7 +176,7 @@ function _test_consume_inodes_and_resize() {
   # We should remain at 3Gi
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi
 
-  _msg_info "waiting for PVC Autoscaler resource to become unhealthy ..."
+  _msg_info "waiting for PVC Autoscaler resource to have false Resizing condition ..."
   kubectl wait "pvca/${_pvca_name}" \
           --for condition=Resizing=false \
           --namespace "${_namespace}" \
