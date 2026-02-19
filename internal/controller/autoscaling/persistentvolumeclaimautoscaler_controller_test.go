@@ -153,9 +153,14 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
-			// Set FreeSpacePercentage below threshold to trigger storage threshold reason
+			// Set UsedSpacePercent above threshold to trigger storage threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.FreeSpacePercentage = "5%"
+			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+				{
+					Name:             "pvc-is-resizing",
+					UsedSpacePercent: ptr.To(85),
+				},
+			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because it is resizing
@@ -233,7 +238,12 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// Set FreeInodesPercentage below threshold to trigger inodes threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.FreeInodesPercentage = "5%"
+			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+				{
+					Name:              "pvc-fs-resize-is-pending",
+					UsedInodesPercent: ptr.To(85),
+				},
+			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because the filesystem resize is pending
@@ -309,9 +319,14 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
-			// Set FreeSpacePercentage below threshold to trigger storage threshold reason
+			// Set UsedSpacePercent above threshold to trigger storage threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.FreeSpacePercentage = "5%"
+			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+				{
+					Name:             "pvc-vol-is-being-modified",
+					UsedSpacePercent: ptr.To(85),
+				},
+			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because the volume is being modified
@@ -378,8 +393,13 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(pvca).NotTo(BeNil())
 
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.PrevSize = resource.MustParse("1Gi")
-			pvca.Status.FreeInodesPercentage = "5%" // Set below threshold to trigger inodes threshold reason
+			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+				{
+					Name:              "pvc-vol-is-still-being-resized",
+					CurrentSize:       ptr.To(resource.MustParse("1Gi")),
+					UsedInodesPercent: ptr.To(85),
+				},
+			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because current
@@ -448,6 +468,15 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+				{
+					Name:        "pvc-should-resize",
+					CurrentSize: ptr.To(resource.MustParse("2Gi")),
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvca)}
 			reconciler, err := newReconciler()
 			Expect(err).NotTo(HaveOccurred())
@@ -514,6 +543,15 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
+
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+				{
+					Name:        "pvc-max-capacity-reached",
+					CurrentSize: ptr.To(resource.MustParse("3Gi")),
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvca)}
 			reconciler, err := newReconciler()
