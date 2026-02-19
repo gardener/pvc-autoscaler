@@ -62,14 +62,14 @@ func (vi *VolumeInfo) FreeSpacePercentage() (float64, error) {
 }
 
 // UsedSpacePercentage returns the used space as a percentage.
-func (vi *VolumeInfo) UsedSpacePercentage() (float64, error) {
+func (vi *VolumeInfo) UsedSpacePercentage() (int, error) {
 	free, err := vi.FreeSpacePercentage()
 	if err != nil {
-		return 0.0, err
+		return 0, err
 	}
 	val := 100.0 - free
 
-	return val, nil
+	return int(val), nil
 }
 
 // FreeInodesPercentage returns the number of free inodes as a percentage.
@@ -83,14 +83,14 @@ func (vi *VolumeInfo) FreeInodesPercentage() (float64, error) {
 }
 
 // UsedInodesPercentage returns the number of used inodes as a percentage.
-func (vi *VolumeInfo) UsedInodesPercentage() (float64, error) {
+func (vi *VolumeInfo) UsedInodesPercentage() (int, error) {
 	free, err := vi.FreeInodesPercentage()
 	if err != nil {
-		return 0.0, err
+		return 0, err
 	}
 	val := 100.0 - free
 
-	return val, nil
+	return int(val), nil
 }
 
 // Metrics is a collection of metrics about persistent volume claims grouped by
