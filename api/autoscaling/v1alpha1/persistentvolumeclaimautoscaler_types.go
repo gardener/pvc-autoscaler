@@ -137,6 +137,19 @@ type ScalingRules struct {
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }
 
+// PersistentVolumeClaimAutoscalerConditionType are the valid conditions of
+// a PersistentVolumeClaimAutoscaler.
+type PersistentVolumeClaimAutoscalerConditionType string
+
+const (
+	// ConditionTypeRecommendationAvailable represents the type of condition
+	// indicating whether metrics have been successfully fetched and computed.
+	ConditionTypeRecommendationAvailable PersistentVolumeClaimAutoscalerConditionType = "RecommendationAvailable"
+	// ConditionTypeResizing represents the type of condition indicating the
+	// status of the resize operation.
+	ConditionTypeResizing PersistentVolumeClaimAutoscalerConditionType = "Resizing"
+)
+
 // SetCondition sets the given [metav1.Condition] for the object.
 func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, klient client.Client, condition metav1.Condition) error {
 	patch := client.MergeFrom(obj.DeepCopy())
@@ -145,6 +158,16 @@ func (obj *PersistentVolumeClaimAutoscaler) SetCondition(ctx context.Context, kl
 		conditions = make([]metav1.Condition, 0)
 	}
 	meta.SetStatusCondition(&conditions, condition)
+	obj.Status.Conditions = conditions
+
+	return klient.Status().Patch(ctx, obj, patch)
+}
+
+// RemoveCondition removes the condition with the given type from the object.
+func (obj *PersistentVolumeClaimAutoscaler) RemoveCondition(ctx context.Context, klient client.Client, conditionType string) error {
+	patch := client.MergeFrom(obj.DeepCopy())
+	conditions := obj.Status.Conditions
+	meta.RemoveStatusCondition(&conditions, conditionType)
 	obj.Status.Conditions = conditions
 
 	return klient.Status().Patch(ctx, obj, patch)

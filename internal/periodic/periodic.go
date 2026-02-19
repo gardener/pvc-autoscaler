@@ -25,7 +25,6 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
-	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
 
 // UnknownUtilizationValue is the value which will be used when the free
@@ -51,6 +50,16 @@ var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not 
 // ErrNoClient is an error which is returned when the periodic [Runner] was
 // configured configured without a Kubernetes API client.
 var ErrNoClient = errors.New("no client provided")
+
+// Condition reasons for the RecommendationAvailable condition
+const (
+	// ReasonMetricsFetched indicates that metrics were successfully fetched and computed.
+	ReasonMetricsFetched = "MetricsFetched"
+	// ReasonMetricsFetchError indicates an error occurred while fetching metrics.
+	ReasonMetricsFetchError = "MetricsFetchError"
+	// ReasonRecommendationError indicates an error occurred during recommendation computation.
+	ReasonRecommendationError = "RecommendationError"
+)
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
 // enqueues [v1alpha1.PersistentVolumeClaimAutoscaler] items for reconciling on
@@ -194,11 +203,17 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 			metrics.SkippedTotal.WithLabelValues(item.Namespace, item.Name, err.Error()).Inc()
+			var reason string
+			if errors.Is(err, common.ErrNoMetrics) {
+				reason = ReasonMetricsFetchError
+			} else {
+				reason = ReasonRecommendationError
+			}
 			condition := metav1.Condition{
-				Type:    utils.ConditionTypeHealthy,
-				Status:  metav1.ConditionUnknown,
-				Reason:  "Reconciling",
-				Message: err.Error(),
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  reason,
+				Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
 			}
 			if err := item.SetCondition(ctx, r.client, condition); err != nil {
 				logger.Info("failed to update status condition", "reason", err.Error())
@@ -209,16 +224,18 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 
 		if ok {
 			toReconcile = append(toReconcile, item)
-		} else {
-			condition := metav1.Condition{
-				Type:    utils.ConditionTypeHealthy,
-				Status:  metav1.ConditionTrue,
-				Reason:  "Reconciling",
-				Message: "Successfully reconciled",
-			}
-			if err := item.SetCondition(ctx, r.client, condition); err != nil {
-				logger.Info("failed to update status condition", "reason", err.Error())
-			}
+		} else if err := item.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
+			logger.Info("failed to remove status condition", "reason", err.Error())
+		}
+
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+			Status:  metav1.ConditionTrue,
+			Reason:  ReasonMetricsFetched,
+			Message: " - All metrics fetched successfully",
+		}
+		if err := item.SetCondition(ctx, r.client, condition); err != nil {
+			logger.Info("failed to update status condition", "reason", err.Error())
 		}
 	}
 
