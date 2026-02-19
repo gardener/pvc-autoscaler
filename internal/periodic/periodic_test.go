@@ -885,6 +885,7 @@ var _ = Describe("Periodic Runner", func() {
 			for i := range updatedPVCA.Status.Conditions {
 				if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
 					foundCondition = &updatedPVCA.Status.Conditions[i]
+
 					break
 				}
 			}
@@ -998,6 +999,7 @@ var _ = Describe("Periodic Runner", func() {
 			for i := range updatedPVCA.Status.Conditions {
 				if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
 					foundCondition = &updatedPVCA.Status.Conditions[i]
+
 					break
 				}
 			}
@@ -1092,6 +1094,7 @@ var _ = Describe("Periodic Runner", func() {
 			for i := range updatedPVCA.Status.Conditions {
 				if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
 					foundCondition = &updatedPVCA.Status.Conditions[i]
+
 					break
 				}
 			}
