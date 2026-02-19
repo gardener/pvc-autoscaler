@@ -877,6 +877,20 @@ var _ = Describe("Periodic Runner", func() {
 			case <-waitCh:
 				break // nolint:revive
 			}
+
+			// Verify the RecommendationAvailable condition
+			updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+			Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+			var foundCondition *metav1.Condition
+			for i := range updatedPVCA.Status.Conditions {
+				if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
+					foundCondition = &updatedPVCA.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(foundCondition).NotTo(BeNil())
+			Expect(foundCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(foundCondition.Reason).To(Equal(ReasonRecommendationError))
 		})
 
 		It("should not enqueue -- failed to get metrics", func() {
@@ -928,6 +942,70 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(runner.enqueueObjects(parentCtx)).NotTo(Succeed())
 		})
 
+		It("should set MetricsFetchError condition when no metrics for PVC", func() {
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// The test pvc
+			pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-no-metrics-condition", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-no-metrics-condition",
+			}
+
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
+					}),
+				},
+			}
+
+			// The PVC Autoscaler targeting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				parentCtx,
+				k8sClient,
+				"pvca-no-metrics-condition",
+				targetRef,
+				volumePolicies,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
+			// Reconfigure the periodic runner with empty metrics source (no metrics registered)
+			metricsSource := fake.New(fake.WithInterval(time.Second))
+			eventCh := make(chan event.GenericEvent, 128)
+			withEventChOpt := WithEventChannel(eventCh)
+			withMetricsSourceOpt := WithMetricsSource(metricsSource)
+			withEventChOpt(runner)
+			withMetricsSourceOpt(runner)
+
+			Expect(runner.enqueueObjects(parentCtx)).To(Succeed())
+
+			// Verify the RecommendationAvailable condition
+			updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+			Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+			var foundCondition *metav1.Condition
+			for i := range updatedPVCA.Status.Conditions {
+				if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
+					foundCondition = &updatedPVCA.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(foundCondition).NotTo(BeNil())
+			Expect(foundCondition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(foundCondition.Reason).To(Equal(ReasonMetricsFetchError))
+		})
+
 		It("should enqueue -- threshold has been reached", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
@@ -971,8 +1049,8 @@ var _ = Describe("Periodic Runner", func() {
 			metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
 			fakeItem := &fake.Item{
 				NamespacedName:         client.ObjectKeyFromObject(pvc),
-				CapacityBytes:          10000,
-				AvailableBytes:         10000,
+				CapacityBytes:          1073741824,
+				AvailableBytes:         1073741824,
 				CapacityInodes:         10000,
 				AvailableInodes:        10000,
 				ConsumeBytesIncrement:  1000,
@@ -1006,6 +1084,20 @@ var _ = Describe("Periodic Runner", func() {
 			case <-waitCh:
 				break // nolint:revive
 			}
+
+			// Verify the RecommendationAvailable condition
+			updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+			Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+			var foundCondition *metav1.Condition
+			for i := range updatedPVCA.Status.Conditions {
+				if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
+					foundCondition = &updatedPVCA.Status.Conditions[i]
+					break
+				}
+			}
+			Expect(foundCondition).NotTo(BeNil())
+			Expect(foundCondition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(foundCondition.Reason).To(Equal(ReasonMetricsFetched))
 		})
 	})
 

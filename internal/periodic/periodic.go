@@ -57,6 +57,8 @@ const (
 	ReasonMetricsFetched = "MetricsFetched"
 	// ReasonMetricsFetchError indicates an error occurred while fetching metrics.
 	ReasonMetricsFetchError = "MetricsFetchError"
+	// ReasonRecommendationError indicates an error occurred during recommendation computation.
+	ReasonRecommendationError = "RecommendationError"
 )
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
@@ -201,16 +203,20 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 			metrics.SkippedTotal.WithLabelValues(item.Namespace, item.Name, err.Error()).Inc()
+			var reason string
 			if errors.Is(err, common.ErrNoMetrics) {
-				condition := metav1.Condition{
-					Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-					Status:  metav1.ConditionFalse,
-					Reason:  ReasonMetricsFetchError,
-					Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
-				}
-				if err := item.SetCondition(ctx, r.client, condition); err != nil {
-					logger.Info("failed to update status condition", "reason", err.Error())
-				}
+				reason = ReasonMetricsFetchError
+			} else {
+				reason = ReasonRecommendationError
+			}
+			condition := metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  reason,
+				Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
+			}
+			if err := item.SetCondition(ctx, r.client, condition); err != nil {
+				logger.Info("failed to update status condition", "reason", err.Error())
 			}
 
 			continue
@@ -226,7 +232,7 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonMetricsFetched,
-			Message: fmt.Sprintf(" - %s: metrics fetched", pvcObjKey.Name),
+			Message: " - All metrics fetched successfully",
 		}
 		if err := item.SetCondition(ctx, r.client, condition); err != nil {
 			logger.Info("failed to update status condition", "reason", err.Error())
