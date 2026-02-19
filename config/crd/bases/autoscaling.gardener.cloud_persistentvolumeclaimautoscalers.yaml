@@ -201,54 +201,57 @@ spec:
                   - type
                   type: object
                 type: array
-              freeInodesPercentage:
-                description: |-
-                  FreeInodesPercentage specifies the last observed free inodes of the
-                  PVC as a percentage.
-                type: string
-              freeSpacePercentage:
-                description: |-
-                  FreeSpacePercentage specifies the last observed free space of the PVC
-                  as a percentage.
-                type: string
               lastCheck:
                 description: LastCheck specifies the last time the PVC was checked
                   by the controller.
                 format: date-time
                 type: string
-              newSize:
-                anyOf:
-                - type: integer
-                - type: string
-                description: NewSize specifies the new size to which the PVC will
-                  be resized.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               nextCheck:
                 description: |-
                   NextCheck specifies the next scheduled check of the PVC by the
                   controller.
                 format: date-time
                 type: string
-              prevSize:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  PrevSize specifies the previous .status.capacity.storage value of the
-                  PVC, just before resizing it.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
-              usedInodesPercentage:
-                description: |-
-                  UsedInodesPercentage specifies the last observed used inodes of the
-                  PVC as a percentage.
-                type: string
-              usedSpacePercentage:
-                description: |-
-                  UsedSpacePercentage specifies the last observed used space of the PVC
-                  as a percentage.
-                type: string
+              persistentVolumeClaims:
+                description: PersistentVolumeClaims specifies the status of the PVCs
+                  managed by the autoscaler.
+                items:
+                  description: PersistentVolumeClaimStatus defines the observed state
+                    of a PVC managed by the autoscaler.
+                  properties:
+                    currentSize:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: CurrentSize specifies the current .status.capacity.storage
+                        value of the PVC.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    name:
+                      description: Name specifies the name of the PVC.
+                      type: string
+                    targetSize:
+                      anyOf:
+                      - type: integer
+                      - type: string
+                      description: TargetSize specifies the new size to which the
+                        PVC will be resized.
+                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                      x-kubernetes-int-or-string: true
+                    usedInodesPercent:
+                      description: |-
+                        UsedInodesPercent specifies the last observed used inodes of the
+                        PVC as a percentage.
+                      type: integer
+                    usedSpacePercent:
+                      description: |-
+                        UsedSpacePercent specifies the last observed used space of the PVC
+                        as a percentage.
+                      type: integer
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
         type: object
     served: true
