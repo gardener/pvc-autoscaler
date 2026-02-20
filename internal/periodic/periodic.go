@@ -255,37 +255,28 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentVolumeClaimAutoscaler, volInfo *metricssource.VolumeInfo) error {
 	patch := client.MergeFrom(obj.DeepCopy())
 	now := time.Now()
-	nextCheck := now.Add(r.interval)
+	obj.Status.LastCheck = metav1.NewTime(now)
+	obj.Status.NextCheck = metav1.NewTime(now.Add(r.interval))
 
-	freeSpaceStr := UnknownUtilizationValue
-	usedSpaceStr := UnknownUtilizationValue
-	freeInodesStr := UnknownUtilizationValue
-	usedInodesStr := UnknownUtilizationValue
-
-	if volInfo != nil {
-		if freeSpace, err := volInfo.FreeSpacePercentage(); err == nil {
-			freeSpaceStr = fmt.Sprintf("%.2f%%", freeSpace)
-		}
-
-		if usedSpace, err := volInfo.UsedSpacePercentage(); err == nil {
-			usedSpaceStr = fmt.Sprintf("%.2f%%", usedSpace)
-		}
-
-		if freeInodes, err := volInfo.FreeInodesPercentage(); err == nil {
-			freeInodesStr = fmt.Sprintf("%.2f%%", freeInodes)
-		}
-
-		if usedInodes, err := volInfo.UsedInodesPercentage(); err == nil {
-			usedInodesStr = fmt.Sprintf("%.2f%%", usedInodes)
-		}
+	pvcStatus := v1alpha1.PersistentVolumeClaimStatus{
+		Name: obj.Spec.TargetRef.Name,
 	}
 
-	obj.Status.LastCheck = metav1.NewTime(now)
-	obj.Status.NextCheck = metav1.NewTime(nextCheck)
-	obj.Status.UsedSpacePercentage = usedSpaceStr
-	obj.Status.FreeSpacePercentage = freeSpaceStr
-	obj.Status.UsedInodesPercentage = usedInodesStr
-	obj.Status.FreeInodesPercentage = freeInodesStr
+	if volInfo != nil {
+		usedSpace, err := volInfo.UsedSpacePercentage()
+		if err != nil {
+			return fmt.Errorf("failed to get used space percentage: %w", err)
+		}
+		pvcStatus.UsedSpacePercent = &usedSpace
+
+		usedInodes, err := volInfo.UsedInodesPercentage()
+		if err != nil {
+			return fmt.Errorf("failed to get used inodes percentage: %w", err)
+		}
+		pvcStatus.UsedInodesPercent = &usedInodes
+	}
+
+	obj.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{pvcStatus}
 
 	return r.client.Status().Patch(ctx, obj, patch)
 }

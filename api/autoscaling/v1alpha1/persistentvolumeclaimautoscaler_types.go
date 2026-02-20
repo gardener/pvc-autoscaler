@@ -65,28 +65,8 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 	// controller.
 	NextCheck metav1.Time `json:"nextCheck,omitempty"`
 
-	// UsedSpacePercentage specifies the last observed used space of the PVC
-	// as a percentage.
-	UsedSpacePercentage string `json:"usedSpacePercentage,omitempty"`
-
-	// FreeSpacePercentage specifies the last observed free space of the PVC
-	// as a percentage.
-	FreeSpacePercentage string `json:"freeSpacePercentage,omitempty"`
-
-	// UsedInodesPercentage specifies the last observed used inodes of the
-	// PVC as a percentage.
-	UsedInodesPercentage string `json:"usedInodesPercentage,omitempty"`
-
-	// FreeInodesPercentage specifies the last observed free inodes of the
-	// PVC as a percentage.
-	FreeInodesPercentage string `json:"freeInodesPercentage,omitempty"`
-
-	// PrevSize specifies the previous .status.capacity.storage value of the
-	// PVC, just before resizing it.
-	PrevSize resource.Quantity `json:"prevSize,omitempty"`
-
-	// NewSize specifies the new size to which the PVC will be resized.
-	NewSize resource.Quantity `json:"newSize,omitempty"`
+	// PersistentVolumeClaims specifies the status of the PVCs managed by the autoscaler.
+	PersistentVolumeClaims []PersistentVolumeClaimStatus `json:"persistentVolumeClaims,omitempty"`
 
 	// Conditions specifies the status conditions.
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
@@ -135,6 +115,30 @@ type ScalingRules struct {
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
+}
+
+// PersistentVolumeClaimStatus defines the observed state of a PVC managed by the autoscaler.
+type PersistentVolumeClaimStatus struct {
+	// Name specifies the name of the PVC.
+	Name string `json:"name"`
+
+	// UsedSpacePercent specifies the last observed used space of the PVC
+	// as a percentage.
+	// +optional
+	UsedSpacePercent *int `json:"usedSpacePercent,omitempty"`
+
+	// UsedInodesPercent specifies the last observed used inodes of the
+	// PVC as a percentage.
+	// +optional
+	UsedInodesPercent *int `json:"usedInodesPercent,omitempty"`
+
+	// CurrentSize specifies the current .status.capacity.storage value of the PVC.
+	// +optional
+	CurrentSize *resource.Quantity `json:"currentSize,omitempty"`
+
+	// TargetSize specifies the new size to which the PVC will be resized.
+	// +optional
+	TargetSize *resource.Quantity `json:"targetSize,omitempty"`
 }
 
 // PersistentVolumeClaimAutoscalerConditionType are the valid conditions of

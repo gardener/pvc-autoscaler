@@ -6,7 +6,6 @@ package periodic
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -146,14 +145,13 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(obj).NotTo(BeNil())
 
-			// No volume info provided, we should see default "unknown" values
+			// No volume info provided, we should see nil values for percentages
 			Expect(runner.updatePVCAStatus(parentCtx, obj, nil)).To(Succeed())
 			Expect(obj.Status.LastCheck).NotTo(Equal(metav1.Time{}))
 			Expect(obj.Status.NextCheck).NotTo(Equal(metav1.Time{}))
-			Expect(obj.Status.UsedSpacePercentage).To(Equal(UnknownUtilizationValue))
-			Expect(obj.Status.FreeSpacePercentage).To(Equal(UnknownUtilizationValue))
-			Expect(obj.Status.UsedInodesPercentage).To(Equal(UnknownUtilizationValue))
-			Expect(obj.Status.FreeInodesPercentage).To(Equal(UnknownUtilizationValue))
+			Expect(obj.Status.PersistentVolumeClaims).To(HaveLen(1))
+			Expect(obj.Status.PersistentVolumeClaims[0].UsedSpacePercent).To(BeNil())
+			Expect(obj.Status.PersistentVolumeClaims[0].UsedInodesPercent).To(BeNil())
 		})
 
 		It("should update the pvca with valid percentage values", func() {
@@ -195,19 +193,16 @@ var _ = Describe("Periodic Runner", func() {
 				CapacityInodes:  2000,
 				AvailableInodes: 12345,
 			}
-			freeSpace, _ := volInfo.FreeSpacePercentage()
 			usedSpace, _ := volInfo.UsedSpacePercentage()
-			freeInodes, _ := volInfo.FreeInodesPercentage()
 			usedInodes, _ := volInfo.UsedInodesPercentage()
 
 			// We should see the computed free and used space percentages
 			Expect(runner.updatePVCAStatus(parentCtx, obj, volInfo)).To(Succeed())
 			Expect(obj.Status.LastCheck).NotTo(Equal(metav1.Time{}))
 			Expect(obj.Status.NextCheck).NotTo(Equal(metav1.Time{}))
-			Expect(obj.Status.UsedSpacePercentage).To(Equal(fmt.Sprintf("%.2f%%", usedSpace)))
-			Expect(obj.Status.FreeSpacePercentage).To(Equal(fmt.Sprintf("%.2f%%", freeSpace)))
-			Expect(obj.Status.UsedInodesPercentage).To(Equal(fmt.Sprintf("%.2f%%", usedInodes)))
-			Expect(obj.Status.FreeInodesPercentage).To(Equal(fmt.Sprintf("%.2f%%", freeInodes)))
+			Expect(obj.Status.PersistentVolumeClaims).To(HaveLen(1))
+			Expect(*obj.Status.PersistentVolumeClaims[0].UsedSpacePercent).To(Equal(usedSpace))
+			Expect(*obj.Status.PersistentVolumeClaims[0].UsedInodesPercent).To(Equal(usedInodes))
 		})
 	})
 
@@ -355,7 +350,13 @@ var _ = Describe("Periodic Runner", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
-			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, &metricssource.VolumeInfo{})
+			volInfo := &metricssource.VolumeInfo{
+				CapacityBytes:   1073741824, // 1Gi
+				AvailableBytes:  536870912,  // 512Mi
+				CapacityInodes:  1000,
+				AvailableInodes: 500,
+			}
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeFalse())
 			Expect(err).To(MatchError(ErrStorageClassNotFound))
 		})
@@ -434,7 +435,13 @@ var _ = Describe("Periodic Runner", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
-			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, &metricssource.VolumeInfo{})
+			volInfo := &metricssource.VolumeInfo{
+				CapacityBytes:   1073741824, // 1Gi
+				AvailableBytes:  536870912,  // 512Mi
+				CapacityInodes:  1000,
+				AvailableInodes: 500,
+			}
+			ok, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 			Expect(ok).To(BeFalse())
 			Expect(err).To(MatchError(ErrStorageClassDoesNotSupportExpansion))
 		})
