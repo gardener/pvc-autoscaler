@@ -37,6 +37,10 @@ var ErrNoStorageRequests = errors.New("no .spec.resources.requests.storage field
 // the .status.capacity.storage field.
 var ErrNoStorageStatus = errors.New("no .status.capacity.storage field")
 
+// ErrUndefinedScalingReason is an error which is returned in case the scaling reason
+// cannot be determined based on the PVCA status.
+var ErrUndefinedScalingReason = errors.New("undefined scaling reason")
+
 // ReasonReconcile condition reason for the Resizing condition.
 const ReasonReconcile = "Reconcile"
 
@@ -143,7 +147,11 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 
 	// Currently only one policy is supported, since only one PVC can be targeted by a PVCA object
 	policy := pvca.Spec.VolumePolicies[0]
-	scalingReason := determineScalingReason(pvca, policy)
+	scalingReason, err := determineScalingReason(pvca, policy)
+	if err != nil {
+		logger.Error(err, "failed to determine scaling reason")
+		return ctrl.Result{}, err
+	}
 
 	// Make sure that the PVC is not being modified at the moment.  Note,
 	// that we are not treating the following status conditions as errors,
@@ -290,16 +298,16 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) SetupWithManager(mgr ctrl.Ma
 
 // determineScalingReason determines why scaling was triggered based on the PVCA status.
 // It compares the free space/inodes percentages against the threshold.
-func determineScalingReason(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volumePolicy v1alpha1.VolumePolicy) string {
+func determineScalingReason(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volumePolicy v1alpha1.VolumePolicy) (string, error) {
 	if pvca.Status.PersistentVolumeClaims[0].UsedSpacePercent != nil &&
 		*pvca.Status.PersistentVolumeClaims[0].UsedSpacePercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
-		return "passing storage threshold"
+		return "passing storage threshold", nil
 	}
 
 	if pvca.Status.PersistentVolumeClaims[0].UsedInodesPercent != nil &&
 		*pvca.Status.PersistentVolumeClaims[0].UsedInodesPercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
-		return "passing inodes threshold"
+		return "passing inodes threshold", nil
 	}
 
-	return "unknown reason"
+	return "unknown reason", ErrUndefinedScalingReason
 }

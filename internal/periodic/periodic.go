@@ -359,7 +359,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 
 	// Get threshold from volume policy
 	// Currently only one policy is supported and is enforced by the CRD schema
-	threshold := 100.0 - float64(*policy.ScaleUp.UtilizationThresholdPercent)
+	threshold := 100 - *policy.ScaleUp.UtilizationThresholdPercent
 
 	// VolumeMode should be Filesystem
 	if pvcObj.Spec.VolumeMode == nil {
@@ -381,7 +381,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 			pvcObj,
 			corev1.EventTypeWarning,
 			"FreeSpaceThresholdReached",
-			"free space (%.2f%%) is less than the configured threshold (%.2f%%)",
+			"free space (%d%%) is less than the configured threshold (%d%%)",
 			freeSpace,
 			threshold,
 		)
@@ -395,7 +395,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 			pvcObj,
 			corev1.EventTypeWarning,
 			"FreeInodesThresholdReached",
-			"free inodes (%.2f%%) are less than the configured threshold (%.2f%%)",
+			"free inodes (%d%%) are less than the configured threshold (%d%%)",
 			freeInodes,
 			threshold,
 		)

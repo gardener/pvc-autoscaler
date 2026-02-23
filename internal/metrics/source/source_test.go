@@ -17,13 +17,13 @@ var _ = Describe("Source", func() {
 			tests := []struct {
 				capacity           int
 				available          int
-				wantFreePercentage float64
+				wantFreePercentage int
 				wantUsedPercentage int
 			}{
-				{capacity: 1000, available: 100, wantFreePercentage: 10.0, wantUsedPercentage: 90},
-				{capacity: 1000, available: 200, wantFreePercentage: 20.0, wantUsedPercentage: 80},
-				{capacity: 1000, available: 500, wantFreePercentage: 50.0, wantUsedPercentage: 50},
-				{capacity: 1000, available: 0, wantFreePercentage: 0.0, wantUsedPercentage: 100},
+				{capacity: 1000, available: 100, wantFreePercentage: 10, wantUsedPercentage: 90},
+				{capacity: 1000, available: 200, wantFreePercentage: 20, wantUsedPercentage: 80},
+				{capacity: 1000, available: 500, wantFreePercentage: 50, wantUsedPercentage: 50},
+				{capacity: 1000, available: 0, wantFreePercentage: 0, wantUsedPercentage: 100},
 			}
 			for _, test := range tests {
 				// Space

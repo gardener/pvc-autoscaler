@@ -158,7 +158,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
 				{
 					Name:             "pvc-is-resizing",
-					UsedSpacePercent: ptr.To(85),
+					UsedSpacePercent: ptr.To(95),
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -241,7 +241,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
 				{
 					Name:              "pvc-fs-resize-is-pending",
-					UsedInodesPercent: ptr.To(85),
+					UsedInodesPercent: ptr.To(95),
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -324,7 +324,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
 				{
 					Name:             "pvc-vol-is-being-modified",
-					UsedSpacePercent: ptr.To(85),
+					UsedSpacePercent: ptr.To(95),
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -397,7 +397,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 				{
 					Name:              "pvc-vol-is-still-being-resized",
 					CurrentSize:       ptr.To(resource.MustParse("1Gi")),
-					UsedInodesPercent: ptr.To(85),
+					UsedInodesPercent: ptr.To(95),
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -471,8 +471,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
 				{
-					Name:        "pvc-should-resize",
-					CurrentSize: ptr.To(resource.MustParse("2Gi")),
+					Name:             "pvc-should-resize",
+					CurrentSize:      ptr.To(resource.MustParse("2Gi")),
+					UsedSpacePercent: ptr.To(95),
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -506,6 +507,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 			Expect(condition.Reason).To(Equal(controller.ReasonReconcile))
 			Expect(condition.Message).To(ContainSubstring("resizing from 1Gi to 2Gi"))
+			Expect(condition.Message).To(ContainSubstring("passing storage threshold"))
 		})
 
 		It("should not resize if max capacity has been reached", func() {
@@ -547,8 +549,9 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
 				{
-					Name:        "pvc-max-capacity-reached",
-					CurrentSize: ptr.To(resource.MustParse("3Gi")),
+					Name:             "pvc-max-capacity-reached",
+					CurrentSize:      ptr.To(resource.MustParse("3Gi")),
+					UsedSpacePercent: ptr.To(95),
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
