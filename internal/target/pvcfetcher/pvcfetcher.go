@@ -73,7 +73,6 @@ func WithSelectorFetcher(sf selectorfetcher.Fetcher) Option {
 }
 
 func (f *pvcFetcher) Fetch(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler) ([]*corev1.PersistentVolumeClaim, error) {
-	// For backwards compatibility handle the case where the PVCA target ref points directly to a PVC.
 	if pvca.Spec.TargetRef.Kind == "PersistentVolumeClaim" {
 		pvc := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
