@@ -39,7 +39,7 @@ var ErrNoStorageStatus = errors.New("no .status.capacity.storage field")
 
 // ErrUndefinedScalingReason is an error which is returned in case the scaling reason
 // cannot be determined based on the PVCA status.
-var ErrUndefinedScalingReason = errors.New("undefined scaling reason")
+var ErrUndefinedScalingReason = errors.New("bug: undefined scaling reason")
 
 // ReasonReconcile condition reason for the Resizing condition.
 const ReasonReconcile = "Reconcile"
@@ -149,7 +149,6 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	policy := pvca.Spec.VolumePolicies[0]
 	scalingReason, err := determineScalingReason(pvca, policy)
 	if err != nil {
-		logger.Error(err, "failed to determine scaling reason")
 		return ctrl.Result{}, err
 	}
 
