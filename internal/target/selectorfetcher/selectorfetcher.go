@@ -91,7 +91,7 @@ func (f *selectorFetcher) Fetch(ctx context.Context, namespace string, targetRef
 		return nil, fmt.Errorf("unable to determine resource for scale target reference: %w", err)
 	}
 
-	scale, _, err := f.scaleForResourceMappings(ctx, namespace, targetRef.Name, mappings)
+	scale, err := f.scaleForResourceMappings(ctx, namespace, targetRef.Name, mappings)
 	if err != nil {
 		return nil, fmt.Errorf("could not get scale subresource for target %s: %w", targetRef.String(), err)
 	}
@@ -104,10 +104,10 @@ func (f *selectorFetcher) Fetch(ctx context.Context, namespace string, targetRef
 	return labelSelector, nil
 }
 
-func (f *selectorFetcher) scaleForResourceMappings(ctx context.Context, namespace, name string, mappings []*apimeta.RESTMapping) (*autoscalingv1.Scale, schema.GroupResource, error) {
+func (f *selectorFetcher) scaleForResourceMappings(ctx context.Context, namespace, name string, mappings []*apimeta.RESTMapping) (*autoscalingv1.Scale, error) {
 	// make sure we handle an empty set of mappings
 	if len(mappings) == 0 {
-		return nil, schema.GroupResource{}, errors.New("unrecognized resource")
+		return nil, errors.New("unrecognized resource")
 	}
 
 	errs := []error{}
@@ -115,11 +115,11 @@ func (f *selectorFetcher) scaleForResourceMappings(ctx context.Context, namespac
 		targetGR := mapping.Resource.GroupResource()
 		scale, err := f.scaleClient.Scales(namespace).Get(ctx, targetGR, name, metav1.GetOptions{})
 		if err == nil {
-			return scale, targetGR, nil
+			return scale, nil
 		}
 
 		errs = append(errs, err)
 	}
 
-	return nil, schema.GroupResource{}, errors.Join(errs...)
+	return nil, errors.Join(errs...)
 }
