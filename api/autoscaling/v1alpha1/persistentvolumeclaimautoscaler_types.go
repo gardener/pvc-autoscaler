@@ -65,8 +65,8 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 	// controller.
 	NextCheck metav1.Time `json:"nextCheck,omitempty"`
 
-	// PersistentVolumeClaims specifies the status of the PVCs managed by the autoscaler.
-	PersistentVolumeClaims []PersistentVolumeClaimStatus `json:"persistentVolumeClaims,omitempty"`
+	// VolumeRecommendations specifies the status and recommendations for the PVCs managed by the autoscaler.
+	VolumeRecommendations []VolumeRecommendation `json:"volumeRecommendations,omitempty"`
 
 	// Conditions specifies the status conditions.
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
@@ -117,8 +117,8 @@ type ScalingRules struct {
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }
 
-// PersistentVolumeClaimStatus defines the observed state of a PVC managed by the autoscaler.
-type PersistentVolumeClaimStatus struct {
+// VolumeRecommendation defines the observed state of a PVC managed by the autoscaler.
+type VolumeRecommendation struct {
 	// Name specifies the name of the PVC.
 	Name string `json:"name"`
 

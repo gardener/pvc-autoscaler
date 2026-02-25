@@ -155,7 +155,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// Set UsedSpacePercent above threshold to trigger storage threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
 					Name:             "pvc-is-resizing",
 					UsedSpacePercent: ptr.To(95),
@@ -238,7 +238,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// Set FreeInodesPercentage below threshold to trigger inodes threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
 					Name:              "pvc-fs-resize-is-pending",
 					UsedInodesPercent: ptr.To(95),
@@ -321,7 +321,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// Set UsedSpacePercent above threshold to trigger storage threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
 					Name:             "pvc-vol-is-being-modified",
 					UsedSpacePercent: ptr.To(95),
@@ -393,7 +393,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(pvca).NotTo(BeNil())
 
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
 					Name:              "pvc-vol-is-still-being-resized",
 					CurrentSize:       ptr.To(resource.MustParse("1Gi")),
@@ -469,7 +469,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(pvca).NotTo(BeNil())
 
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
 					Name:             "pvc-should-resize",
 					CurrentSize:      ptr.To(resource.MustParse("2Gi")),
@@ -547,7 +547,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(pvca).NotTo(BeNil())
 
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
 					Name:             "pvc-max-capacity-reached",
 					CurrentSize:      ptr.To(resource.MustParse("3Gi")),

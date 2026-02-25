@@ -212,12 +212,12 @@ spec:
                   controller.
                 format: date-time
                 type: string
-              persistentVolumeClaims:
-                description: PersistentVolumeClaims specifies the status of the PVCs
-                  managed by the autoscaler.
+              volumeRecommendations:
+                description: VolumeRecommendations specifies the status and recommendations
+                  for the PVCs managed by the autoscaler.
                 items:
-                  description: PersistentVolumeClaimStatus defines the observed state
-                    of a PVC managed by the autoscaler.
+                  description: VolumeRecommendation defines the observed state of
+                    a PVC managed by the autoscaler.
                   properties:
                     currentSize:
                       anyOf:

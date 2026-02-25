@@ -258,7 +258,7 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 	obj.Status.LastCheck = metav1.NewTime(now)
 	obj.Status.NextCheck = metav1.NewTime(now.Add(r.interval))
 
-	pvcStatus := v1alpha1.PersistentVolumeClaimStatus{
+	volumeRecommendation := v1alpha1.VolumeRecommendation{
 		Name: obj.Spec.TargetRef.Name,
 	}
 
@@ -267,16 +267,16 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 		if err != nil {
 			return fmt.Errorf("failed to get used space percentage: %w", err)
 		}
-		pvcStatus.UsedSpacePercent = &usedSpace
+		volumeRecommendation.UsedSpacePercent = &usedSpace
 
 		usedInodes, err := volInfo.UsedInodesPercentage()
 		if err != nil {
 			return fmt.Errorf("failed to get used inodes percentage: %w", err)
 		}
-		pvcStatus.UsedInodesPercent = &usedInodes
+		volumeRecommendation.UsedInodesPercent = &usedInodes
 	}
 
-	obj.Status.PersistentVolumeClaims = []v1alpha1.PersistentVolumeClaimStatus{pvcStatus}
+	obj.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{volumeRecommendation}
 
 	return r.client.Status().Patch(ctx, obj, patch)
 }
