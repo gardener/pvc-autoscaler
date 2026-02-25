@@ -193,8 +193,8 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 
 	// If previously recorded size is equal to the current status it means
 	// we are still waiting for the resize to complete
-	if pvca.Status.VolumeRecommendations[0].CurrentSize != nil &&
-		pvca.Status.VolumeRecommendations[0].CurrentSize.Equal(*currStatusSize) {
+	if pvca.Status.VolumeRecommendations[0].Current.Size != nil &&
+		pvca.Status.VolumeRecommendations[0].Current.Size.Equal(*currStatusSize) {
 		logger.Info("persistent volume claim is still being resized")
 		condition := metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
@@ -268,8 +268,8 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	}
 
 	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-	pvca.Status.VolumeRecommendations[0].CurrentSize = currStatusSize
-	pvca.Status.VolumeRecommendations[0].TargetSize = targetSize
+	pvca.Status.VolumeRecommendations[0].Current.Size = currStatusSize
+	pvca.Status.VolumeRecommendations[0].Target.Size = targetSize
 	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -298,13 +298,13 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) SetupWithManager(mgr ctrl.Ma
 // determineScalingReason determines why scaling was triggered based on the PVCA status.
 // It compares the free space/inodes percentages against the threshold.
 func determineScalingReason(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volumePolicy v1alpha1.VolumePolicy) (string, error) {
-	if pvca.Status.VolumeRecommendations[0].UsedSpacePercent != nil &&
-		*pvca.Status.VolumeRecommendations[0].UsedSpacePercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
+	if pvca.Status.VolumeRecommendations[0].Current.UsedSpacePercent != nil &&
+		*pvca.Status.VolumeRecommendations[0].Current.UsedSpacePercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
 		return "passing storage threshold", nil
 	}
 
-	if pvca.Status.VolumeRecommendations[0].UsedInodesPercent != nil &&
-		*pvca.Status.VolumeRecommendations[0].UsedInodesPercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
+	if pvca.Status.VolumeRecommendations[0].Current.UsedInodesPercent != nil &&
+		*pvca.Status.VolumeRecommendations[0].Current.UsedInodesPercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
 		return "passing inodes threshold", nil
 	}
 

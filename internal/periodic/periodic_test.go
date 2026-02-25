@@ -150,8 +150,8 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(obj.Status.LastCheck).NotTo(Equal(metav1.Time{}))
 			Expect(obj.Status.NextCheck).NotTo(Equal(metav1.Time{}))
 			Expect(obj.Status.VolumeRecommendations).To(HaveLen(1))
-			Expect(obj.Status.VolumeRecommendations[0].UsedSpacePercent).To(BeNil())
-			Expect(obj.Status.VolumeRecommendations[0].UsedInodesPercent).To(BeNil())
+			Expect(obj.Status.VolumeRecommendations[0].Current.UsedSpacePercent).To(BeNil())
+			Expect(obj.Status.VolumeRecommendations[0].Current.UsedInodesPercent).To(BeNil())
 		})
 
 		It("should update the pvca with valid percentage values", func() {
@@ -201,8 +201,8 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(obj.Status.LastCheck).NotTo(Equal(metav1.Time{}))
 			Expect(obj.Status.NextCheck).NotTo(Equal(metav1.Time{}))
 			Expect(obj.Status.VolumeRecommendations).To(HaveLen(1))
-			Expect(*obj.Status.VolumeRecommendations[0].UsedSpacePercent).To(Equal(usedSpace))
-			Expect(*obj.Status.VolumeRecommendations[0].UsedInodesPercent).To(Equal(usedInodes))
+			Expect(*obj.Status.VolumeRecommendations[0].Current.UsedSpacePercent).To(Equal(usedSpace))
+			Expect(*obj.Status.VolumeRecommendations[0].Current.UsedInodesPercent).To(Equal(usedInodes))
 		})
 	})
 

@@ -267,13 +267,13 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 		if err != nil {
 			return fmt.Errorf("failed to get used space percentage: %w", err)
 		}
-		volumeRecommendation.UsedSpacePercent = &usedSpace
+		volumeRecommendation.Current.UsedSpacePercent = &usedSpace
 
 		usedInodes, err := volInfo.UsedInodesPercentage()
 		if err != nil {
 			return fmt.Errorf("failed to get used inodes percentage: %w", err)
 		}
-		volumeRecommendation.UsedInodesPercent = &usedInodes
+		volumeRecommendation.Current.UsedInodesPercent = &usedInodes
 	}
 
 	obj.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{volumeRecommendation}

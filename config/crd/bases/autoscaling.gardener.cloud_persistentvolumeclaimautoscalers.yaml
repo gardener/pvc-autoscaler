@@ -219,35 +219,44 @@ spec:
                   description: VolumeRecommendation defines the observed state of
                     a PVC managed by the autoscaler.
                   properties:
-                    currentSize:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      description: CurrentSize specifies the current .status.capacity.storage
-                        value of the PVC.
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
+                    current:
+                      description: Current specifies the current status of the PVC.
+                      properties:
+                        size:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: Size specifies the current .status.capacity.storage
+                            value of the PVC.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        usedInodesPercent:
+                          description: |-
+                            UsedInodesPercent specifies the last observed used inodes of the
+                            PVC as a percentage.
+                          type: integer
+                        usedSpacePercent:
+                          description: |-
+                            UsedSpacePercent specifies the last observed used space of the PVC
+                            as a percentage.
+                          type: integer
+                      type: object
                     name:
                       description: Name specifies the name of the PVC.
                       type: string
-                    targetSize:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      description: TargetSize specifies the new size to which the
-                        PVC will be resized.
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
-                    usedInodesPercent:
-                      description: |-
-                        UsedInodesPercent specifies the last observed used inodes of the
-                        PVC as a percentage.
-                      type: integer
-                    usedSpacePercent:
-                      description: |-
-                        UsedSpacePercent specifies the last observed used space of the PVC
-                        as a percentage.
-                      type: integer
+                    target:
+                      description: Target specifies the target recommendations for
+                        the PVC.
+                      properties:
+                        size:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: Size specifies the new size to which the PVC
+                            will be resized.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                      type: object
                   required:
                   - name
                   type: object

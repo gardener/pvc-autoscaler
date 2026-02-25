@@ -122,6 +122,15 @@ type VolumeRecommendation struct {
 	// Name specifies the name of the PVC.
 	Name string `json:"name"`
 
+	// Current specifies the current status of the PVC.
+	Current CurrentVolumeStatus `json:"current,omitempty"`
+
+	// Target specifies the target recommendations for the PVC.
+	Target TargetRecommendation `json:"target,omitempty"`
+}
+
+// CurrentVolumeStatus defines the current status of a PVC managed by the autoscaler.
+type CurrentVolumeStatus struct {
 	// UsedSpacePercent specifies the last observed used space of the PVC
 	// as a percentage.
 	// +optional
@@ -132,13 +141,16 @@ type VolumeRecommendation struct {
 	// +optional
 	UsedInodesPercent *int `json:"usedInodesPercent,omitempty"`
 
-	// CurrentSize specifies the current .status.capacity.storage value of the PVC.
+	// Size specifies the current .status.capacity.storage value of the PVC.
 	// +optional
-	CurrentSize *resource.Quantity `json:"currentSize,omitempty"`
+	Size *resource.Quantity `json:"size,omitempty"`
+}
 
-	// TargetSize specifies the new size to which the PVC will be resized.
+// TargetRecommendation defines the target recommendations for a PVC managed by the autoscaler.
+type TargetRecommendation struct {
+	// Size specifies the new size to which the PVC will be resized.
 	// +optional
-	TargetSize *resource.Quantity `json:"targetSize,omitempty"`
+	Size *resource.Quantity `json:"size,omitempty"`
 }
 
 // PersistentVolumeClaimAutoscalerConditionType are the valid conditions of

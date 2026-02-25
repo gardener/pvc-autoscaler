@@ -157,8 +157,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
-					Name:             "pvc-is-resizing",
-					UsedSpacePercent: ptr.To(95),
+					Name: "pvc-is-resizing",
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedSpacePercent: ptr.To(95),
+					},
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -240,8 +242,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
-					Name:              "pvc-fs-resize-is-pending",
-					UsedInodesPercent: ptr.To(95),
+					Name: "pvc-fs-resize-is-pending",
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedInodesPercent: ptr.To(95),
+					},
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -323,8 +327,10 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
-					Name:             "pvc-vol-is-being-modified",
-					UsedSpacePercent: ptr.To(95),
+					Name: "pvc-vol-is-being-modified",
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedSpacePercent: ptr.To(95),
+					},
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -395,9 +401,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
-					Name:              "pvc-vol-is-still-being-resized",
-					CurrentSize:       ptr.To(resource.MustParse("1Gi")),
-					UsedInodesPercent: ptr.To(95),
+					Name: "pvc-vol-is-still-being-resized",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:              ptr.To(resource.MustParse("1Gi")),
+						UsedInodesPercent: ptr.To(95),
+					},
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -471,9 +479,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
-					Name:             "pvc-should-resize",
-					CurrentSize:      ptr.To(resource.MustParse("2Gi")),
-					UsedSpacePercent: ptr.To(95),
+					Name: "pvc-should-resize",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:             ptr.To(resource.MustParse("2Gi")),
+						UsedSpacePercent: ptr.To(95),
+					},
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
@@ -549,9 +559,11 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
 				{
-					Name:             "pvc-max-capacity-reached",
-					CurrentSize:      ptr.To(resource.MustParse("3Gi")),
-					UsedSpacePercent: ptr.To(95),
+					Name: "pvc-max-capacity-reached",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:             ptr.To(resource.MustParse("3Gi")),
+						UsedSpacePercent: ptr.To(95),
+					},
 				},
 			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
