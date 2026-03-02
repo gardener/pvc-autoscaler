@@ -37,6 +37,10 @@ var ErrNoStorageRequests = errors.New("no .spec.resources.requests.storage field
 // the .status.capacity.storage field.
 var ErrNoStorageStatus = errors.New("no .status.capacity.storage field")
 
+// ErrUndefinedScalingReason is an error which is returned in case the scaling reason
+// cannot be determined based on the PVCA status.
+var ErrUndefinedScalingReason = errors.New("bug: undefined scaling reason")
+
 // ReasonReconcile condition reason for the Resizing condition.
 const ReasonReconcile = "Reconcile"
 
@@ -143,7 +147,10 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 
 	// Currently only one policy is supported, since only one PVC can be targeted by a PVCA object
 	policy := pvca.Spec.VolumePolicies[0]
-	scalingReason := determineScalingReason(pvca, policy)
+	scalingReason, err := determineScalingReason(pvca, policy)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	// Make sure that the PVC is not being modified at the moment.  Note,
 	// that we are not treating the following status conditions as errors,
@@ -186,7 +193,8 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 
 	// If previously recorded size is equal to the current status it means
 	// we are still waiting for the resize to complete
-	if pvca.Status.PrevSize.Equal(*currStatusSize) {
+	if pvca.Status.VolumeRecommendations[0].Current.Size != nil &&
+		pvca.Status.VolumeRecommendations[0].Current.Size.Equal(*currStatusSize) {
 		logger.Info("persistent volume claim is still being resized")
 		condition := metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
@@ -201,13 +209,13 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	// Calculate the new size
 	stepPercent := float64(*policy.ScaleUp.StepPercent)
 	increment := math.Max(float64(currSpecSize.Value())*(stepPercent/100.0), float64(policy.ScaleUp.MinStepAbsolute.Value()))
-	newSizeBytes := int64(math.Ceil((float64(currSpecSize.Value())+increment)/1073741824)) * 1073741824
-	newSize := resource.NewQuantity(newSizeBytes, resource.BinarySI)
+	targetSizeBytes := int64(math.Ceil((float64(currSpecSize.Value())+increment)/1073741824)) * 1073741824
+	targetSize := resource.NewQuantity(targetSizeBytes, resource.BinarySI)
 
-	// Check that we've got a valid new size. If we end up in any of these
+	// Check that we've got a valid target size. If we end up in any of these
 	// cases below, it pretty much means the logic is broken, so we don't
 	// want to retry any of them.
-	cmp := newSize.Cmp(*currSpecSize)
+	cmp := targetSize.Cmp(*currSpecSize)
 	switch cmp {
 	case 0:
 		logger.Info("new and current size are the same")
@@ -220,7 +228,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	}
 
 	// We don't want to exceed the max capacity
-	if newSize.Value() > policy.MaxCapacity.Value() {
+	if targetSize.Value() > policy.MaxCapacity.Value() {
 		r.eventRecorder.Eventf(
 			pvcObj,
 			corev1.EventTypeWarning,
@@ -241,7 +249,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 	}
 
 	// And finally we should be good to resize now
-	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", newSize.String())
+	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", targetSize.String())
 	metrics.ResizedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
 	r.eventRecorder.Eventf(
 		pvcObj,
@@ -249,19 +257,19 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		"ResizingStorage",
 		"resizing storage from %s to %s",
 		currSpecSize.String(),
-		newSize.String(),
+		targetSize.String(),
 	)
 
 	// Update PVC and PVCA resources
 	pvcPatch := client.MergeFrom(pvcObj.DeepCopy())
-	pvcObj.Spec.Resources.Requests[corev1.ResourceStorage] = *newSize
+	pvcObj.Spec.Resources.Requests[corev1.ResourceStorage] = *targetSize
 	if err := r.client.Patch(ctx, pvcObj, pvcPatch); err != nil {
 		return ctrl.Result{}, err
 	}
 
 	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-	pvca.Status.PrevSize = *currStatusSize
-	pvca.Status.NewSize = *newSize
+	pvca.Status.VolumeRecommendations[0].Current.Size = currStatusSize
+	pvca.Status.VolumeRecommendations[0].Target.Size = targetSize
 	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -270,7 +278,7 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) Reconcile(ctx context.Contex
 		Type:    string(v1alpha1.ConditionTypeResizing),
 		Status:  metav1.ConditionTrue,
 		Reason:  ReasonReconcile,
-		Message: fmt.Sprintf("- %s: resizing from %s to %s due to %s", pvcObj.Name, currSpecSize.String(), newSize.String(), scalingReason),
+		Message: fmt.Sprintf("- %s: resizing from %s to %s due to %s", pvcObj.Name, currSpecSize.String(), targetSize.String(), scalingReason),
 	}
 
 	return ctrl.Result{}, pvca.SetCondition(ctx, r.client, condition)
@@ -289,20 +297,16 @@ func (r *PersistentVolumeClaimAutoscalerReconciler) SetupWithManager(mgr ctrl.Ma
 
 // determineScalingReason determines why scaling was triggered based on the PVCA status.
 // It compares the free space/inodes percentages against the threshold.
-func determineScalingReason(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volumePolicy v1alpha1.VolumePolicy) string {
-	if pvca.Status.FreeSpacePercentage != "" && pvca.Status.FreeSpacePercentage != "unknown" {
-		freeSpace, err := utils.ParsePercentage(pvca.Status.FreeSpacePercentage)
-		if err == nil && freeSpace < float64(*volumePolicy.ScaleUp.UtilizationThresholdPercent) {
-			return "passing storage threshold"
-		}
+func determineScalingReason(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volumePolicy v1alpha1.VolumePolicy) (string, error) {
+	if pvca.Status.VolumeRecommendations[0].Current.UsedSpacePercent != nil &&
+		*pvca.Status.VolumeRecommendations[0].Current.UsedSpacePercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
+		return "passing storage threshold", nil
 	}
 
-	if pvca.Status.FreeInodesPercentage != "" && pvca.Status.FreeInodesPercentage != "unknown" {
-		freeInodes, err := utils.ParsePercentage(pvca.Status.FreeInodesPercentage)
-		if err == nil && freeInodes < float64(*volumePolicy.ScaleUp.UtilizationThresholdPercent) {
-			return "passing inodes threshold"
-		}
+	if pvca.Status.VolumeRecommendations[0].Current.UsedInodesPercent != nil &&
+		*pvca.Status.VolumeRecommendations[0].Current.UsedInodesPercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
+		return "passing inodes threshold", nil
 	}
 
-	return "unknown reason"
+	return "unknown reason", ErrUndefinedScalingReason
 }

@@ -153,9 +153,16 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
-			// Set FreeSpacePercentage below threshold to trigger storage threshold reason
+			// Set UsedSpacePercent above threshold to trigger storage threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.FreeSpacePercentage = "5%"
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-is-resizing",
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedSpacePercent: ptr.To(95),
+					},
+				},
+			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because it is resizing
@@ -233,7 +240,14 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 
 			// Set FreeInodesPercentage below threshold to trigger inodes threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.FreeInodesPercentage = "5%"
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-fs-resize-is-pending",
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedInodesPercent: ptr.To(95),
+					},
+				},
+			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because the filesystem resize is pending
@@ -309,9 +323,16 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
-			// Set FreeSpacePercentage below threshold to trigger storage threshold reason
+			// Set UsedSpacePercent above threshold to trigger storage threshold reason
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.FreeSpacePercentage = "5%"
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-vol-is-being-modified",
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedSpacePercent: ptr.To(95),
+					},
+				},
+			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because the volume is being modified
@@ -378,8 +399,15 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(pvca).NotTo(BeNil())
 
 			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-			pvca.Status.PrevSize = resource.MustParse("1Gi")
-			pvca.Status.FreeInodesPercentage = "5%" // Set below threshold to trigger inodes threshold reason
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-vol-is-still-being-resized",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:              ptr.To(resource.MustParse("1Gi")),
+						UsedInodesPercent: ptr.To(95),
+					},
+				},
+			}
 			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			// We should see this PVC being skipped because current
@@ -448,6 +476,18 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
 
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-should-resize",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:             ptr.To(resource.MustParse("2Gi")),
+						UsedSpacePercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvca)}
 			reconciler, err := newReconciler()
 			Expect(err).NotTo(HaveOccurred())
@@ -477,6 +517,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 			Expect(condition.Reason).To(Equal(controller.ReasonReconcile))
 			Expect(condition.Message).To(ContainSubstring("resizing from 1Gi to 2Gi"))
+			Expect(condition.Message).To(ContainSubstring("passing storage threshold"))
 		})
 
 		It("should not resize if max capacity has been reached", func() {
@@ -514,6 +555,18 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Controller", func() {
 			)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvca).NotTo(BeNil())
+
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-max-capacity-reached",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:             ptr.To(resource.MustParse("3Gi")),
+						UsedSpacePercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
 
 			req := ctrl.Request{NamespacedName: client.ObjectKeyFromObject(pvca)}
 			reconciler, err := newReconciler()

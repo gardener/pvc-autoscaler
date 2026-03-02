@@ -51,44 +51,44 @@ type VolumeInfo struct {
 var ErrCapacityIsZero = errors.New("capacity is zero")
 
 // FreeSpacePercentage returns the free space as a percentage.
-func (vi *VolumeInfo) FreeSpacePercentage() (float64, error) {
+func (vi *VolumeInfo) FreeSpacePercentage() (int, error) {
 	if vi.CapacityBytes == 0 {
-		return 0.0, ErrCapacityIsZero
+		return 0, ErrCapacityIsZero
 	}
 
 	val := float64(vi.AvailableBytes) / float64(vi.CapacityBytes) * 100.0
 
-	return val, nil
+	return int(val), nil
 }
 
 // UsedSpacePercentage returns the used space as a percentage.
-func (vi *VolumeInfo) UsedSpacePercentage() (float64, error) {
+func (vi *VolumeInfo) UsedSpacePercentage() (int, error) {
 	free, err := vi.FreeSpacePercentage()
 	if err != nil {
-		return 0.0, err
+		return 0, err
 	}
-	val := 100.0 - free
+	val := 100 - free
 
 	return val, nil
 }
 
 // FreeInodesPercentage returns the number of free inodes as a percentage.
-func (vi *VolumeInfo) FreeInodesPercentage() (float64, error) {
+func (vi *VolumeInfo) FreeInodesPercentage() (int, error) {
 	if vi.CapacityInodes == 0 {
-		return 0.0, ErrCapacityIsZero
+		return 0, ErrCapacityIsZero
 	}
 	val := float64(vi.AvailableInodes) / float64(vi.CapacityInodes) * 100.0
 
-	return val, nil
+	return int(val), nil
 }
 
 // UsedInodesPercentage returns the number of used inodes as a percentage.
-func (vi *VolumeInfo) UsedInodesPercentage() (float64, error) {
+func (vi *VolumeInfo) UsedInodesPercentage() (int, error) {
 	free, err := vi.FreeInodesPercentage()
 	if err != nil {
-		return 0.0, err
+		return 0, err
 	}
-	val := 100.0 - free
+	val := 100 - free
 
 	return val, nil
 }

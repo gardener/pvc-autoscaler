@@ -83,16 +83,16 @@ var _ = Describe("Fake", func() {
 			Expect(result).NotTo(BeNil())
 
 			freeSpace, _ := result[key].FreeSpacePercentage()
-			Expect(freeSpace).To(Equal(100.0))
+			Expect(freeSpace).To(Equal(100))
 
 			usedSpace, _ := result[key].UsedSpacePercentage()
-			Expect(usedSpace).To(Equal(0.0))
+			Expect(usedSpace).To(Equal(0))
 
 			freeInodes, _ := result[key].FreeInodesPercentage()
-			Expect(freeInodes).To(Equal(100.0))
+			Expect(freeInodes).To(Equal(100))
 
 			usedInodes, _ := result[key].UsedInodesPercentage()
-			Expect(usedInodes).To(Equal(0.0))
+			Expect(usedInodes).To(Equal(0))
 
 			// Start the fake source and give it some time to
 			// consume it all
@@ -110,16 +110,16 @@ var _ = Describe("Fake", func() {
 			Expect(result).NotTo(BeNil())
 
 			freeSpace, _ = result[key].FreeSpacePercentage()
-			Expect(freeSpace).To(Equal(0.0))
+			Expect(freeSpace).To(Equal(0))
 
 			usedSpace, _ = result[key].UsedSpacePercentage()
-			Expect(usedSpace).To(Equal(100.0))
+			Expect(usedSpace).To(Equal(100))
 
 			freeInodes, _ = result[key].FreeInodesPercentage()
-			Expect(freeInodes).To(Equal(0.0))
+			Expect(freeInodes).To(Equal(0))
 
 			usedInodes, _ = result[key].UsedInodesPercentage()
-			Expect(usedInodes).To(Equal(100.0))
+			Expect(usedInodes).To(Equal(100))
 		})
 	})
 
