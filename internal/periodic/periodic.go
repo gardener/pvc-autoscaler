@@ -213,10 +213,8 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 			if err := r.resizePVC(ctx, &item, scalingReason); err != nil {
 				logger.Error(err, "failed to resize pvc")
 			}
-		} else {
-			if err := item.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
-				logger.Info("failed to remove status condition", "reason", err.Error())
-			}
+		} else if err := item.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
+			logger.Info("failed to remove status condition", "reason", err.Error())
 		}
 
 		condition := metav1.Condition{

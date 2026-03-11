@@ -1460,8 +1460,7 @@ var _ = Describe("Periodic Runner", func() {
 
 		It("should successfully resize the pvc based on storage threshold", func() {
 			ctx := context.Background()
-			initialCapacity := "1Gi"
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-should-resize", initialCapacity)
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-should-resize", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -1536,8 +1535,7 @@ var _ = Describe("Periodic Runner", func() {
 
 		It("should successfully resize the pvc based on inodes threshold", func() {
 			ctx := context.Background()
-			initialCapacity := "1Gi"
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-resize-inodes-threshold", initialCapacity)
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-resize-inodes-threshold", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
@@ -1613,8 +1611,7 @@ var _ = Describe("Periodic Runner", func() {
 
 		It("should not resize if max capacity has been reached", func() {
 			ctx := context.Background()
-			initialCapacity := "1Gi"
-			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-max-capacity-reached", initialCapacity)
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-max-capacity-reached", "1Gi")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
