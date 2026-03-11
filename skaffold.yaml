@@ -11,7 +11,6 @@ build:
             - api/autoscaling/v1alpha1
             - cmd/pvc-autoscaler
             - internal/common
-            - internal/controller/autoscaling
             - internal/metrics
             - internal/metrics/source
             - internal/metrics/source/prometheus
@@ -29,7 +28,7 @@ deploy:
       - name: cert-manager
         repo: https://charts.jetstack.io
         remoteChart: cert-manager
-        version: v1.16.1
+        version: v1.17.1
         namespace: cert-manager
         createNamespace: true
         setValues:
