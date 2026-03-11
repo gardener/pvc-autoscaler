@@ -8,16 +8,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
+	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
 
 // UnknownUtilizationValue is the value which will be used when the free
@@ -51,6 +53,10 @@ var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not 
 // configured configured without a Kubernetes API client.
 var ErrNoClient = errors.New("no client provided")
 
+// ErrUndefinedScalingReason is an error which is returned in case the scaling reason
+// cannot be determined based on the PVCA status.
+var ErrUndefinedScalingReason = errors.New("bug: undefined scaling reason")
+
 // Condition reasons for the RecommendationAvailable condition
 const (
 	// ReasonMetricsFetched indicates that metrics were successfully fetched and computed.
@@ -59,15 +65,16 @@ const (
 	ReasonMetricsFetchError = "MetricsFetchError"
 	// ReasonRecommendationError indicates an error occurred during recommendation computation.
 	ReasonRecommendationError = "RecommendationError"
+	// ReasonReconcile condition reason for the Resizing condition.
+	ReasonReconcile = "Reconcile"
 )
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
-// enqueues [v1alpha1.PersistentVolumeClaimAutoscaler] items for reconciling on
-// regular basis.
+// processes [v1alpha1.PersistentVolumeClaimAutoscaler] items on a regular basis
+// and performs PVC resizing when thresholds are reached.
 type Runner struct {
 	client        client.Client
 	interval      time.Duration
-	eventCh       chan event.GenericEvent
 	metricsSource metricssource.Source
 	eventRecorder record.EventRecorder
 }
@@ -92,10 +99,6 @@ func New(opts ...Option) (*Runner, error) {
 		return nil, common.ErrNoEventRecorder
 	}
 
-	if r.eventCh == nil {
-		return nil, common.ErrNoEventChannel
-	}
-
 	if r.client == nil {
 		return nil, ErrNoClient
 	}
@@ -116,16 +119,6 @@ func WithClient(c client.Client) Option {
 func WithInterval(interval time.Duration) Option {
 	opt := func(r *Runner) {
 		r.interval = interval
-	}
-
-	return opt
-}
-
-// WithEventChannel configures the [Runner] to use the given channel for
-// enqueuing.
-func WithEventChannel(ch chan event.GenericEvent) Option {
-	opt := func(r *Runner) {
-		r.eventCh = ch
 	}
 
 	return opt
@@ -155,13 +148,12 @@ func (r *Runner) Start(ctx context.Context) error {
 	ticker := time.NewTicker(r.interval)
 	logger := log.FromContext(ctx, "controller", common.ControllerName)
 	defer ticker.Stop()
-	defer close(r.eventCh)
 
 	for {
 		select {
 		case <-ticker.C:
-			if err := r.enqueueObjects(ctx); err != nil {
-				logger.Error(err, "failed to enqueue persistentvolumeclaimautoscalers")
+			if err := r.reconcileAll(ctx); err != nil {
+				logger.Error(err, "failed to reconcile persistentvolumeclaimautoscalers")
 			}
 		case <-ctx.Done():
 			return nil
@@ -169,9 +161,9 @@ func (r *Runner) Start(ctx context.Context) error {
 	}
 }
 
-// enqueueObjects enqueues the [v1alpha1.PersitentVolumeClaimAutoscaler]
-// resources for reconciliation.
-func (r *Runner) enqueueObjects(ctx context.Context) error {
+// reconcileAll processes all [v1alpha1.PersistentVolumeClaimAutoscaler]
+// resources and resizes PVCs when thresholds are reached.
+func (r *Runner) reconcileAll(ctx context.Context) error {
 	var items v1alpha1.PersistentVolumeClaimAutoscalerList
 	if err := r.client.List(ctx, &items); err != nil {
 		return err
@@ -187,7 +179,6 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		return fmt.Errorf("failed to get metrics: %w", err)
 	}
 
-	toReconcile := make([]v1alpha1.PersistentVolumeClaimAutoscaler, 0)
 	for _, item := range items.Items {
 		pvcObjKey := client.ObjectKey{Namespace: item.Namespace, Name: item.Spec.TargetRef.Name}
 		volInfo := metricsData[pvcObjKey]
@@ -223,9 +214,13 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		}
 
 		if ok {
-			toReconcile = append(toReconcile, item)
-		} else if err := item.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
-			logger.Info("failed to remove status condition", "reason", err.Error())
+			if err := r.resizePVC(ctx, &item); err != nil {
+				logger.Error(err, "failed to resize pvc")
+			}
+		} else {
+			if err := item.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
+				logger.Info("failed to remove status condition", "reason", err.Error())
+			}
 		}
 
 		condition := metav1.Condition{
@@ -237,13 +232,6 @@ func (r *Runner) enqueueObjects(ctx context.Context) error {
 		if err := item.SetCondition(ctx, r.client, condition); err != nil {
 			logger.Info("failed to update status condition", "reason", err.Error())
 		}
-	}
-
-	for _, item := range toReconcile {
-		e := event.GenericEvent{
-			Object: &item,
-		}
-		r.eventCh <- e
 	}
 
 	return nil
@@ -407,4 +395,172 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	default:
 		return false, nil
 	}
+}
+
+// resizePVC performs the actual resize of the PVC targeted by the given
+// [v1alpha1.PersistentVolumeClaimAutoscaler].
+func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler) error {
+	pvcObjKey := client.ObjectKey{Namespace: pvca.Namespace, Name: pvca.Spec.TargetRef.Name}
+	pvcObj := &corev1.PersistentVolumeClaim{}
+	if err := r.client.Get(ctx, pvcObjKey, pvcObj); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+
+	logger := log.FromContext(ctx).WithValues("pvc", pvcObj.Name)
+	currSpecSize := pvcObj.Spec.Resources.Requests.Storage()
+	currStatusSize := pvcObj.Status.Capacity.Storage()
+
+	// Currently only one policy is supported, since only one PVC can be targeted by a PVCA object
+	policy := pvca.Spec.VolumePolicies[0]
+	scalingReason, err := determineScalingReason(pvca, policy)
+	if err != nil {
+		return err
+	}
+
+	// Make sure that the PVC is not being modified at the moment.
+	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimResizing) {
+		logger.Info("resize has been started")
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeResizing),
+			Status:  metav1.ConditionTrue,
+			Reason:  ReasonReconcile,
+			Message: fmt.Sprintf(" - %s: is being scaled due to %s, resize has been started", pvcObj.Name, scalingReason),
+		}
+
+		return pvca.SetCondition(ctx, r.client, condition)
+	}
+
+	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimFileSystemResizePending) {
+		logger.Info("filesystem resize is pending")
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeResizing),
+			Status:  metav1.ConditionTrue,
+			Reason:  ReasonReconcile,
+			Message: fmt.Sprintf(" - %s: is being scaled due to %s, file system resize is pending", pvcObj.Name, scalingReason),
+		}
+
+		return pvca.SetCondition(ctx, r.client, condition)
+	}
+
+	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimVolumeModifyingVolume) {
+		logger.Info("volume is being modified")
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeResizing),
+			Status:  metav1.ConditionTrue,
+			Reason:  ReasonReconcile,
+			Message: fmt.Sprintf(" - %s: is being scaled due to %s, volume is being modified", pvcObj.Name, scalingReason),
+		}
+
+		return pvca.SetCondition(ctx, r.client, condition)
+	}
+
+	// If previously recorded size is equal to the current status it means
+	// we are still waiting for the resize to complete
+	if pvca.Status.VolumeRecommendations[0].Current.Size != nil &&
+		pvca.Status.VolumeRecommendations[0].Current.Size.Equal(*currStatusSize) {
+		logger.Info("persistent volume claim is still being resized")
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeResizing),
+			Status:  metav1.ConditionTrue,
+			Reason:  ReasonReconcile,
+			Message: fmt.Sprintf(" - %s: is being scaled due to %s, persistent volume claim is still being resized", pvcObj.Name, scalingReason),
+		}
+
+		return pvca.SetCondition(ctx, r.client, condition)
+	}
+
+	// Calculate the new size
+	stepPercent := float64(*policy.ScaleUp.StepPercent)
+	increment := math.Max(float64(currSpecSize.Value())*(stepPercent/100.0), float64(policy.ScaleUp.MinStepAbsolute.Value()))
+	targetSizeBytes := int64(math.Ceil((float64(currSpecSize.Value())+increment)/1073741824)) * 1073741824
+	targetSize := resource.NewQuantity(targetSizeBytes, resource.BinarySI)
+
+	// Check that we've got a valid new size
+	cmp := targetSize.Cmp(*currSpecSize)
+	switch cmp {
+	case 0:
+		logger.Info("new and current size are the same")
+
+		return nil
+	case -1:
+		logger.Info("new size is less than current")
+
+		return nil
+	}
+
+	// We don't want to exceed the max capacity
+	if targetSize.Value() > policy.MaxCapacity.Value() {
+		r.eventRecorder.Eventf(
+			pvcObj,
+			corev1.EventTypeWarning,
+			"MaxCapacityReached",
+			"max capacity (%s) has been reached, will not resize",
+			policy.MaxCapacity.String(),
+		)
+		logger.Info("max capacity reached")
+		metrics.MaxCapacityReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeResizing),
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonReconcile,
+			Message: fmt.Sprintf(" - %s: max capacity reached", pvcObj.Name),
+		}
+
+		return pvca.SetCondition(ctx, r.client, condition)
+	}
+
+	// And finally we should be good to resize now
+	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", targetSize.String())
+	metrics.ResizedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
+	r.eventRecorder.Eventf(
+		pvcObj,
+		corev1.EventTypeNormal,
+		"ResizingStorage",
+		"resizing storage from %s to %s",
+		currSpecSize.String(),
+		targetSize.String(),
+	)
+
+	// Update PVC and PVCA resources
+	pvcPatch := client.MergeFrom(pvcObj.DeepCopy())
+	pvcObj.Spec.Resources.Requests[corev1.ResourceStorage] = *targetSize
+	if err := r.client.Patch(ctx, pvcObj, pvcPatch); err != nil {
+		return err
+	}
+
+	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+	pvca.Status.VolumeRecommendations[0].Current.Size = currStatusSize
+	pvca.Status.VolumeRecommendations[0].Target.Size = targetSize
+	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
+		return err
+	}
+
+	condition := metav1.Condition{
+		Type:    string(v1alpha1.ConditionTypeResizing),
+		Status:  metav1.ConditionTrue,
+		Reason:  ReasonReconcile,
+		Message: fmt.Sprintf("- %s: resizing from %s to %s due to %s", pvcObj.Name, currSpecSize.String(), targetSize.String(), scalingReason),
+	}
+
+	return pvca.SetCondition(ctx, r.client, condition)
+}
+
+// determineScalingReason determines why scaling was triggered based on the PVCA status.
+// It compares the free space/inodes percentages against the threshold.
+func determineScalingReason(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volumePolicy v1alpha1.VolumePolicy) (string, error) {
+	if len(pvca.Status.VolumeRecommendations) == 0 {
+		return "unknown reason", ErrUndefinedScalingReason
+	}
+
+	if pvca.Status.VolumeRecommendations[0].Current.UsedSpacePercent != nil &&
+		*pvca.Status.VolumeRecommendations[0].Current.UsedSpacePercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
+		return "passing storage threshold", nil
+	}
+
+	if pvca.Status.VolumeRecommendations[0].Current.UsedInodesPercent != nil &&
+		*pvca.Status.VolumeRecommendations[0].Current.UsedInodesPercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
+		return "passing inodes threshold", nil
+	}
+
+	return "unknown reason", ErrUndefinedScalingReason
 }

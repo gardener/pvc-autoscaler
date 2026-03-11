@@ -15,12 +15,12 @@ import (
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -39,13 +39,23 @@ func newRunner() (*Runner, error) {
 
 	runner, err := New(
 		WithClient(k8sClient),
-		WithEventChannel(eventCh),
 		WithEventRecorder(eventRecorder),
 		WithInterval(time.Second),
 		WithMetricsSource(metricsSource),
 	)
 
 	return runner, err
+}
+
+// getResizingCondition gets and returns the [utils.ConditionTypeResizing] status
+// condition for the given PVC Autoscaler resource.
+func getResizingCondition(ctx context.Context, c client.Client, key client.ObjectKey) (*metav1.Condition, error) {
+	obj := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+	if err := c.Get(ctx, key, obj); err != nil {
+		return nil, err
+	}
+
+	return meta.FindStatusCondition(obj.Status.Conditions, string(v1alpha1.ConditionTypeResizing)), nil
 }
 
 var _ = Describe("Periodic Runner", func() {
@@ -59,7 +69,6 @@ var _ = Describe("Periodic Runner", func() {
 		It("should fail without metrics source", func() {
 			runner, err := New(
 				WithClient(k8sClient),
-				WithEventChannel(eventCh),
 				WithEventRecorder(eventRecorder),
 				WithInterval(time.Second),
 				WithMetricsSource(nil), // should not be nil
@@ -68,22 +77,9 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(runner).To(BeNil())
 		})
 
-		It("should fail without event channel", func() {
-			runner, err := New(
-				WithClient(k8sClient),
-				WithEventChannel(nil), // should not be nil
-				WithEventRecorder(eventRecorder),
-				WithInterval(time.Second),
-				WithMetricsSource(fake.New()),
-			)
-			Expect(err).To(MatchError(common.ErrNoEventChannel))
-			Expect(runner).To(BeNil())
-		})
-
 		It("should fail without client", func() {
 			runner, err := New(
 				WithClient(nil), // should not be nil
-				WithEventChannel(eventCh),
 				WithEventRecorder(eventRecorder),
 				WithInterval(time.Second),
 				WithMetricsSource(fake.New()),
@@ -95,7 +91,6 @@ var _ = Describe("Periodic Runner", func() {
 		It("should fail without event recorder", func() {
 			runner, err := New(
 				WithClient(k8sClient),
-				WithEventChannel(eventCh),
 				WithEventRecorder(nil), // should not be nil
 				WithInterval(time.Second),
 				WithMetricsSource(fake.New()),
@@ -804,8 +799,8 @@ var _ = Describe("Periodic Runner", func() {
 		})
 	})
 
-	Context("enqueueObjects", func() {
-		It("should not enqueue -- no autoscaler for PVCs", func() {
+	Context("reconcileAll", func() {
+		It("should not reconcile -- no autoscaler for PVCs", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
@@ -865,25 +860,13 @@ var _ = Describe("Periodic Runner", func() {
 			}()
 			metricsSource.Start(newCtx)
 
-			// Reconfigure the periodic runner, so that we always
-			// start with a clean state of events. Also, reconfigure
-			// the metrics source.
-			eventCh := make(chan event.GenericEvent, 128)
-			withEventChOpt := WithEventChannel(eventCh)
+			// Reconfigure the periodic runner with the metrics source
 			withMetricsSourceOpt := WithMetricsSource(metricsSource)
-			withEventChOpt(runner)
 			withMetricsSourceOpt(runner)
 
-			// We should not see any events for this PVC, even if it
-			// is already full, since we haven't annotated it
-			Expect(runner.enqueueObjects(parentCtx)).To(Succeed())
-			waitCh := time.After(500 * time.Millisecond)
-			select {
-			case obj := <-eventCh:
-				Expect(obj).To(BeNil())
-			case <-waitCh:
-				break // nolint:revive
-			}
+			// We should not see the PVC being resized, even if it
+			// is already full, since the PVCA targets a different PVC
+			Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
 			// Verify the RecommendationAvailable condition
 			updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
@@ -901,7 +884,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(foundCondition.Reason).To(Equal(ReasonRecommendationError))
 		})
 
-		It("should not enqueue -- failed to get metrics", func() {
+		It("should not reconcile -- failed to get metrics", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
@@ -945,9 +928,8 @@ var _ = Describe("Periodic Runner", func() {
 			withMetricsSourceOpt := WithMetricsSource(metricsSource)
 			withMetricsSourceOpt(runner)
 
-			// We should not see any events for this PVC, since the
-			// metrics source is returning errors
-			Expect(runner.enqueueObjects(parentCtx)).NotTo(Succeed())
+			// We should see an error since the metrics source is returning errors
+			Expect(runner.reconcileAll(parentCtx)).NotTo(Succeed())
 		})
 
 		It("should set MetricsFetchError condition when no metrics for PVC", func() {
@@ -991,13 +973,10 @@ var _ = Describe("Periodic Runner", func() {
 
 			// Reconfigure the periodic runner with empty metrics source (no metrics registered)
 			metricsSource := fake.New(fake.WithInterval(time.Second))
-			eventCh := make(chan event.GenericEvent, 128)
-			withEventChOpt := WithEventChannel(eventCh)
 			withMetricsSourceOpt := WithMetricsSource(metricsSource)
-			withEventChOpt(runner)
 			withMetricsSourceOpt(runner)
 
-			Expect(runner.enqueueObjects(parentCtx)).To(Succeed())
+			Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
 			// Verify the RecommendationAvailable condition
 			updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
@@ -1015,7 +994,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(foundCondition.Reason).To(Equal(ReasonMetricsFetchError))
 		})
 
-		It("should enqueue -- threshold has been reached", func() {
+		It("should reconcile -- threshold has been reached", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
@@ -1075,24 +1054,12 @@ var _ = Describe("Periodic Runner", func() {
 			}()
 			metricsSource.Start(newCtx)
 
-			// Reconfigure the periodic runner, so that we always
-			// start with a clean state of events. Also, reconfigure
-			// the metrics source.
-			eventCh := make(chan event.GenericEvent, 128)
-			withEventChOpt := WithEventChannel(eventCh)
+			// Reconfigure the periodic runner with the metrics source
 			withMetricsSourceOpt := WithMetricsSource(metricsSource)
-			withEventChOpt(runner)
 			withMetricsSourceOpt(runner)
 
-			// We should see an event that our test PVC needs to be reconciled
-			Expect(runner.enqueueObjects(parentCtx)).To(Succeed())
-			waitCh := time.After(500 * time.Millisecond)
-			select {
-			case obj := <-eventCh:
-				Expect(obj).NotTo(BeNil())
-			case <-waitCh:
-				break // nolint:revive
-			}
+			// The PVC should be reconciled when threshold is reached
+			Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
 			// Verify the RecommendationAvailable condition
 			updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
@@ -1112,7 +1079,7 @@ var _ = Describe("Periodic Runner", func() {
 	})
 
 	Context("Start periodic runner", func() {
-		It("should fail to enqueue because of metrics source", func() {
+		It("should fail to reconcile because of metrics source", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
@@ -1160,7 +1127,7 @@ var _ = Describe("Periodic Runner", func() {
 			withIntervalOpt(runner)
 
 			// Inspect the log messages, that it did actually failed
-			// to enqueue objects
+			// to reconcile objects
 			var buf strings.Builder
 			w := io.MultiWriter(GinkgoWriter, &buf)
 			logger := zap.New(zap.WriteTo(w))
@@ -1169,7 +1136,585 @@ var _ = Describe("Periodic Runner", func() {
 			defer cancelFunc()
 			ctx2 := log.IntoContext(ctx1, logger)
 			Expect(runner.Start(ctx2)).To(Succeed())
-			Expect(buf.String()).To(ContainSubstring("failed to enqueue persistentvolumeclaimautoscalers"))
+			Expect(buf.String()).To(ContainSubstring("failed to reconcile persistentvolumeclaimautoscalers"))
+		})
+	})
+
+	Context("resizePVC", func() {
+		It("should skip resize if pvc resize has been started", func() {
+			ctx := context.Background()
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-is-resizing", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			// Add the status conditions
+			patch := client.MergeFrom(pvc.DeepCopy())
+			pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+				{
+					Type:   corev1.PersistentVolumeClaimResizing,
+					Status: corev1.ConditionTrue,
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-is-resizing",
+			}
+
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
+					}),
+				},
+			}
+
+			// The PVC Autoscaler resource targeting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				ctx,
+				k8sClient,
+				"pvca-is-resizing",
+				targetRef,
+				volumePolicies,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
+			// Set UsedSpacePercent above threshold to trigger storage threshold reason
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-is-resizing",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:             ptr.To(resource.MustParse("1Gi")),
+						UsedSpacePercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("resize has been started"))
+
+			// Check status condition
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("resize has been started"))
+			Expect(condition.Message).To(ContainSubstring("storage threshold"))
+		})
+
+		It("should skip resize if filesystem resize is pending", func() {
+			ctx := context.Background()
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-fs-resize-is-pending", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			// Add the status conditions
+			patch := client.MergeFrom(pvc.DeepCopy())
+			pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+				{
+					Type:   corev1.PersistentVolumeClaimFileSystemResizePending,
+					Status: corev1.ConditionTrue,
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-fs-resize-is-pending",
+			}
+
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
+					}),
+				},
+			}
+
+			// The PVC Autoscaler resource targeting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				ctx,
+				k8sClient,
+				"pvca-fs-resize-is-pending",
+				targetRef,
+				volumePolicies,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
+			// Set UsedInodesPercent above threshold to trigger inodes threshold reason
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-fs-resize-is-pending",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:              ptr.To(resource.MustParse("1Gi")),
+						UsedInodesPercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("filesystem resize is pending"))
+
+			// Check status condition
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("file system resize is pending"))
+			Expect(condition.Message).To(ContainSubstring("inodes threshold"))
+		})
+
+		It("should skip resize if volume is being modified", func() {
+			ctx := context.Background()
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-vol-is-being-modified", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			// Add the status conditions
+			patch := client.MergeFrom(pvc.DeepCopy())
+			pvc.Status.Conditions = []corev1.PersistentVolumeClaimCondition{
+				{
+					Type:   corev1.PersistentVolumeClaimVolumeModifyingVolume,
+					Status: corev1.ConditionTrue,
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-vol-is-being-modified",
+			}
+
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
+					}),
+				},
+			}
+
+			// The PVC Autoscaler resource targeting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				ctx,
+				k8sClient,
+				"pvca-vol-is-being-modified",
+				targetRef,
+				volumePolicies,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
+			// Set UsedSpacePercent above threshold to trigger storage threshold reason
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-vol-is-being-modified",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:             ptr.To(resource.MustParse("1Gi")),
+						UsedSpacePercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("volume is being modified"))
+
+			// Check status condition
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("volume is being modified"))
+			Expect(condition.Message).To(ContainSubstring("storage threshold"))
+		})
+
+		It("should skip resize if pvc is still being resized", func() {
+			ctx := context.Background()
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-vol-is-still-being-resized", "1Gi")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-vol-is-still-being-resized",
+			}
+
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
+					}),
+				},
+			}
+
+			// The PVC Autoscaler resource targeting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				ctx,
+				k8sClient,
+				"pvca-vol-is-still-being-resized",
+				targetRef,
+				volumePolicies,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
+			// Set UsedInodesPercent above threshold and Current.Size equal to pvc.status.capacity
+			// to simulate resize in progress
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-vol-is-still-being-resized",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:              ptr.To(resource.MustParse("1Gi")),
+						UsedInodesPercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("persistent volume claim is still being resized"))
+
+			// Check status condition
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("persistent volume claim is still being resized"))
+			Expect(condition.Message).To(ContainSubstring("inodes threshold"))
+		})
+
+		It("should successfully resize the pvc based on storage threshold", func() {
+			ctx := context.Background()
+			initialCapacity := "1Gi"
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-should-resize", initialCapacity)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-should-resize",
+			}
+
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
+					}),
+				},
+			}
+
+			// The PVC Autoscaler resource targeting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				ctx,
+				k8sClient,
+				"pvca-should-resize",
+				targetRef,
+				volumePolicies,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-should-resize",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:             ptr.To(resource.MustParse("2Gi")),
+						UsedSpacePercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("resizing persistent volume claim"))
+
+			var resizedPvc corev1.PersistentVolumeClaim
+			increasedCapacity := resource.MustParse("2Gi") // New capacity should be 2Gi
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(increasedCapacity))
+
+			// Check status condition
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("resizing from 1Gi to 2Gi"))
+			Expect(condition.Message).To(ContainSubstring("passing storage threshold"))
+		})
+
+		It("should successfully resize the pvc based on inodes threshold", func() {
+			ctx := context.Background()
+			initialCapacity := "1Gi"
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-resize-inodes-threshold", initialCapacity)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-resize-inodes-threshold",
+			}
+
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MaxCapacity: resource.MustParse("5Gi"),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
+					}),
+				},
+			}
+
+			// The PVC Autoscaler resource targeting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				ctx,
+				k8sClient,
+				"pvca-resize-inodes-threshold",
+				targetRef,
+				volumePolicies,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
+			// Set just UsedInodesPercent above threshold
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-resize-inodes-threshold",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:              ptr.To(resource.MustParse("2Gi")),
+						UsedInodesPercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("resizing persistent volume claim"))
+
+			var resizedPvc corev1.PersistentVolumeClaim
+			increasedCapacity := resource.MustParse("2Gi") // New capacity should be 2Gi
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(increasedCapacity))
+
+			// Check status condition
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionTrue))
+			Expect(condition.Reason).To(Equal(ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("resizing from 1Gi to 2Gi"))
+			Expect(condition.Message).To(ContainSubstring("passing inodes threshold"))
+		})
+
+		It("should not resize if max capacity has been reached", func() {
+			ctx := context.Background()
+			initialCapacity := "1Gi"
+			pvc, err := testutils.CreatePVC(ctx, k8sClient, "pvc-max-capacity-reached", initialCapacity)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvc).NotTo(BeNil())
+
+			targetRef := autoscalingv1.CrossVersionObjectReference{
+				APIVersion: "v1",
+				Kind:       "PersistentVolumeClaim",
+				Name:       "pvc-max-capacity-reached",
+			}
+
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					MaxCapacity: resource.MustParse("3Gi"),
+					ScaleUp: ptr.To(v1alpha1.ScalingRules{
+						UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+						StepPercent:                 ptr.To(common.DefaultStepPercent),
+						MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+						CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
+					}),
+				},
+			}
+
+			// The PVC Autoscaler resource targeting our test PVC
+			pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+				ctx,
+				k8sClient,
+				"pvca-max-capacity-reached",
+				targetRef,
+				volumePolicies,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(pvca).NotTo(BeNil())
+
+			pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+			pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+				{
+					Name: "pvc-max-capacity-reached",
+					Current: v1alpha1.CurrentVolumeStatus{
+						Size:             ptr.To(resource.MustParse("3Gi")),
+						UsedSpacePercent: ptr.To(95),
+					},
+				},
+			}
+			Expect(k8sClient.Status().Patch(ctx, pvca, pvcaPatch)).To(Succeed())
+
+			runner, err := newRunner()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(runner).NotTo(BeNil())
+
+			// Inspect the log messages
+			var buf strings.Builder
+			w := io.MultiWriter(GinkgoWriter, &buf)
+			logger := zap.New(zap.WriteTo(w))
+			newCtx := log.IntoContext(ctx, logger)
+
+			// First resize
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+
+			wantLog := `"resizing persistent volume claim","pvc":"pvc-max-capacity-reached","from":"1Gi","to":"2Gi"}`
+			Expect(buf.String()).To(ContainSubstring(wantLog))
+
+			// PVC should be resized
+			var resizedPvc corev1.PersistentVolumeClaim
+			firstIncreaseCap := resource.MustParse("2Gi") // New capacity should be 2Gi
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(firstIncreaseCap))
+
+			// Update status of the PVC, so that it seems like it
+			// actually resized
+			patch := client.MergeFrom(resizedPvc.DeepCopy())
+			resizedPvc.Status.Capacity[corev1.ResourceStorage] = firstIncreaseCap
+			Expect(k8sClient.Status().Patch(ctx, &resizedPvc, patch)).To(Succeed())
+
+			// Re-fetch the pvca to get the updated status
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
+
+			// Resize for the second time
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+
+			wantLog = `"resizing persistent volume claim","pvc":"pvc-max-capacity-reached","from":"2Gi","to":"3Gi"}`
+			Expect(buf.String()).To(ContainSubstring(wantLog))
+
+			secondIncreaseCap := resource.MustParse("3Gi") // New capacity should be 3Gi
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+			Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(secondIncreaseCap))
+
+			// Update status of the PVC again, so that it seems like it
+			// actually resized
+			patch = client.MergeFrom(resizedPvc.DeepCopy())
+			resizedPvc.Status.Capacity[corev1.ResourceStorage] = secondIncreaseCap
+			Expect(k8sClient.Status().Patch(ctx, &resizedPvc, patch)).To(Succeed())
+
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
+			Expect(runner.resizePVC(newCtx, pvca)).To(Succeed())
+			Expect(buf.String()).To(ContainSubstring("max capacity reached"))
+
+			// Check status condition
+			condition, err := getResizingCondition(ctx, k8sClient, client.ObjectKeyFromObject(pvca))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(condition).NotTo(BeNil())
+			Expect(condition.Status).To(Equal(metav1.ConditionFalse))
+			Expect(condition.Reason).To(Equal(ReasonReconcile))
+			Expect(condition.Message).To(ContainSubstring("max capacity reached"))
 		})
 	})
 })
