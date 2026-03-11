@@ -53,10 +53,6 @@ var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not 
 // configured configured without a Kubernetes API client.
 var ErrNoClient = errors.New("no client provided")
 
-// ErrUndefinedScalingReason is an error which is returned in case the scaling reason
-// cannot be determined based on the PVCA status.
-var ErrUndefinedScalingReason = errors.New("bug: undefined scaling reason")
-
 // Condition reasons for the RecommendationAvailable condition
 const (
 	// ReasonMetricsFetched indicates that metrics were successfully fetched and computed.
@@ -190,20 +186,20 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 			"pvc", item.Spec.TargetRef.Name,
 		)
 
-		ok, err := r.shouldReconcilePVC(ctx, &item, volInfo)
+		ok, scalingReason, err := r.shouldReconcilePVC(ctx, &item, volInfo)
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 			metrics.SkippedTotal.WithLabelValues(item.Namespace, item.Name, err.Error()).Inc()
-			var reason string
+			var conditionReason string
 			if errors.Is(err, common.ErrNoMetrics) {
-				reason = ReasonMetricsFetchError
+				conditionReason = ReasonMetricsFetchError
 			} else {
-				reason = ReasonRecommendationError
+				conditionReason = ReasonRecommendationError
 			}
 			condition := metav1.Condition{
 				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
 				Status:  metav1.ConditionFalse,
-				Reason:  reason,
+				Reason:  conditionReason,
 				Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
 			}
 			if err := item.SetCondition(ctx, r.client, condition); err != nil {
@@ -214,7 +210,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 		}
 
 		if ok {
-			if err := r.resizePVC(ctx, &item); err != nil {
+			if err := r.resizePVC(ctx, &item, scalingReason); err != nil {
 				logger.Error(err, "failed to resize pvc")
 			}
 		} else {
@@ -272,49 +268,49 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 // shouldReconcilePVC is a predicate which checks whether the
 // [corev1.PersistentVolumeClaim] object targeted by
 // [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
-// reconciliation.
-func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volInfo *metricssource.VolumeInfo) (bool, error) {
+// reconciliation. When it returns true, it also returns the scaling reason.
+func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volInfo *metricssource.VolumeInfo) (bool, string, error) {
 	pvcObjKey := client.ObjectKey{Namespace: pvca.Namespace, Name: pvca.Spec.TargetRef.Name}
 	pvcObj := &corev1.PersistentVolumeClaim{}
 	if err := r.client.Get(ctx, pvcObjKey, pvcObj); err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	if err := r.updatePVCAStatus(ctx, pvca, volInfo); err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	// No metrics found, nothing to do for now
 	if volInfo == nil {
-		return false, common.ErrNoMetrics
+		return false, "", common.ErrNoMetrics
 	}
 
 	// Validate the PVC itself against the spec
 	currStatusSize := pvcObj.Status.Capacity.Storage()
 	if currStatusSize.IsZero() {
-		return false, fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
+		return false, "", fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
 	}
 
 	// Only one volume policy is supported currently
 	policy := pvca.Spec.VolumePolicies[0]
 	if policy.MaxCapacity.Value() < currStatusSize.Value() {
-		return false, fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
+		return false, "", fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
 	}
 
 	// We need a StorageClass with expansion support
 	scName := ptr.Deref(pvcObj.Spec.StorageClassName, "")
 	if scName == "" {
-		return false, ErrStorageClassNotFound
+		return false, "", ErrStorageClassNotFound
 	}
 
 	var sc storagev1.StorageClass
 	scKey := types.NamespacedName{Name: scName}
 	if err := r.client.Get(ctx, scKey, &sc); err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	if !ptr.Deref(sc.AllowVolumeExpansion, false) {
-		return false, ErrStorageClassDoesNotSupportExpansion
+		return false, "", ErrStorageClassDoesNotSupportExpansion
 	}
 
 	// Detect whether the metrics source is reporting stale data. Stale
@@ -327,7 +323,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 			delta = -delta
 		}
 		if delta > common.ScalingResolutionBytes/2 {
-			return false, fmt.Errorf("stale metrics data detected: pvc size=%d bytes, metrics size=%d bytes:%w", statusSize, volInfo.CapacityBytes, common.ErrStaleMetrics)
+			return false, "", fmt.Errorf("stale metrics data detected: pvc size=%d bytes, metrics size=%d bytes:%w", statusSize, volInfo.CapacityBytes, common.ErrStaleMetrics)
 		}
 	}
 
@@ -336,13 +332,13 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	// didn't get any metrics for it.
 	freeSpace, err := volInfo.FreeSpacePercentage()
 	if err != nil {
-		return false, common.ErrNoMetrics
+		return false, "", common.ErrNoMetrics
 	}
 
 	// Even, if we don't have inode metrics we still want to proceed here.
 	freeInodes, err := volInfo.FreeInodesPercentage()
 	if err != nil {
-		return false, common.ErrNoMetrics
+		return false, "", common.ErrNoMetrics
 	}
 
 	// Get threshold from volume policy
@@ -351,15 +347,15 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 
 	// VolumeMode should be Filesystem
 	if pvcObj.Spec.VolumeMode == nil {
-		return false, nil
+		return false, "", nil
 	}
 	if *pvcObj.Spec.VolumeMode != corev1.PersistentVolumeFilesystem {
-		return false, ErrVolumeModeIsNotFilesystem
+		return false, "", ErrVolumeModeIsNotFilesystem
 	}
 
 	// The PVC should be bound
 	if pvcObj.Status.Phase != corev1.ClaimBound {
-		return false, nil
+		return false, "", nil
 	}
 
 	switch {
@@ -375,7 +371,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name, "space").Inc()
 
-		return true, nil
+		return true, "passing storage threshold", nil
 
 	// Free inodes reached threshold
 	case volInfo.CapacityInodes > 0.0 && (freeInodes < threshold):
@@ -389,17 +385,17 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name, "inodes").Inc()
 
-		return true, nil
+		return true, "passing inodes threshold", nil
 
 	// No need to reconcile the PVC for now
 	default:
-		return false, nil
+		return false, "", nil
 	}
 }
 
 // resizePVC performs the actual resize of the PVC targeted by the given
 // [v1alpha1.PersistentVolumeClaimAutoscaler].
-func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler) error {
+func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, scalingReason string) error {
 	pvcObjKey := client.ObjectKey{Namespace: pvca.Namespace, Name: pvca.Spec.TargetRef.Name}
 	pvcObj := &corev1.PersistentVolumeClaim{}
 	if err := r.client.Get(ctx, pvcObjKey, pvcObj); err != nil {
@@ -412,10 +408,6 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 
 	// Currently only one policy is supported, since only one PVC can be targeted by a PVCA object
 	policy := pvca.Spec.VolumePolicies[0]
-	scalingReason, err := determineScalingReason(pvca, policy)
-	if err != nil {
-		return err
-	}
 
 	// Make sure that the PVC is not being modified at the moment.
 	if utils.IsPersistentVolumeClaimConditionTrue(pvcObj, corev1.PersistentVolumeClaimResizing) {
@@ -543,24 +535,4 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	return pvca.SetCondition(ctx, r.client, condition)
-}
-
-// determineScalingReason determines why scaling was triggered based on the PVCA status.
-// It compares the free space/inodes percentages against the threshold.
-func determineScalingReason(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, volumePolicy v1alpha1.VolumePolicy) (string, error) {
-	if len(pvca.Status.VolumeRecommendations) == 0 {
-		return "unknown reason", ErrUndefinedScalingReason
-	}
-
-	if pvca.Status.VolumeRecommendations[0].Current.UsedSpacePercent != nil &&
-		*pvca.Status.VolumeRecommendations[0].Current.UsedSpacePercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
-		return "passing storage threshold", nil
-	}
-
-	if pvca.Status.VolumeRecommendations[0].Current.UsedInodesPercent != nil &&
-		*pvca.Status.VolumeRecommendations[0].Current.UsedInodesPercent > *volumePolicy.ScaleUp.UtilizationThresholdPercent {
-		return "passing inodes threshold", nil
-	}
-
-	return "unknown reason", ErrUndefinedScalingReason
 }
