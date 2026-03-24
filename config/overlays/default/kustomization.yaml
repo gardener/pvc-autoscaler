@@ -4,7 +4,8 @@ kind: Kustomization
 resources:
 - ../../base
 
+components:
+- ../../components/kube-rbac-proxy
+
 patches:
-# Protect the /metrics endpoint by putting it behind auth.
-- path: manager_auth_proxy_patch.yaml
 - path: manager_config_patch.yaml
