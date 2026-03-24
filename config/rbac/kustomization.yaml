@@ -22,4 +22,3 @@ resources:
 # if you do not want those helpers be installed with your Project.
 - autoscaling_persistentvolumeclaimautoscaler_editor_role.yaml
 - autoscaling_persistentvolumeclaimautoscaler_viewer_role.yaml
-

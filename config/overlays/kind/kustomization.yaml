@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../../base
+- fake-metrics/
+
+patches:
+# Local dev: points to kind-prometheus, exposes metrics directly,
+# and overrides metric queries to use fake metrics (type="fake").
+- path: manager_config_patch.yaml
+
+# Use the local skaffold-built image instead of the release image.
+images:
+- name: controller
+  newName: local-skaffold/pvc-autoscaler
+  newTag: latest

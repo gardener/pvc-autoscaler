@@ -3,8 +3,3 @@ kind: Kustomization
 
 resources:
 - manager.yaml
-
-images:
-- name: controller
-  newName: local-skaffold/pvc-autoscaler
-  newTag: latest

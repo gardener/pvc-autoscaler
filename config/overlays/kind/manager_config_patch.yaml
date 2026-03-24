@@ -1,0 +1,21 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+  namespace: system
+spec:
+  template:
+    spec:
+      containers:
+      - name: manager
+        args:
+        - "--health-probe-bind-address=:8081"
+        - "--metrics-bind-address=:8080"
+        - "--leader-elect"
+        - "--interval=30s"
+        - "--prometheus-address=http://kind-prometheus-kube-prome-prometheus.monitoring.svc.cluster.local:9090"
+        - --metrics-available-bytes-query=kubelet_volume_stats_available_bytes{type="fake"}
+        - --metrics-capacity-bytes-query=kubelet_volume_stats_capacity_bytes{type="fake"}
+        - --metrics-available-inodes-query=kubelet_volume_stats_inodes_free{type="fake"}
+        - --metrics-capacity-inodes-query=kubelet_volume_stats_inodes{type="fake"}
