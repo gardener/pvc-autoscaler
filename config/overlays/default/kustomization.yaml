@@ -9,3 +9,7 @@ components:
 
 patches:
 - path: manager_config_patch.yaml
+images:
+- name: controller
+  newName: europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler
+  newTag: latest

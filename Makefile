@@ -211,8 +211,8 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 build-installer: generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
 	echo "---" > dist/install.yaml  # Add a document separator before appending
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:latest
-	$(KUSTOMIZE) build config/default >> dist/install.yaml
+	cd config/overlays/default && $(KUSTOMIZE) edit set image controller=${IMG}:latest
+	$(KUSTOMIZE) build config/overlays/default >> dist/install.yaml
 
 ##@ Deployment
 
@@ -230,12 +230,12 @@ uninstall: generate kustomize ## Uninstall CRDs from the K8s cluster specified i
 
 .PHONY: deploy
 deploy: generate kustomize ## Deploy controller to the K8s cluster specified in ~/.kube/config.
-	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}:${IMAGE_TAG}
-	$(KUSTOMIZE) build config/default | $(KUBECTL) apply -f -
+	cd config/overlays/default && $(KUSTOMIZE) edit set image controller=${IMG}:${IMAGE_TAG}
+	$(KUSTOMIZE) build config/overlays/default | $(KUBECTL) apply -f -
 
 .PHONY: undeploy
 undeploy: kustomize ## Undeploy controller from the K8s cluster specified in ~/.kube/config. Call with ignore-not-found=true to ignore resource not found errors during deletion.
-	$(KUSTOMIZE) build config/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
+	$(KUSTOMIZE) build config/overlays/default | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 ##@ Dependencies
 
