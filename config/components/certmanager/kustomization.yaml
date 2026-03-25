@@ -8,4 +8,5 @@ configurations:
 - kustomizeconfig.yaml
 
 patches:
+- path: cainjection_in_autoscaling_persistentvolumeclaimautoscalers.yaml
 - path: webhookcainjection_patch.yaml
