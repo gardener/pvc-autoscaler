@@ -187,7 +187,7 @@ var _ = Describe("Periodic Runner", func() {
 			})
 		})
 
-		Context("update PersistentVolumeClaimAutoscaler resource", func() {
+		Context("Updating PVCA status with volume metrics (updatePVCAStatus)", func() {
 			It("should update the pvca with unknown values", func() {
 				Expect(runner.updatePVCAStatus(parentCtx, pvca, nil)).To(Succeed())
 				Expect(pvca.Status.LastCheck).NotTo(Equal(metav1.Time{}))
@@ -216,7 +216,7 @@ var _ = Describe("Periodic Runner", func() {
 			})
 		})
 
-		Context("shouldReconcilePVC predicate", func() {
+		Context("Determining if PVC should be reconciled (shouldReconcilePVC)", func() {
 			It("should return error - PVC is not found", func() {
 				// Patch shared pvca to target a non-existent PVC
 				patch := client.MergeFrom(pvca.DeepCopy())
@@ -521,7 +521,7 @@ var _ = Describe("Periodic Runner", func() {
 
 		})
 
-		Context("reconcileAll", func() {
+		Context("Reconciling all PVCAs (reconcileAll)", func() {
 			It("should not reconcile -- PVCA targets non-existent PVC", func() {
 				// Patch shared pvca to target a non-existent PVC
 				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
@@ -650,7 +650,7 @@ var _ = Describe("Periodic Runner", func() {
 			})
 		})
 
-		Context("Start periodic runner", func() {
+		Context("Starting the periodic runner (Start)", func() {
 			It("should fail to reconcile because of metrics source", func() {
 				withMetricsSourceOpt := WithMetricsSource(&fake.AlwaysFailing{})
 				withMetricsSourceOpt(runner)
@@ -669,7 +669,7 @@ var _ = Describe("Periodic Runner", func() {
 			})
 		})
 
-		Context("resizePVC", func() {
+		Context("Resizing PVCs based on thresholds (resizePVC)", func() {
 			It("should skip resize if pvc resize has been started", func() {
 				// Patch shared pvc to simulate resizing condition
 				patch := client.MergeFrom(pvc.DeepCopy())
