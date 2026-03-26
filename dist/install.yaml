@@ -618,7 +618,7 @@ metadata:
     app.kubernetes.io/created-by: pvc-autoscaler
     app.kubernetes.io/instance: controller-manager
     app.kubernetes.io/managed-by: kustomize
-    app.kubernetes.io/name: deployment
+    app.kubernetes.io/name: pvc-autoscaler
     app.kubernetes.io/part-of: pvc-autoscaler
     control-plane: controller-manager
   name: pvc-autoscaler-controller-manager
@@ -666,6 +666,10 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
@@ -684,6 +688,10 @@ spec:
           capabilities:
             drop:
             - ALL
+        volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
       - args:
         - --secure-listen-address=0.0.0.0:8443
         - --upstream=http://127.0.0.1:8080/
@@ -716,6 +724,43 @@ spec:
           type: RuntimeDefault
       serviceAccountName: pvc-autoscaler-controller-manager
       terminationGracePeriodSeconds: 10
+      volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/created-by: pvc-autoscaler
+    app.kubernetes.io/instance: serving-cert
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: certificate
+    app.kubernetes.io/part-of: pvc-autoscaler
+  name: pvc-autoscaler-serving-cert
+  namespace: pvc-autoscaler-system
+spec:
+  dnsNames:
+  - pvc-autoscaler-webhook-service.pvc-autoscaler-system.svc
+  - pvc-autoscaler-webhook-service.pvc-autoscaler-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: pvc-autoscaler-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: pvc-autoscaler
+  name: pvc-autoscaler-selfsigned-issuer
+  namespace: pvc-autoscaler-system
+spec:
+  selfSigned: {}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -743,6 +788,15 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: pvc-autoscaler-system/pvc-autoscaler-serving-cert
+  labels:
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/created-by: pvc-autoscaler
+    app.kubernetes.io/instance: validating-webhook-configuration
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: validatingwebhookconfiguration
+    app.kubernetes.io/part-of: pvc-autoscaler
   name: pvc-autoscaler-validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
