@@ -293,7 +293,7 @@ var _ = Describe("Periodic Runner", func() {
 
 			It("should return ErrStorageClassDoesNotSupportExpansion", func() {
 				// This storage class does not support volume expansion
-				scName := "storageclass-without-expasion"
+				scName := "storageclass-without-expansion"
 				sc := &storagev1.StorageClass{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: scName,
