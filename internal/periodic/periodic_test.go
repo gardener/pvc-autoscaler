@@ -707,8 +707,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Reason).To(Equal(ReasonReconcile))
-				Expect(condition.Message).To(ContainSubstring("resize has been started"))
-				Expect(condition.Message).To(ContainSubstring("storage threshold"))
+				Expect(condition.Message).To(MatchRegexp(`storage threshold.*resize has been started`))
 			})
 
 			It("should skip resize if filesystem resize is pending", func() {
@@ -748,8 +747,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Reason).To(Equal(ReasonReconcile))
-				Expect(condition.Message).To(ContainSubstring("file system resize is pending"))
-				Expect(condition.Message).To(ContainSubstring("passing inodes threshold"))
+				Expect(condition.Message).To(MatchRegexp(`passing inodes threshold.*file system resize is pending`))
 			})
 
 			It("should skip resize if volume is being modified", func() {
@@ -789,8 +787,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Reason).To(Equal(ReasonReconcile))
-				Expect(condition.Message).To(ContainSubstring("volume is being modified"))
-				Expect(condition.Message).To(ContainSubstring("storage threshold"))
+				Expect(condition.Message).To(MatchRegexp(`storage threshold.*volume is being modified`))
 			})
 
 			It("should skip resize if pvc is still being resized", func() {
@@ -819,8 +816,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Reason).To(Equal(ReasonReconcile))
-				Expect(condition.Message).To(ContainSubstring("persistent volume claim is still being resized"))
-				Expect(condition.Message).To(ContainSubstring("passing inodes threshold"))
+				Expect(condition.Message).To(MatchRegexp(`passing inodes threshold.*persistent volume claim is still being resized`))
 			})
 
 			It("should successfully resize the pvc based on storage threshold", func() {
@@ -854,8 +850,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Reason).To(Equal(ReasonReconcile))
-				Expect(condition.Message).To(ContainSubstring("resizing from 1Gi to 2Gi"))
-				Expect(condition.Message).To(ContainSubstring("passing storage threshold"))
+				Expect(condition.Message).To(MatchRegexp(`resizing from 1Gi to 2Gi.*passing storage threshold`))
 			})
 
 			It("should successfully resize the pvc based on inodes threshold", func() {
@@ -889,8 +884,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(condition).NotTo(BeNil())
 				Expect(condition.Status).To(Equal(metav1.ConditionTrue))
 				Expect(condition.Reason).To(Equal(ReasonReconcile))
-				Expect(condition.Message).To(ContainSubstring("resizing from 1Gi to 2Gi"))
-				Expect(condition.Message).To(ContainSubstring("passing inodes threshold"))
+				Expect(condition.Message).To(MatchRegexp(`resizing from 1Gi to 2Gi.*passing inodes threshold`))
 			})
 
 			It("should not resize if max capacity has been reached", func() {
