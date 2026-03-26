@@ -177,11 +177,13 @@ var _ = Describe("Periodic Runner", func() {
 				// Wait for complete removal
 				Eventually(func() bool {
 					err := k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), &v1alpha1.PersistentVolumeClaimAutoscaler{})
+
 					return err != nil && client.IgnoreNotFound(err) == nil
 				}).Should(BeTrue())
 
 				Eventually(func() bool {
 					err := k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &corev1.PersistentVolumeClaim{})
+
 					return err != nil && client.IgnoreNotFound(err) == nil
 				}).Should(BeTrue())
 			})
@@ -518,7 +520,6 @@ var _ = Describe("Periodic Runner", func() {
 				wantEvent := `Warning FreeInodesThresholdReached free inodes (9%) are less than the configured threshold (20%)`
 				Expect(event).To(Equal(wantEvent))
 			})
-
 		})
 
 		Context("Reconciling all PVCAs (reconcileAll)", func() {
