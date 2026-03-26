@@ -26,6 +26,7 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
+	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
 
@@ -50,8 +51,12 @@ var ErrStorageClassNotFound = errors.New("no storage class found")
 var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not support expansion")
 
 // ErrNoClient is an error which is returned when the periodic [Runner] was
-// configured configured without a Kubernetes API client.
+// configured without a Kubernetes API client.
 var ErrNoClient = errors.New("no client provided")
+
+// ErrNoPVCFetcher is an error which is returned when the periodic [Runner] was
+// configured without a [pvcfetcher.Fetcher].
+var ErrNoPVCFetcher = errors.New("no PersistentVolumeClaim fetcher provided")
 
 // Condition reasons for the RecommendationAvailable condition
 const (
@@ -73,6 +78,7 @@ type Runner struct {
 	interval      time.Duration
 	metricsSource metricssource.Source
 	eventRecorder record.EventRecorder
+	pvcFetcher    pvcfetcher.Fetcher
 }
 
 var _ manager.Runnable = &Runner{}
@@ -97,6 +103,10 @@ func New(opts ...Option) (*Runner, error) {
 
 	if r.client == nil {
 		return nil, ErrNoClient
+	}
+
+	if r.pvcFetcher == nil {
+		return nil, ErrNoPVCFetcher
 	}
 
 	return r, nil
@@ -133,6 +143,15 @@ func WithMetricsSource(src metricssource.Source) Option {
 func WithEventRecorder(recorder record.EventRecorder) Option {
 	opt := func(r *Runner) {
 		r.eventRecorder = recorder
+	}
+
+	return opt
+}
+
+// WithPVCFetcher configures the [Runner] to use the given [pvcfetcher.Fetcher].
+func WithPVCFetcher(pvcFetcher pvcfetcher.Fetcher) Option {
+	opt := func(r *Runner) {
+		r.pvcFetcher = pvcFetcher
 	}
 
 	return opt
