@@ -10,6 +10,7 @@ resources:
 components:
 - ../../components/network-policy
 - ../../components/kube-rbac-proxy
+- ../../components/certmanager
 
 patches:
 - path: manager_config_patch.yaml
@@ -17,3 +18,85 @@ images:
 - name: controller
   newName: europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler
   newTag: latest
+
+# [CERTMANAGER] Wire cert-manager CA injection annotations across resources.
+# replacements have to be defined here, otherwise they do not take into account
+# the `namespace` and `namePrefix` values.
+replacements:
+- source:
+    fieldPath: .metadata.namespace
+    group: cert-manager.io
+    kind: Certificate
+    name: serving-cert
+    version: v1
+  targets:
+  - fieldPaths:
+    - .metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+      delimiter: /
+    select:
+      kind: ValidatingWebhookConfiguration
+  - fieldPaths:
+    - .metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+      delimiter: /
+    select:
+      kind: CustomResourceDefinition
+- source:
+    fieldPath: .metadata.name
+    group: cert-manager.io
+    kind: Certificate
+    name: serving-cert
+    version: v1
+  targets:
+  - fieldPaths:
+    - .metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+      delimiter: /
+      index: 1
+    select:
+      kind: ValidatingWebhookConfiguration
+  - fieldPaths:
+    - .metadata.annotations.[cert-manager.io/inject-ca-from]
+    options:
+      create: true
+      delimiter: /
+      index: 1
+    select:
+      kind: CustomResourceDefinition
+- source:
+    fieldPath: .metadata.name
+    kind: Service
+    name: webhook-service
+    version: v1
+  targets:
+  - fieldPaths:
+    - .spec.dnsNames.0
+    - .spec.dnsNames.1
+    options:
+      create: true
+      delimiter: .
+    select:
+      group: cert-manager.io
+      kind: Certificate
+      version: v1
+- source:
+    fieldPath: .metadata.namespace
+    kind: Service
+    name: webhook-service
+    version: v1
+  targets:
+  - fieldPaths:
+    - .spec.dnsNames.0
+    - .spec.dnsNames.1
+    options:
+      create: true
+      delimiter: .
+      index: 1
+    select:
+      group: cert-manager.io
+      kind: Certificate
+      version: v1
