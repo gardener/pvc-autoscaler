@@ -41,15 +41,18 @@ var StorageClass storagev1.StorageClass = storagev1.StorageClass{
 func CreatePVC(ctx context.Context,
 	k8sClient client.Client,
 	name string,
-	capacity string) (*corev1.PersistentVolumeClaim, error) {
+	capacity string,
+	storageClassName *string,
+	volumeMode *corev1.PersistentVolumeMode) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: ptr.To(StorageClassName),
+			StorageClassName: storageClassName,
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			VolumeMode:       volumeMode,
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: resource.MustParse(capacity),
