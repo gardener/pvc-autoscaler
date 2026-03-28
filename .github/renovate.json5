@@ -6,11 +6,11 @@
     "regexManagers:githubActionsVersions",
     "group:monorepos",
     'github>gardener/ci-infra//config/renovate/makefile-versions.json5',
-    'github>gardener/ci-infra//config/renovate/group-go-updates.json5'
+    'github>gardener/ci-infra//config/renovate/group-go-updates.json5',
+    'github>gardener/ci-infra//config/renovate/automerge-with-tide.json5',
   ],
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
-  "automergeStrategy": "squash",
   "separateMinorPatch": true,
   // Add PR footer with empty release note by default.
   "prFooter": "**Release note**:\n```other dependency\nNONE\n```",
@@ -40,6 +40,25 @@
     },
   ],
   "packageRules": [
+    {
+      // automerge patch updates
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+    },
+    {
+      // automerge k8s.io/utils updates
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["k8s.io/utils"],
+      "matchUpdateTypes": ["digest"],
+      "automerge": true,
+    },
+    {
+      // automerge non-major golang.org/x updates
+      "matchDatasources": ["go"],
+      matchPackageNames: ["golang.org/x/*"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+    },
     {
       // Update only patchlevels of major dependencies like kubernetes and controller-runtime.
       // Minor and major upgrades most likely require manual adaptations of the code.
