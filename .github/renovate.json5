@@ -86,6 +86,27 @@
       "enabled": false,
     },
     {
+      // Ask for manual approval to create PRs for minor and major updates of dependencies which most likely
+      // require manual adaptations of the code.
+      "matchDatasources": ["go"],
+      "matchUpdateTypes": ["major","minor"],
+      "dependencyDashboardApproval": true,
+      "matchPackageNames": [
+        "/k8s\\.io/.+/",
+        "/sigs\\.k8s\\.io/controller-runtime/",
+        "/istio\\.io/.+/",
+        "/github\\.com/fluent/.+/",
+      ],
+    },
+    {
+      // Ask for manual approval to create PRs for kindest/node image. Minor and major versions are updated when new
+      // versions of Kubernetes are introduced only.
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major","minor"],
+      "dependencyDashboardApproval": true,
+      "matchPackageNames": ["/kindest/node/"],
+    },
+    {
       // Group github-actions minor updates in one PR
       "matchManagers": ["github-actions"],
       "groupName": "github-actions"
