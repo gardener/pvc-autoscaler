@@ -4,7 +4,8 @@
     "config:recommended",
     ":semanticCommitsDisabled",
     "regexManagers:githubActionsVersions",
-    "group:monorepos"
+    "group:monorepos",
+    'github>gardener/ci-infra//config/renovate/makefile-versions.json5'
   ],
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
