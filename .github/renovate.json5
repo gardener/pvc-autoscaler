@@ -13,6 +13,31 @@
   "separateMinorPatch": true,
   // Add PR footer with empty release note by default.
   "prFooter": "**Release note**:\n```other dependency\nNONE\n```",
+  customManagers: [
+    {
+      // Generic detection for pod-like image specifications.
+      "customType": "regex",
+      managerFilePatterns: [
+        "/^.github/workflows/.+\\.yaml$/",
+        "/^example/.+\\.yaml$/",
+        "/^config/.+\\.yaml$/",
+        "/^hack/.+\\.yaml$/",
+        "/^test/manifests/.+\\.yaml$/",
+      ],
+      "matchStrings": [
+        '["|\']?image["|\']?: ["|\']?(?<depName>.*?):(?<currentValue>.*?)["|\']?\\s',
+      ],
+      "datasourceTemplate": "docker",
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^skaffold\\.yaml$"],
+      "matchStrings": [
+        "repo: (?<registryUrl>https?://[^\\s]+)\\s+remoteChart: (?<depName>[^\\s]+)\\s+version: (?<currentValue>[^\\s]+)",
+      ],
+      "datasourceTemplate": "helm",
+    },
+  ],
   "packageRules": [
     {
       // Group golang updates in one PR.
