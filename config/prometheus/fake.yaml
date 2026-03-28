@@ -20,7 +20,7 @@ spec:
     spec:
       initContainers:
       - name: metrics-verifier
-        image: busybox:latest
+        image: busybox:1.37
         command:
         - /bin/sh
         - -c
@@ -31,18 +31,18 @@ spec:
           echo "Starting kubelet_volume_stats_* metrics validation..."
           node_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}' --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
           metrics_path="/api/v1/nodes/${node_name}/proxy/metrics"
-          
+
           # Retry logic: try every 10 seconds for up to 3 minutes
           max_attempts=18
           attempt=1
           success=false
-          
+
           while [ $attempt -le $max_attempts ]; do
             echo "Attempt $attempt/$max_attempts: Fetching kubelet metrics..."
-            
+
             output=$(chroot /host kubectl get --raw "${metrics_path}" --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
             exit_status=$?
-            
+
             if [ $exit_status -eq 0 ]; then
               echo "Successfully accessed kubelet metrics endpoint"
               if echo "${output}" | grep -q "kubelet_volume_stats_"; then
@@ -56,17 +56,17 @@ spec:
             else
               echo "Cannot access kubelet metrics endpoint (exit code: $exit_status)"
             fi
-            
+
             echo "Waiting 10 seconds before next attempt..."
             sleep 10
             attempt=$((attempt + 1))
           done
-          
+
           if [ "$success" = "false" ]; then
             echo "ERROR: Failed to find kubelet_volume_stats_* metrics after 3 minutes"
             exit 1
           fi
-          
+
           echo "kubelet_volume_stats_* metrics validation completed successfully"
         volumeMounts:
         - name: host-root
@@ -75,19 +75,19 @@ spec:
         securityContext:
           privileged: true
       - name: stage-selector
-        image: busybox:latest
+        image: busybox:1.37
         command:
         - /bin/sh
         - -c
         - |
           echo "Multi-stage fake metrics server initializing..."
-          
+
           # Get stage from downward API environment variable
           STAGE_FILE="${METRICS_STAGE}.txt"
-          
+
           echo "Selected stage: ${METRICS_STAGE}"
           echo "Looking for file: ${STAGE_FILE}"
-          
+
           # Check if the stage file exists
           if [ -f "/config/${STAGE_FILE}" ]; then
             echo "Found stage file: ${STAGE_FILE}"
@@ -98,7 +98,7 @@ spec:
             ls -la /config/stage*.txt || true
             exit 1
           fi
-          
+
           echo "Stage selection completed. Current stage: ${METRICS_STAGE}"
           echo "Content preview:"
           cat "/etc/nginx/metrics.txt"
@@ -114,7 +114,7 @@ spec:
           mountPath: /etc/nginx
       containers:
       - name: nginx
-        image: nginx:alpine
+        image: nginx:1.29.7-alpine
         ports:
         - containerPort: 8080
           name: metrics

@@ -11,7 +11,7 @@ spec:
         claimName: test-pvc-2
   containers:
     - name: test-pod-2
-      image: debian:latest
+      image: alpine:2.23.3
       command:
         - sleep
         - infinity
