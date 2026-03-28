@@ -77,6 +77,15 @@
       "enabled": false
     },
     {
+      // Disable major updates of jsonpatch/v2.
+      // The major version of this dependency should be kept in sync with controller-runtime:
+      // https://github.com/kubernetes-sigs/controller-runtime/blob/main/go.mod
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["gomodules.xyz/jsonpatch/v2"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false,
+    },
+    {
       // Group github-actions minor updates in one PR
       "matchManagers": ["github-actions"],
       "groupName": "github-actions"
