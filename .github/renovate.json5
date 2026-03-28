@@ -10,6 +10,7 @@
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
   "automergeStrategy": "squash",
+  "separateMinorPatch": true,
   // Add PR footer with empty release note by default.
   "prFooter": "**Release note**:\n```other dependency\nNONE\n```",
   "packageRules": [
