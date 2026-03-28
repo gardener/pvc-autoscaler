@@ -12,6 +12,8 @@
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
   "separateMinorPatch": true,
+  // Only rebase when there are conflicts. Prow tests against the latest state of master branch anyway before merging the PR.
+  "rebaseWhen": "conflicted",
   // Add PR footer with empty release note by default.
   "prFooter": "**Release note**:\n```other dependency\nNONE\n```",
   customManagers: [
