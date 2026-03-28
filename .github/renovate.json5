@@ -10,6 +10,8 @@
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
   "automergeStrategy": "squash",
+  // Add PR footer with empty release note by default.
+  "prFooter": "**Release note**:\n```other dependency\nNONE\n```",
   "packageRules": [
     {
       // Group golang updates in one PR.
