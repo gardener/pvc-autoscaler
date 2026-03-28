@@ -5,7 +5,8 @@
     ":semanticCommitsDisabled",
     "regexManagers:githubActionsVersions",
     "group:monorepos",
-    'github>gardener/ci-infra//config/renovate/makefile-versions.json5'
+    'github>gardener/ci-infra//config/renovate/makefile-versions.json5',
+    'github>gardener/ci-infra//config/renovate/group-go-updates.json5'
   ],
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
@@ -39,12 +40,6 @@
     },
   ],
   "packageRules": [
-    {
-      // Group golang updates in one PR.
-      "groupName": "golang",
-      "matchDatasources": ["docker", "go", "golang-version"],
-      "matchPackageNames": ["go", "golang"],
-    },
     {
       // Update only patchlevels of major dependencies like kubernetes and controller-runtime.
       // Minor and major upgrades most likely require manual adaptations of the code.
