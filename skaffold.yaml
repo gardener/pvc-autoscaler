@@ -15,6 +15,8 @@ build:
             - internal/metrics/source
             - internal/metrics/source/prometheus
             - internal/periodic
+            - internal/target/pvcfetcher
+            - internal/target/selectorfetcher
             - internal/utils
             - VERSION
         main: ./cmd/pvc-autoscaler
