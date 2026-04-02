@@ -69,9 +69,8 @@ spec:
           metadata:
             type: object
           spec:
-            description: |-
-              PersistentVolumeClaimAutoscalerSpec defines the desired state of
-              PersistentVolumeClaimAutoscaler
+            description: PersistentVolumeClaimAutoscalerSpec defines the desired state
+              of the PersistentVolumeClaimAutoscaler.
             properties:
               targetRef:
                 description: |-
@@ -105,68 +104,58 @@ spec:
                       - type: string
                       description: |-
                         MaxCapacity specifies the maximum capacity up to which a PVC is
-                        allowed to be extended.
+                        allowed to be extended. The max capacity is specified as a
+                        [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       x-kubernetes-int-or-string: true
                       x-kubernetes-validations:
                       - message: maxCapacity must be > 0
                         rule: quantity(self).isGreaterThan(quantity('0'))
-                    minCapacity:
-                      anyOf:
-                      - type: integer
-                      - type: string
-                      description: MinCapacity specifies the minimum capacity for
-                        the PVC.
-                      pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                      x-kubernetes-int-or-string: true
-                      x-kubernetes-validations:
-                      - message: minCapacity must be > 0
-                        rule: quantity(self).isGreaterThan(quantity('0'))
                     scaleUp:
-                      description: ScaleUp defines the policy for scaling up the PVC.
+                      default: {}
+                      description: ScaleUp defines the rules for scaling up the PVC.
                       properties:
                         cooldownDuration:
-                          description: CooldownDuration specifies the duration to
-                            wait before another scale-up operation.
+                          description: |-
+                            This field is currenntly not used (NOOP), but will be implemented at a later stage.
+                            CooldownDuration specifies the duration to wait before another scaling operation.
                           type: string
                           x-kubernetes-validations:
-                          - message: cooldownDuration must be greater than 0
+                          - message: cooldownDuration must be > 0s
                             rule: duration(self) > duration('0s')
                         minStepAbsolute:
                           anyOf:
                           - type: integer
                           - type: string
+                          default: 1Gi
                           description: |-
-                            MinStepAbsolute specifies the minimum absolute increase in capacity during scale-up.
-                            This ensures that the capacity increase is at least this amount, regardless of the percentage.
+                            MinStepAbsolute specifies the minimum absolute change in capacity during scaling.
+                            This ensures that the change in capacity is at least this amount, regardless of the percentage.
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
+                          x-kubernetes-validations:
+                          - message: minStepAbsolute must be > 1 if specified
+                            rule: self == null || quantity(self).compareTo(quantity('1Gi'))
+                              >= 0
                         stepPercent:
                           default: 10
-                          description: StepPercent specifies the percentage increase
-                            for the PVC capacity during scale-up.
+                          description: StepPercent specifies the percentage by which
+                            to change the PVC storage capacity when scaling.
                           maximum: 100
                           minimum: 1
                           type: integer
                         utilizationThresholdPercent:
-                          default: 90
+                          default: 80
                           description: |-
-                            UtilizationThresholdPercent specifies the threshold percentage for used space.
-                            When the used space reaches or exceeds this threshold, a scale-up is triggered.
+                            UtilizationThresholdPercent specifies the threshold percentage for used space and inodes.
+                            When the used space or inodes passes this threshold, the PVC is scaled.
                           maximum: 100
                           minimum: 1
                           type: integer
-                      required:
-                      - cooldownDuration
-                      - minStepAbsolute
                       type: object
                   required:
                   - maxCapacity
-                  - scaleUp
                   type: object
-                  x-kubernetes-validations:
-                  - message: maxCapacity must be >= minCapacity
-                    rule: '!quantity(self.maxCapacity).isLessThan(quantity(self.minCapacity))'
                 maxItems: 1
                 minItems: 1
                 type: array
@@ -236,54 +225,66 @@ spec:
                   - type
                   type: object
                 type: array
-              freeInodesPercentage:
-                description: |-
-                  FreeInodesPercentage specifies the last observed free inodes of the
-                  PVC as a percentage.
-                type: string
-              freeSpacePercentage:
-                description: |-
-                  FreeSpacePercentage specifies the last observed free space of the PVC
-                  as a percentage.
-                type: string
               lastCheck:
                 description: LastCheck specifies the last time the PVC was checked
                   by the controller.
                 format: date-time
                 type: string
-              newSize:
-                anyOf:
-                - type: integer
-                - type: string
-                description: NewSize specifies the new size to which the PVC will
-                  be resized.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
               nextCheck:
                 description: |-
                   NextCheck specifies the next scheduled check of the PVC by the
                   controller.
                 format: date-time
                 type: string
-              prevSize:
-                anyOf:
-                - type: integer
-                - type: string
-                description: |-
-                  PrevSize specifies the previous .status.capacity.storage value of the
-                  PVC, just before resizing it.
-                pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
-                x-kubernetes-int-or-string: true
-              usedInodesPercentage:
-                description: |-
-                  UsedInodesPercentage specifies the last observed used inodes of the
-                  PVC as a percentage.
-                type: string
-              usedSpacePercentage:
-                description: |-
-                  UsedSpacePercentage specifies the last observed used space of the PVC
-                  as a percentage.
-                type: string
+              volumeRecommendations:
+                description: VolumeRecommendations specifies the status and recommendations
+                  for the PVCs managed by the autoscaler.
+                items:
+                  description: VolumeRecommendation defines the observed state of
+                    a PVC managed by the autoscaler.
+                  properties:
+                    current:
+                      description: Current specifies the current status of the PVC.
+                      properties:
+                        size:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: Size specifies the current .status.capacity.storage
+                            value of the PVC.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                        usedInodesPercent:
+                          description: |-
+                            UsedInodesPercent specifies the last observed used inodes of the
+                            PVC as a percentage.
+                          type: integer
+                        usedSpacePercent:
+                          description: |-
+                            UsedSpacePercent specifies the last observed used space of the PVC
+                            as a percentage.
+                          type: integer
+                      type: object
+                    name:
+                      description: Name specifies the name of the PVC.
+                      type: string
+                    target:
+                      description: Target specifies the target recommendations for
+                        the PVC.
+                      properties:
+                        size:
+                          anyOf:
+                          - type: integer
+                          - type: string
+                          description: Size specifies the new size to which the PVC
+                            will be resized.
+                          pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                          x-kubernetes-int-or-string: true
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
             type: object
         type: object
     served: true
@@ -938,7 +939,7 @@ spec:
         - --upstream=http://127.0.0.1:8080/
         - --logtostderr=true
         - --v=0
-        image: gcr.io/kubebuilder/kube-rbac-proxy:v0.15.0
+        image: quay.io/brancz/kube-rbac-proxy:v0.18.0
         name: kube-rbac-proxy
         ports:
         - containerPort: 8443
@@ -986,7 +987,7 @@ spec:
         app: minimal-fake-metrics-server
     spec:
       containers:
-      - image: nginx:alpine
+      - image: nginx:1.29.7-alpine
         livenessProbe:
           httpGet:
             path: /health
@@ -1013,27 +1014,51 @@ spec:
       - command:
         - /bin/sh
         - -c
-        - "echo \"Waiting for metrics-test-pod...\"\nchroot /host kubectl wait --for=condition=Ready
-          --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod
-          --kubeconfig=/etc/kubernetes/admin.conf\n\necho \"Starting kubelet_volume_stats_*
-          metrics validation...\"\nnode_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}'
-          --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)\nmetrics_path=\"/api/v1/nodes/${node_name}/proxy/metrics\"\n\n#
-          Retry logic: try every 10 seconds for up to 3 minutes\nmax_attempts=18\nattempt=1\nsuccess=false\n\nwhile
-          [ $attempt -le $max_attempts ]; do\n  echo \"Attempt $attempt/$max_attempts:
-          Fetching kubelet metrics...\"\n  \n  output=$(chroot /host kubectl get --raw
-          \"${metrics_path}\" --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)\n
-          \ exit_status=$?\n  \n  if [ $exit_status -eq 0 ]; then\n    echo \"Successfully
-          accessed kubelet metrics endpoint\"\n    if echo \"${output}\" | grep -q
-          \"kubelet_volume_stats_\"; then\n      echo \"kubelet_volume_stats_* metrics
-          found:\"\n      echo \"${output}\" | grep \"kubelet_volume_stats_\"\n      success=true\n
-          \     break\n    else\n      echo \"kubelet_volume_stats_* metrics NOT found
-          in response\"\n    fi\n  else\n    echo \"Cannot access kubelet metrics
-          endpoint (exit code: $exit_status)\"\n  fi\n  \n  echo \"Waiting 10 seconds
-          before next attempt...\"\n  sleep 10\n  attempt=$((attempt + 1))\ndone\n\nif
-          [ \"$success\" = \"false\" ]; then\n  echo \"ERROR: Failed to find kubelet_volume_stats_*
-          metrics after 3 minutes\"\n  exit 1\nfi\n\necho \"kubelet_volume_stats_*
-          metrics validation completed successfully\"\n"
-        image: busybox:latest
+        - |
+          echo "Waiting for metrics-test-pod..."
+          chroot /host kubectl wait --for=condition=Ready --timeout=120s -n pvc-autoscaler-system  pod/pvc-autoscaler-metrics-test-pod --kubeconfig=/etc/kubernetes/admin.conf
+
+          echo "Starting kubelet_volume_stats_* metrics validation..."
+          node_name=$(chroot /host kubectl get nodes -o jsonpath='{.items[0].metadata.name}' --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
+          metrics_path="/api/v1/nodes/${node_name}/proxy/metrics"
+
+          # Retry logic: try every 10 seconds for up to 3 minutes
+          max_attempts=18
+          attempt=1
+          success=false
+
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt/$max_attempts: Fetching kubelet metrics..."
+
+            output=$(chroot /host kubectl get --raw "${metrics_path}" --kubeconfig=/etc/kubernetes/admin.conf 2>/dev/null)
+            exit_status=$?
+
+            if [ $exit_status -eq 0 ]; then
+              echo "Successfully accessed kubelet metrics endpoint"
+              if echo "${output}" | grep -q "kubelet_volume_stats_"; then
+                echo "kubelet_volume_stats_* metrics found:"
+                echo "${output}" | grep "kubelet_volume_stats_"
+                success=true
+                break
+              else
+                echo "kubelet_volume_stats_* metrics NOT found in response"
+              fi
+            else
+              echo "Cannot access kubelet metrics endpoint (exit code: $exit_status)"
+            fi
+
+            echo "Waiting 10 seconds before next attempt..."
+            sleep 10
+            attempt=$((attempt + 1))
+          done
+
+          if [ "$success" = "false" ]; then
+            echo "ERROR: Failed to find kubelet_volume_stats_* metrics after 3 minutes"
+            exit 1
+          fi
+
+          echo "kubelet_volume_stats_* metrics validation completed successfully"
+        image: busybox:1.37
         name: metrics-verifier
         securityContext:
           privileged: true
@@ -1072,7 +1097,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.annotations['fake-metrics.pvc-autoscaler.io/stage']
-        image: busybox:latest
+        image: busybox:1.37
         name: stage-selector
         volumeMounts:
         - mountPath: /config
@@ -1192,7 +1217,7 @@ spec:
   - command:
     - sleep
     - infinity
-    image: busybox:latest
+    image: busybox:1.37
     name: metrics-test-container
     volumeMounts:
     - mountPath: /data

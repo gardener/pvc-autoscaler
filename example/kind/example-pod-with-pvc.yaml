@@ -25,7 +25,7 @@ metadata:
 spec:
   containers:
   - name: dummy-container
-    image: busybox:1.35
+    image: busybox:1.37
     command:
     - sleep
     - "3600"
@@ -59,7 +59,7 @@ spec:
   targetRef:
     apiVersion: v1
     kind: PersistentVolumeClaim
-    name: vali-vali-0    
+    name: vali-vali-0
   volumePolicies:
   - maxCapacity: 200Gi                    # Maximum allowed size
     scaleUp:
