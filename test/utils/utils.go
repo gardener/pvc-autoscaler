@@ -105,3 +105,18 @@ func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 
 	return obj, nil
 }
+
+// CleanupObject removes finalizers and deletes the given object.
+func CleanupObject(ctx context.Context, k8sClient client.Client, obj client.Object) error {
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+
+	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+	obj.SetFinalizers(nil)
+	if err := k8sClient.Patch(ctx, obj, patch); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+
+	return k8sClient.Delete(ctx, obj)
+}

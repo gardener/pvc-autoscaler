@@ -18,7 +18,6 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -128,17 +127,10 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(pvc).NotTo(BeNil())
 
 			DeferCleanup(func() {
-				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)).To(Succeed())
-
-				patch := client.MergeFrom(pvc.DeepCopy())
-				pvc.SetFinalizers(nil)
-				Expect(k8sClient.Patch(parentCtx, pvc, patch)).To(Succeed())
-
-				Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, pvc))).To(Succeed())
-
+				Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
 				Eventually(func() error {
 					return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
-				}).Should(Or(Succeed(), MatchError(apierrors.NewNotFound(schema.GroupResource{Group: "", Resource: "persistentvolumeclaims"}, pvc.Name))))
+				}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 			})
 
 			targetRef := autoscalingv1.CrossVersionObjectReference{
@@ -157,17 +149,10 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(pvca).NotTo(BeNil())
 
 			DeferCleanup(func() {
-				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
-
-				patch := client.MergeFrom(pvca.DeepCopy())
-				pvca.SetFinalizers(nil)
-				Expect(k8sClient.Patch(parentCtx, pvca, patch)).To(Succeed())
-
-				Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, pvca))).To(Succeed())
-
+				Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
 				Eventually(func() error {
 					return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
-				}).Should(Or(Succeed(), MatchError(apierrors.NewNotFound(schema.GroupResource{Group: "autoscaling.gardener.cloud", Resource: "persistentvolumeclaimautoscalers"}, pvca.Name))))
+				}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 			})
 		})
 
@@ -249,7 +234,10 @@ var _ = Describe("Periodic Runner", func() {
 				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-without-storageclass", "1Gi", nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				DeferCleanup(func() {
-					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, pvc))).To(Succeed())
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
 				By("Creating PVC Autoscaler targeting our test PVC")
@@ -269,7 +257,10 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(pvca).NotTo(BeNil())
 				DeferCleanup(func() {
-					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, pvca))).To(Succeed())
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
 				volInfo := &metricssource.VolumeInfo{
@@ -304,7 +295,10 @@ var _ = Describe("Periodic Runner", func() {
 				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-sc-no-expansion", "1Gi", ptr.To(scName), nil)
 				Expect(err).NotTo(HaveOccurred())
 				DeferCleanup(func() {
-					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, pvc))).To(Succeed())
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
 				By("Creating PVC Autoscaler targeting our test PVC")
@@ -324,7 +318,10 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(pvca).NotTo(BeNil())
 				DeferCleanup(func() {
-					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, pvca))).To(Succeed())
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
 				volInfo := &metricssource.VolumeInfo{
@@ -342,7 +339,10 @@ var _ = Describe("Periodic Runner", func() {
 				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-block-mode", "1Gi", ptr.To(testutils.StorageClassName), ptr.To(corev1.PersistentVolumeBlock))
 				Expect(err).NotTo(HaveOccurred())
 				DeferCleanup(func() {
-					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, pvc))).To(Succeed())
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
 				By("Creating PVC Autoscaler targeting our test PVC")
@@ -362,7 +362,10 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(pvca).NotTo(BeNil())
 				DeferCleanup(func() {
-					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, pvca))).To(Succeed())
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
 				By("Calling shouldReconcilePVC with sample volume info metrics")
