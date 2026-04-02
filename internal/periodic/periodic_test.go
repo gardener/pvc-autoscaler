@@ -42,6 +42,7 @@ func newRunner() (*Runner, error) {
 		WithEventRecorder(eventRecorder),
 		WithInterval(time.Second),
 		WithMetricsSource(metricsSource),
+		WithPVCFetcher(pvcFetcher),
 	)
 
 	return runner, err
@@ -88,6 +89,18 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(runner).To(BeNil())
 		})
 
+		It("should fail without pvc fetcher", func() {
+			runner, err := New(
+				WithClient(k8sClient),
+				WithEventRecorder(eventRecorder),
+				WithInterval(time.Second),
+				WithMetricsSource(fake.New()),
+				WithPVCFetcher(nil), // should not be nil
+			)
+			Expect(err).To(MatchError(ErrNoPVCFetcher))
+			Expect(runner).To(BeNil())
+		})
+
 		It("should create instance successfully", func() {
 			runner, err := newRunner()
 			Expect(err).NotTo(HaveOccurred())
@@ -121,18 +134,20 @@ var _ = Describe("Periodic Runner", func() {
 				},
 			}
 
-			By("Creating shared PVC and PVCA for tests that can use them")
+			By("Creating PVC for tests")
 			pvc, err = testutils.CreatePVC(parentCtx, k8sClient, "test-pvc", "1Gi", ptr.To(testutils.StorageClassName), nil)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(pvc).NotTo(BeNil())
 
 			DeferCleanup(func() {
+				By("Deleting PVC")
 				Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
 				Eventually(func() error {
 					return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
 				}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 			})
 
+			By("Creating PVCA for tests")
 			targetRef := autoscalingv1.CrossVersionObjectReference{
 				APIVersion: "v1",
 				Kind:       "PersistentVolumeClaim",
@@ -149,6 +164,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(pvca).NotTo(BeNil())
 
 			DeferCleanup(func() {
+				By("Deleting PVCA")
 				Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
 				Eventually(func() error {
 					return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
@@ -230,17 +246,18 @@ var _ = Describe("Periodic Runner", func() {
 			)
 
 			It("should return ErrStorageClassNotFound", func() {
-				By("Creating a PVC without a storageclass")
+				By("Creating a PVC without a StorageClass")
 				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-without-storageclass", "1Gi", nil, nil)
 				Expect(err).NotTo(HaveOccurred())
 				DeferCleanup(func() {
+					By("Deleting PVC without a StorageClass")
 					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
 					Eventually(func() error {
 						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
 					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
-				By("Creating PVC Autoscaler targeting our test PVC")
+				By("Creating PVCA targeting the PVC without StorageClass")
 				targetRef := autoscalingv1.CrossVersionObjectReference{
 					APIVersion: "v1",
 					Kind:       "PersistentVolumeClaim",
@@ -257,6 +274,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(pvca).NotTo(BeNil())
 				DeferCleanup(func() {
+					By("Deleting PVCA targeting the PVC without StorageClass")
 					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
 					Eventually(func() error {
 						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
@@ -275,7 +293,7 @@ var _ = Describe("Periodic Runner", func() {
 			})
 
 			It("should return ErrStorageClassDoesNotSupportExpansion", func() {
-				By("Creating a storage class that does not support volume expansion")
+				By("Creating a StorageClass that does not support volume expansion")
 				scName := "storageclass-without-expansion"
 				sc := &storagev1.StorageClass{
 					ObjectMeta: metav1.ObjectMeta{
@@ -288,20 +306,22 @@ var _ = Describe("Periodic Runner", func() {
 				}
 				Expect(k8sClient.Create(parentCtx, sc)).To(Succeed())
 				DeferCleanup(func() {
+					By("Deleting StorageClass that does not support volume expansion")
 					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, sc))).To(Succeed())
 				})
 
-				By("Creating a test PVC using the storageclass")
+				By("Creating a test PVC using the StorageClass")
 				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-sc-no-expansion", "1Gi", ptr.To(scName), nil)
 				Expect(err).NotTo(HaveOccurred())
 				DeferCleanup(func() {
+					By("Deleting the PVC with StorageClass")
 					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
 					Eventually(func() error {
 						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
 					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
-				By("Creating PVC Autoscaler targeting our test PVC")
+				By("Creating PVCA targeting the PVC with StorageClass")
 				targetRef := autoscalingv1.CrossVersionObjectReference{
 					APIVersion: "v1",
 					Kind:       "PersistentVolumeClaim",
@@ -318,6 +338,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(pvca).NotTo(BeNil())
 				DeferCleanup(func() {
+					By("Deleting PVCA targeting the PVC with StorageClass")
 					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
 					Eventually(func() error {
 						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
@@ -336,6 +357,7 @@ var _ = Describe("Periodic Runner", func() {
 			})
 
 			It("should return ErrVolumeModeIsNotFilesystem", func() {
+				By("Creating PVC with block volume")
 				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-block-mode", "1Gi", ptr.To(testutils.StorageClassName), ptr.To(corev1.PersistentVolumeBlock))
 				Expect(err).NotTo(HaveOccurred())
 				DeferCleanup(func() {
@@ -345,13 +367,12 @@ var _ = Describe("Periodic Runner", func() {
 					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
-				By("Creating PVC Autoscaler targeting our test PVC")
+				By("Creating PVCA targeting the PVC with block volume")
 				targetRef := autoscalingv1.CrossVersionObjectReference{
 					APIVersion: "v1",
 					Kind:       "PersistentVolumeClaim",
 					Name:       "pvc-block-mode",
 				}
-
 				pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 					parentCtx,
 					k8sClient,
@@ -362,6 +383,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(pvca).NotTo(BeNil())
 				DeferCleanup(func() {
+					By("Deleting the PVCA targeting the PVC with block volume")
 					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
 					Eventually(func() error {
 						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
@@ -395,7 +417,7 @@ var _ = Describe("Periodic Runner", func() {
 			})
 
 			It("should not reconcile - lost pvc claim", func() {
-				By("Patching shared pvc to simulate lost claim")
+				By("Patching test PVC to simulate lost claim")
 				patch := client.MergeFrom(pvc.DeepCopy())
 				pvc.Status.Phase = corev1.ClaimLost
 				Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
@@ -445,7 +467,7 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(event).To(Equal(wantEvent))
 				})
 
-				It("should reconcile - free inodes threshold reached", func() {
+				It("should reconcile when free inodes threshold reached", func() {
 					volInfo := &metricssource.VolumeInfo{
 						AvailableBytes:  1024 * 1024 * 1024,
 						CapacityBytes:   1024 * 1024 * 1024,
@@ -466,13 +488,13 @@ var _ = Describe("Periodic Runner", func() {
 		})
 
 		Describe("#reconcileAll", func() {
-			It("should not reconcile -- PVCA targets non-existent PVC", func() {
-				By("Patching shared pvca to target a non-existent PVC")
+			It("should not reconcile when PVCA targets non-existent PVC", func() {
+				By("Patching PVCA to target a non-existent PVC")
 				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 				pvca.Spec.TargetRef.Name = "non-existent-pvc"
 				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
 
-				By("Registering metrics for the shared pvc")
+				By("Registering metrics for the test PVC")
 				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
 				fakeItem := &fake.Item{
 					NamespacedName:         client.ObjectKeyFromObject(pvc),
@@ -503,52 +525,35 @@ var _ = Describe("Periodic Runner", func() {
 				By("Verifying the RecommendationAvailable condition")
 				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
-				var foundCondition *metav1.Condition
-				for i := range updatedPVCA.Status.Conditions {
-					if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
-						foundCondition = &updatedPVCA.Status.Conditions[i]
-
-						break
-					}
-				}
-				Expect(foundCondition).NotTo(BeNil())
-				Expect(foundCondition.Status).To(Equal(metav1.ConditionFalse))
-				Expect(foundCondition.Reason).To(Equal(ReasonRecommendationError))
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionFalse),
+					HaveField("Reason", ReasonPVCFetchError),
+				)))
 			})
 
-			It("should not reconcile -- failed to get metrics", func() {
+			It("should retrun error when metrics cannot be fetched", func() {
 				metricsSource := &fake.AlwaysFailing{}
 				withMetricsSourceOpt := WithMetricsSource(metricsSource)
 				withMetricsSourceOpt(runner)
 
-				By("Expecting error since the metrics source is returning errors")
 				Expect(runner.reconcileAll(parentCtx)).NotTo(Succeed())
 			})
 
 			It("should set MetricsFetchError condition when no metrics for PVC", func() {
-				metricsSource := fake.New(fake.WithInterval(time.Second))
-				withMetricsSourceOpt := WithMetricsSource(metricsSource)
-				withMetricsSourceOpt(runner)
-
 				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
 				By("Verifying the RecommendationAvailable condition")
 				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
-				var foundCondition *metav1.Condition
-				for i := range updatedPVCA.Status.Conditions {
-					if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
-						foundCondition = &updatedPVCA.Status.Conditions[i]
-
-						break
-					}
-				}
-				Expect(foundCondition).NotTo(BeNil())
-				Expect(foundCondition.Status).To(Equal(metav1.ConditionFalse))
-				Expect(foundCondition.Reason).To(Equal(ReasonMetricsFetchError))
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionFalse),
+					HaveField("Reason", ReasonMetricsFetchError),
+				)))
 			})
 
-			It("should reconcile -- threshold has been reached", func() {
+			It("should reconcile when threshold has been reached", func() {
 				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
 				fakeItem := &fake.Item{
 					NamespacedName:         client.ObjectKeyFromObject(pvc),
@@ -579,17 +584,82 @@ var _ = Describe("Periodic Runner", func() {
 				By("Verifying the RecommendationAvailable condition")
 				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
-				var foundCondition *metav1.Condition
-				for i := range updatedPVCA.Status.Conditions {
-					if updatedPVCA.Status.Conditions[i].Type == string(v1alpha1.ConditionTypeRecommendationAvailable) {
-						foundCondition = &updatedPVCA.Status.Conditions[i]
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionTrue),
+					HaveField("Reason", ReasonMetricsFetched),
+				)))
+			})
 
-						break
-					}
+			It("should set RecommendationAvailable condition to false and not enqueue when two PVCAs manage the same PVC", func() {
+				By("Creating PVCA that points to a PVC already managed by a different PVCA")
+				conflictingPVCA, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+					parentCtx, k8sClient, "pvca-with-conflict", pvca.Spec.TargetRef, pvca.Spec.VolumePolicies,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(conflictingPVCA).NotTo(BeNil())
+
+				DeferCleanup(func() {
+					By("Deleting conflicting PVCA")
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, conflictingPVCA)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(conflictingPVCA), conflictingPVCA)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				By("Verifying the RecommendationAvailable conditions for both PVCAs")
+				for _, pvca := range []*v1alpha1.PersistentVolumeClaimAutoscaler{pvca, conflictingPVCA} {
+					updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed(), "should successfully fetch pvca "+client.ObjectKeyFromObject(pvca).String())
+					Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+						HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+						HaveField("Status", metav1.ConditionFalse),
+						HaveField("Reason", ReasonAmbiguousPVCA),
+					)), client.ObjectKeyFromObject(pvca).String()+" pvca should have expected condition")
 				}
-				Expect(foundCondition).NotTo(BeNil())
-				Expect(foundCondition.Status).To(Equal(metav1.ConditionTrue))
-				Expect(foundCondition.Reason).To(Equal(ReasonMetricsFetched))
+			})
+
+			It("should set RecommendationAvailable condition to true when conflict is resolved", func() {
+				By("Creating PVCA that points to a PVC already managed by a different PVCA")
+				conflictingPVCA, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+					parentCtx, k8sClient, "pvca-with-conflict", pvca.Spec.TargetRef, pvca.Spec.VolumePolicies,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(conflictingPVCA).NotTo(BeNil())
+
+				DeferCleanup(func() {
+					By("Deleting conflicting PVCA")
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, conflictingPVCA)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(conflictingPVCA), conflictingPVCA)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionFalse),
+					HaveField("Reason", ReasonAmbiguousPVCA),
+				)))
+
+				Expect(testutils.CleanupObject(parentCtx, k8sClient, conflictingPVCA)).To(Succeed())
+				Eventually(func() error {
+					return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(conflictingPVCA), conflictingPVCA)
+				}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				By("Verifying the RecommendationAvailable condition no longer has AmbiguousPersistentVolumeClaimAutoscaler reason")
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Reason", Not(Equal(ReasonAmbiguousPVCA))),
+				)))
 			})
 		})
 
