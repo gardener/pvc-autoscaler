@@ -173,11 +173,11 @@ minikube-load-image: minikube docker-build  ## Load the operator image into the 
 
 .PHONY: build
 build: generate ## Build manager binary.
-	go build -o bin/manager cmd/main.go
+	go build -o bin/manager cmd/pvc-autoscaler/main.go
 
 .PHONY: run
 run: generate ## Run a controller from your host.
-	go run ./cmd/main.go
+	go run ./cmd/pvc-autoscaler/main.go
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
