@@ -41,15 +41,18 @@ var StorageClass storagev1.StorageClass = storagev1.StorageClass{
 func CreatePVC(ctx context.Context,
 	k8sClient client.Client,
 	name string,
-	capacity string) (*corev1.PersistentVolumeClaim, error) {
+	capacity string,
+	storageClassName *string,
+	volumeMode *corev1.PersistentVolumeMode) (*corev1.PersistentVolumeClaim, error) {
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: "default",
 		},
 		Spec: corev1.PersistentVolumeClaimSpec{
-			StorageClassName: ptr.To(StorageClassName),
+			StorageClassName: storageClassName,
 			AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
+			VolumeMode:       volumeMode,
 			Resources: corev1.VolumeResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceStorage: resource.MustParse(capacity),
@@ -101,4 +104,19 @@ func CreatePersistentVolumeClaimAutoscaler(ctx context.Context,
 	}
 
 	return obj, nil
+}
+
+// CleanupObject removes finalizers and deletes the given object.
+func CleanupObject(ctx context.Context, k8sClient client.Client, obj client.Object) error {
+	if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+
+	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
+	obj.SetFinalizers(nil)
+	if err := k8sClient.Patch(ctx, obj, patch); err != nil {
+		return err
+	}
+
+	return k8sClient.Delete(ctx, obj)
 }

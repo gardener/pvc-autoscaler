@@ -15,7 +15,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -23,7 +22,6 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
-	controller "github.com/gardener/pvc-autoscaler/internal/controller/autoscaling"
 	_ "github.com/gardener/pvc-autoscaler/internal/metrics"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/prometheus"
@@ -130,7 +128,6 @@ func main() {
 	}
 
 	ctx := ctrl.SetupSignalHandler()
-	eventCh := make(chan event.GenericEvent)
 
 	prometheusOpts := []prometheus.Option{
 		prometheus.WithAddress(prometheusAddress),
@@ -150,7 +147,6 @@ func main() {
 	runner, err := periodic.New(
 		periodic.WithClient(mgr.GetClient()),
 		periodic.WithInterval(interval),
-		periodic.WithEventChannel(eventCh),
 		periodic.WithMetricsSource(metricsSource),
 		periodic.WithEventRecorder(mgr.GetEventRecorderFor(common.ControllerName)),
 	)
@@ -162,23 +158,6 @@ func main() {
 
 	if err := mgr.Add(runner); err != nil {
 		setupLog.Error(err, "unable to add periodic runner to manager", "controller", common.ControllerName)
-		os.Exit(1)
-	}
-
-	// And create our controller
-	reconciler, err := controller.New(
-		controller.WithClient(mgr.GetClient()),
-		controller.WithScheme(mgr.GetScheme()),
-		controller.WithEventChannel(eventCh),
-		controller.WithEventRecorder(mgr.GetEventRecorderFor(common.ControllerName)),
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to create reconciler", "controller", common.ControllerName)
-		os.Exit(1)
-	}
-
-	if err := reconciler.SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", common.ControllerName)
 		os.Exit(1)
 	}
 
