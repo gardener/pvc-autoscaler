@@ -115,7 +115,7 @@ func CleanupObject(ctx context.Context, k8sClient client.Client, obj client.Obje
 	patch := client.MergeFrom(obj.DeepCopyObject().(client.Object))
 	obj.SetFinalizers(nil)
 	if err := k8sClient.Patch(ctx, obj, patch); err != nil {
-		return client.IgnoreNotFound(err)
+		return err
 	}
 
 	return k8sClient.Delete(ctx, obj)
