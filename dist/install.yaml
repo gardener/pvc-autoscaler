@@ -116,6 +116,7 @@ spec:
                       description: ScaleUp defines the rules for scaling up the PVC.
                       properties:
                         cooldownDuration:
+                          default: 10m
                           description: |-
                             CooldownDuration specifies the minimum time that must elapse after a scaling
                             operation before another scaling operation can be triggered for the targeted PVC objects.
@@ -265,6 +266,12 @@ spec:
                             as a percentage.
                           type: integer
                       type: object
+                    lastResizeTime:
+                      description: |-
+                        LastResizeTime specifies the timestamp when the last resize operation
+                        was initiated for this PVC. Used for cooldown calculation.
+                      format: date-time
+                      type: string
                     name:
                       description: Name specifies the name of the PVC.
                       type: string
