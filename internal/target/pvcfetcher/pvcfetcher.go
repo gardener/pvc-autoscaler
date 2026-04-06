@@ -98,10 +98,23 @@ func (f *pvcFetcher) Fetch(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 		return nil, fmt.Errorf("failed to list Pods for PersistentVolumeClaimAutoscaler %s: %w", client.ObjectKeyFromObject(pvca), err)
 	}
 
-	return f.getPVCsFromPods(ctx, podList.Items, pvca)
+	if len(podList.Items) == 0 {
+		return nil, fmt.Errorf("no pods found for selector '%s' used by PersistentVolumeClaimAutoscaler %s", selector, client.ObjectKeyFromObject(pvca))
+	}
+
+	pvcs, err := f.getPVCsFromPods(ctx, podList.Items)
+	if err != nil {
+		return nil, fmt.Errorf("could not get all PersistentVolumeClaims for PersistentVolumeClaimAutoscaler %s: %w", client.ObjectKeyFromObject(pvca), err)
+	}
+
+	if len(pvcs) == 0 {
+		return nil, fmt.Errorf("no PersistentVolumeClaims found for selector '%s' used by PersistentVolumeClaimAutoscaler %s", selector, client.ObjectKeyFromObject(pvca))
+	}
+
+	return pvcs, nil
 }
 
-func (f *pvcFetcher) getPVCsFromPods(ctx context.Context, pods []corev1.Pod, pvca *v1alpha1.PersistentVolumeClaimAutoscaler) ([]*corev1.PersistentVolumeClaim, error) {
+func (f *pvcFetcher) getPVCsFromPods(ctx context.Context, pods []corev1.Pod) ([]*corev1.PersistentVolumeClaim, error) {
 	// Use a map to deduplicate PVCs (multiple pods might reference the same PVC)
 	pvcMap := make(map[string]*corev1.PersistentVolumeClaim)
 
@@ -122,7 +135,7 @@ func (f *pvcFetcher) getPVCsFromPods(ctx context.Context, pods []corev1.Pod, pvc
 
 			pvc := &corev1.PersistentVolumeClaim{}
 			if err := f.client.Get(ctx, pvcKey, pvc); err != nil {
-				return nil, fmt.Errorf("failed to get PersistentVolumeClaim %s referenced by Pod %s under PersistentVolumeClaimAutoscaler %s: %w", pvcKey, client.ObjectKeyFromObject(&pod), client.ObjectKeyFromObject(pvca), err)
+				return nil, fmt.Errorf("failed to get PersistentVolumeClaim %s referenced by Pod %s: %w", pvcKey, client.ObjectKeyFromObject(&pod), err)
 			}
 
 			pvcMap[pvcKey.String()] = pvc

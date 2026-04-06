@@ -14,8 +14,12 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/restmapper"
+	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -23,6 +27,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
+	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
+	"github.com/gardener/pvc-autoscaler/internal/target/selectorfetcher"
 	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 )
 
@@ -30,6 +36,7 @@ var cfg *rest.Config
 var k8sClient client.Client
 var testEnv *envtest.Environment
 var eventRecorder = record.NewFakeRecorder(1024)
+var pvcFetcher pvcfetcher.Fetcher
 var parentCtx context.Context
 var cancelFunc context.CancelFunc
 
@@ -76,6 +83,23 @@ var _ = BeforeSuite(func() {
 
 	// Create test storage class
 	Expect(k8sClient.Create(context.Background(), &testutils.StorageClass)).To(Succeed())
+
+	clientSet, err := clientset.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+
+	groupResources, err := restmapper.GetAPIGroupResources(clientSet.Discovery())
+	Expect(err).NotTo(HaveOccurred())
+	restMapper := restmapper.NewDiscoveryRESTMapper(groupResources)
+
+	scaleKindResolver := scale.NewDiscoveryScaleKindResolver(clientSet.Discovery())
+	scalesClient, err := scale.NewForConfig(cfg, restMapper, dynamic.LegacyAPIPathResolverFunc, scaleKindResolver)
+	Expect(err).NotTo(HaveOccurred())
+
+	selectorFetcher, err := selectorfetcher.New(selectorfetcher.WithRESTMapper(restMapper), selectorfetcher.WithScaleClient(scalesClient))
+	Expect(err).NotTo(HaveOccurred())
+
+	pvcFetcher, err = pvcfetcher.New(pvcfetcher.WithClient(k8sClient), pvcfetcher.WithSelectorFetcher(selectorFetcher))
+	Expect(err).NotTo(HaveOccurred())
 })
 
 var _ = AfterSuite(func() {

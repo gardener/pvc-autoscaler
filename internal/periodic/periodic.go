@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -26,6 +28,7 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
+	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
 
@@ -50,8 +53,12 @@ var ErrStorageClassNotFound = errors.New("no storage class found")
 var ErrStorageClassDoesNotSupportExpansion = errors.New("storage class does not support expansion")
 
 // ErrNoClient is an error which is returned when the periodic [Runner] was
-// configured configured without a Kubernetes API client.
+// configured without a Kubernetes API client.
 var ErrNoClient = errors.New("no client provided")
+
+// ErrNoPVCFetcher is an error which is returned when the periodic [Runner] was
+// configured without a [pvcfetcher.Fetcher].
+var ErrNoPVCFetcher = errors.New("no PersistentVolumeClaim fetcher provided")
 
 // Condition reasons for the RecommendationAvailable condition
 const (
@@ -59,6 +66,10 @@ const (
 	ReasonMetricsFetched = "MetricsFetched"
 	// ReasonMetricsFetchError indicates an error occurred while fetching metrics.
 	ReasonMetricsFetchError = "MetricsFetchError"
+	// ReasonPVCFetchError indicates an error occurred during fetching of PVCs.
+	ReasonPVCFetchError = "PersistentVolumeClaimFetchError"
+	// ReasonAmbiguousPVCA indicates that a PVC is autoscaled by multiple PVCAs.
+	ReasonAmbiguousPVCA = "AmbiguousPersistentVolumeClaimAutoscaler"
 	// ReasonRecommendationError indicates an error occurred during recommendation computation.
 	ReasonRecommendationError = "RecommendationError"
 	// ReasonReconcile condition reason for the Resizing condition.
@@ -73,6 +84,7 @@ type Runner struct {
 	interval      time.Duration
 	metricsSource metricssource.Source
 	eventRecorder record.EventRecorder
+	pvcFetcher    pvcfetcher.Fetcher
 }
 
 var _ manager.Runnable = &Runner{}
@@ -97,6 +109,10 @@ func New(opts ...Option) (*Runner, error) {
 
 	if r.client == nil {
 		return nil, ErrNoClient
+	}
+
+	if r.pvcFetcher == nil {
+		return nil, ErrNoPVCFetcher
 	}
 
 	return r, nil
@@ -138,6 +154,15 @@ func WithEventRecorder(recorder record.EventRecorder) Option {
 	return opt
 }
 
+// WithPVCFetcher configures the [Runner] to use the given [pvcfetcher.Fetcher].
+func WithPVCFetcher(pvcFetcher pvcfetcher.Fetcher) Option {
+	opt := func(r *Runner) {
+		r.pvcFetcher = pvcFetcher
+	}
+
+	return opt
+}
+
 // Start implements the
 // [sigs.k8s.io/controller-runtime/pkg/manager.Runnable] interface.
 func (r *Runner) Start(ctx context.Context) error {
@@ -160,13 +185,17 @@ func (r *Runner) Start(ctx context.Context) error {
 // reconcileAll processes all [v1alpha1.PersistentVolumeClaimAutoscaler]
 // resources and resizes PVCs when thresholds are reached.
 func (r *Runner) reconcileAll(ctx context.Context) error {
-	var items v1alpha1.PersistentVolumeClaimAutoscalerList
-	if err := r.client.List(ctx, &items); err != nil {
+	var (
+		logger   = log.FromContext(ctx, "controller", common.ControllerName)
+		pvcaList v1alpha1.PersistentVolumeClaimAutoscalerList
+	)
+
+	if err := r.client.List(ctx, &pvcaList); err != nil {
 		return err
 	}
 
 	// Nothing to do for now
-	if len(items.Items) == 0 {
+	if len(pvcaList.Items) == 0 {
 		return nil
 	}
 
@@ -175,21 +204,40 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 		return fmt.Errorf("failed to get metrics: %w", err)
 	}
 
-	for _, item := range items.Items {
-		pvcObjKey := client.ObjectKey{Namespace: item.Namespace, Name: item.Spec.TargetRef.Name}
-		volInfo := metricsData[pvcObjKey]
-		logger := log.FromContext(
-			ctx,
-			"controller", common.ControllerName,
-			"namespace", item.Namespace,
-			"name", item.Name,
-			"pvc", item.Spec.TargetRef.Name,
-		)
+	pvcaToPVCsMap, pvcToOwnersMap := r.fetchPVCsForPVCAs(ctx, logger, pvcaList.Items)
 
-		ok, scalingReason, err := r.shouldReconcilePVC(ctx, &item, volInfo)
+	for pvca, pvcs := range pvcaToPVCsMap {
+		logger := logger.WithValues("pvca", client.ObjectKeyFromObject(pvca))
+
+		// TODO(plkokanov): When multi-PVC support is added, this must be updated to iterate over all PVCs.
+		// Currently, the PVCA can only target one PVC, so we only get the first element.
+		// Because of that, we can also skip reconciling the PVCA resource if
+		// other PVCAs also target the same PVC.
+		pvc := pvcs[0]
+		pvcObjKey := client.ObjectKeyFromObject(pvc)
+		logger = logger.WithValues("pvc", pvcObjKey)
+
+		if owners, ok := pvcToOwnersMap[pvcObjKey.String()]; ok && len(owners) > 1 {
+			logger.Info("skipping persistentvolumeclaim because it is scaled by multiple persistentvolumeclaimautoscalers", "pvcas", strings.Join(owners, ", "))
+			condition := metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonAmbiguousPVCA,
+				Message: fmt.Sprintf("PersistentVolumeClaim %s is scaled by multiple PersistentVolumeClaimAutoscalers: %s", pvcObjKey, strings.Join(owners, ", ")),
+			}
+			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
+				logger.Info("failed to update status condition", "reason", err.Error())
+			}
+
+			continue
+		}
+
+		volInfo := metricsData[pvcObjKey]
+
+		ok, scalingReason, err := r.shouldReconcilePVC(ctx, pvca, volInfo)
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
-			metrics.SkippedTotal.WithLabelValues(item.Namespace, item.Name, err.Error()).Inc()
+			metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
 			var conditionReason string
 			if errors.Is(err, common.ErrNoMetrics) {
 				conditionReason = ReasonMetricsFetchError
@@ -202,7 +250,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 				Reason:  conditionReason,
 				Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
 			}
-			if err := item.SetCondition(ctx, r.client, condition); err != nil {
+			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
 				logger.Info("failed to update status condition", "reason", err.Error())
 			}
 
@@ -210,10 +258,10 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 		}
 
 		if ok {
-			if err := r.resizePVC(ctx, &item, scalingReason); err != nil {
+			if err := r.resizePVC(ctx, pvca, scalingReason); err != nil {
 				logger.Error(err, "failed to resize pvc")
 			}
-		} else if err := item.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
+		} else if err := pvca.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
 			logger.Info("failed to remove status condition", "reason", err.Error())
 		}
 
@@ -223,12 +271,49 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 			Reason:  ReasonMetricsFetched,
 			Message: " - All metrics fetched successfully",
 		}
-		if err := item.SetCondition(ctx, r.client, condition); err != nil {
+		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
 			logger.Info("failed to update status condition", "reason", err.Error())
 		}
 	}
 
 	return nil
+}
+
+func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, persistentVolumeClaimAutoscalers []v1alpha1.PersistentVolumeClaimAutoscaler) (
+	map[*v1alpha1.PersistentVolumeClaimAutoscaler][]*corev1.PersistentVolumeClaim,
+	map[string][]string,
+) {
+	var (
+		pvcaToPVCsMap  = make(map[*v1alpha1.PersistentVolumeClaimAutoscaler][]*corev1.PersistentVolumeClaim, len(persistentVolumeClaimAutoscalers))
+		pvcToOwnersMap = map[string][]string{}
+	)
+
+	for _, pvca := range persistentVolumeClaimAutoscalers {
+		persistentVolumeClaims, err := r.pvcFetcher.Fetch(ctx, &pvca)
+		if err != nil {
+			logger.Error(err, "failed to fetch persistentvolumeclaims for persistentvolumeclaimautoscaler", "pvca", client.ObjectKeyFromObject(&pvca))
+			condition := metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonPVCFetchError,
+				Message: fmt.Sprintf("failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler: %s", err.Error()),
+			}
+			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
+				logger.Info("failed to update status condition", "pvca", client.ObjectKeyFromObject(&pvca), "reason", err.Error())
+			}
+
+			continue
+		}
+
+		pvcaToPVCsMap[&pvca] = persistentVolumeClaims
+
+		for _, pvc := range persistentVolumeClaims {
+			key := client.ObjectKeyFromObject(pvc).String()
+			pvcToOwnersMap[key] = append(pvcToOwnersMap[key], client.ObjectKeyFromObject(&pvca).String())
+		}
+	}
+
+	return pvcaToPVCsMap, pvcToOwnersMap
 }
 
 // updatePVCAStatus updates the status of the

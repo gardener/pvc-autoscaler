@@ -7,14 +7,21 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"os"
 	"time"
 
+	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/dynamic"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/rest"
+	scaleclient "k8s.io/client-go/scale"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -26,6 +33,8 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/prometheus"
 	"github.com/gardener/pvc-autoscaler/internal/periodic"
+	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
+	"github.com/gardener/pvc-autoscaler/internal/target/selectorfetcher"
 )
 
 var (
@@ -143,14 +152,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	pvcFetcher, err := newPVCFetcher(mgr.GetRESTMapper(), mgr.GetConfig(), mgr.GetClient())
+	if err != nil {
+		setupLog.Error(err, "unable to create PersistentVolumeClaim fetcher", "controller", common.ControllerName)
+		os.Exit(1)
+	}
+
 	// Add the periodic runner
 	runner, err := periodic.New(
 		periodic.WithClient(mgr.GetClient()),
 		periodic.WithInterval(interval),
 		periodic.WithMetricsSource(metricsSource),
 		periodic.WithEventRecorder(mgr.GetEventRecorderFor(common.ControllerName)),
+		periodic.WithPVCFetcher(pvcFetcher),
 	)
-
 	if err != nil {
 		setupLog.Error(err, "unable to create periodic runner", "controller", common.ControllerName)
 		os.Exit(1)
@@ -184,4 +199,41 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func newPVCFetcher(restMapper meta.RESTMapper, config *rest.Config, c client.Client) (pvcfetcher.Fetcher, error) {
+	scalesClient, err := newScalesClient(restMapper, config)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create scales client: %w", err)
+	}
+
+	selectorFetcher, err := selectorfetcher.New(
+		selectorfetcher.WithRESTMapper(restMapper),
+		selectorfetcher.WithScaleClient(scalesClient),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create selector fetcher: %w", err)
+	}
+
+	return pvcfetcher.New(
+		pvcfetcher.WithClient(c),
+		pvcfetcher.WithSelectorFetcher(selectorFetcher),
+	)
+}
+
+func newScalesClient(restMapper meta.RESTMapper, config *rest.Config) (scaleclient.ScalesGetter, error) {
+	clientSet, err := clientset.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new clientset: %w", err)
+	}
+
+	// we don't use cached discovery because DiscoveryScaleKindResolver does its own caching,
+	// so we want to re-fetch every time when we actually ask for it
+	scaleKindResolver := scaleclient.NewDiscoveryScaleKindResolver(clientSet.Discovery())
+	scaleClient, err := scaleclient.NewForConfig(config, restMapper, dynamic.LegacyAPIPathResolverFunc, scaleKindResolver)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new scale client: %w", err)
+	}
+
+	return scaleClient, nil
 }
