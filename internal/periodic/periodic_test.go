@@ -639,6 +639,7 @@ var _ = Describe("Periodic Runner", func() {
 
 				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
+				By("Verifying pvca's RecommendationAvailable condition has AmbiguousPersistentVolumeClaimAutoscaler reason")
 				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
 				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
@@ -647,6 +648,7 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Reason", ReasonAmbiguousPVCA),
 				)))
 
+				By("Deleting conflicting pvca")
 				Expect(testutils.CleanupObject(parentCtx, k8sClient, conflictingPVCA)).To(Succeed())
 				Eventually(func() error {
 					return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(conflictingPVCA), conflictingPVCA)

@@ -21,6 +21,7 @@ import (
 	"k8s.io/client-go/rest"
 	scaleclient "k8s.io/client-go/scale"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -151,25 +152,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	scalesClient, err := newScalesClient(mgr.GetRESTMapper(), mgr.GetConfig())
-	if err != nil {
-		setupLog.Error(err, "unable to create scales client", "controller", common.ControllerName)
-		os.Exit(1)
-	}
-
-	selectorFetcher, err := selectorfetcher.New(
-		selectorfetcher.WithRESTMapper(mgr.GetRESTMapper()),
-		selectorfetcher.WithScaleClient(scalesClient),
-	)
-	if err != nil {
-		setupLog.Error(err, "unable to create selector fetcher", "controller", common.ControllerName)
-		os.Exit(1)
-	}
-
-	pvcFetcher, err := pvcfetcher.New(
-		pvcfetcher.WithClient(mgr.GetClient()),
-		pvcfetcher.WithSelectorFetcher(selectorFetcher),
-	)
+	pvcFetcher, err := newPVCFetcher(mgr.GetRESTMapper(), mgr.GetConfig(), mgr.GetClient())
 	if err != nil {
 		setupLog.Error(err, "unable to create PersistentVolumeClaim fetcher", "controller", common.ControllerName)
 		os.Exit(1)
@@ -216,6 +199,26 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func newPVCFetcher(restMapper meta.RESTMapper, config *rest.Config, c client.Client) (pvcfetcher.Fetcher, error) {
+	scalesClient, err := newScalesClient(restMapper, config)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create scales client: %w", err)
+	}
+
+	selectorFetcher, err := selectorfetcher.New(
+		selectorfetcher.WithRESTMapper(restMapper),
+		selectorfetcher.WithScaleClient(scalesClient),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create selector fetcher: %w", err)
+	}
+
+	return pvcfetcher.New(
+		pvcfetcher.WithClient(c),
+		pvcfetcher.WithSelectorFetcher(selectorFetcher),
+	)
 }
 
 func newScalesClient(restMapper meta.RESTMapper, config *rest.Config) (scaleclient.ScalesGetter, error) {
