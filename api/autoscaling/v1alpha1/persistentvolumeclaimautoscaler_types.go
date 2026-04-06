@@ -110,8 +110,8 @@ type ScalingRules struct {
 	// +optional
 	MinStepAbsolute *resource.Quantity `json:"minStepAbsolute,omitempty"`
 
-	// This field is currenntly not used (NOOP), but will be implemented at a later stage.
-	// CooldownDuration specifies the duration to wait before another scaling operation.
+	// CooldownDuration specifies the minimum time that must elapse after a scaling
+	// operation before another scaling operation can be triggered for the targeted PVC objects.
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
