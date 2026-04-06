@@ -869,6 +869,58 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Message", ContainSubstring("max capacity reached")),
 				)))
 			})
+
+			DescribeTable("Should handle cooldown period",
+				func(lastResizeOffset time.Duration, expectResize bool, expectedLog string) {
+					pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+					lastResizeTime := metav1.NewTime(time.Now().Add(lastResizeOffset))
+					pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+						{
+							Name: "test-pvc",
+							Current: v1alpha1.CurrentVolumeStatus{
+								Size:             ptr.To(resource.MustParse("2Gi")),
+								UsedSpacePercent: ptr.To(95),
+							},
+							LastResizeTime: &lastResizeTime,
+						},
+					}
+					Expect(k8sClient.Status().Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+					pvcaPatch = client.MergeFrom(pvca.DeepCopy())
+					pvca.Spec.VolumePolicies[0].ScaleUp.CooldownDuration = &metav1.Duration{Duration: time.Hour}
+					Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+					var buf strings.Builder
+					logger := zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &buf)))
+					newCtx := log.IntoContext(parentCtx, logger)
+
+					beforeResize := time.Now()
+					Expect(runner.resizePVC(newCtx, pvca, "passing storage threshold")).To(Succeed())
+					Expect(buf.String()).To(ContainSubstring(expectedLog))
+
+					var pvcObj corev1.PersistentVolumeClaim
+					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &pvcObj)).To(Succeed())
+					if expectResize {
+						Expect(pvcObj.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("2Gi")))
+
+						Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
+						Expect(pvca.Status.VolumeRecommendations[0].LastResizeTime).NotTo(BeNil())
+						Expect(pvca.Status.VolumeRecommendations[0].LastResizeTime.Time).To(BeTemporally("~", beforeResize, time.Second))
+					} else {
+						Expect(pvcObj.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("1Gi")))
+					}
+				},
+				Entry("should not resize if cooldown period has not elapsed",
+					time.Duration(0),
+					false,
+					"cooldown period not elapsed",
+				),
+				Entry("should resize if cooldown period has elapsed and update LastResizeTime",
+					-2*time.Hour,
+					true,
+					"resizing persistent volume claim",
+				),
+			)
 		})
 	})
 })
