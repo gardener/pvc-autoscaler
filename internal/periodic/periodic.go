@@ -74,6 +74,8 @@ const (
 	ReasonRecommendationError = "RecommendationError"
 	// ReasonReconcile condition reason for the Resizing condition.
 	ReasonReconcile = "Reconcile"
+	// ReasonPVCAInCooldown indicates that the PVCA is in cooldown period.
+	ReasonPVCAInCooldown = "PersistentVolumeClaimAutoscalerInCooldown"
 )
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
@@ -584,6 +586,26 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 		return pvca.SetCondition(ctx, r.client, condition)
 	}
 
+	if policy.ScaleUp.CooldownDuration != nil && len(pvca.Status.VolumeRecommendations) > 0 {
+		lastResizeTime := pvca.Status.VolumeRecommendations[0].LastResizeTime
+		if lastResizeTime != nil {
+			elapsed := time.Since(lastResizeTime.Time)
+			cooldown := policy.ScaleUp.CooldownDuration.Duration
+			if elapsed < cooldown {
+				remaining := cooldown - elapsed
+				logger.Info("cooldown period not elapsed", "remaining", remaining.String())
+				condition := metav1.Condition{
+					Type:    string(v1alpha1.ConditionTypeResizing),
+					Status:  metav1.ConditionFalse,
+					Reason:  ReasonPVCAInCooldown,
+					Message: fmt.Sprintf("- %s: cooldown period not elapsed, %s remaining", pvcObj.Name, remaining.Round(time.Second).String()),
+				}
+
+				return pvca.SetCondition(ctx, r.client, condition)
+			}
+		}
+	}
+
 	// And finally we should be good to resize now
 	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", targetSize.String())
 	metrics.ResizedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
@@ -606,6 +628,8 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 	pvca.Status.VolumeRecommendations[0].Current.Size = currStatusSize
 	pvca.Status.VolumeRecommendations[0].Target.Size = targetSize
+	lastResizeTime := metav1.Now()
+	pvca.Status.VolumeRecommendations[0].LastResizeTime = &lastResizeTime
 	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
 		return err
 	}
