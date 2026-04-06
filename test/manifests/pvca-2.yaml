@@ -11,3 +11,5 @@ spec:
     name: test-pvc-2
   volumePolicies:
   - maxCapacity: 3Gi
+    scaleUp:
+      cooldownDuration: 1m
