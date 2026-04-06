@@ -33,6 +33,16 @@
       "datasourceTemplate": "docker",
     },
     {
+      // Detection for kindest/node image tag in Makefile.
+      "customType": "regex",
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": [
+        'KINDEST_NODE_IMAGE_TAG\\s*\\?=\\s*(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)',
+      ],
+      "depNameTemplate": "kindest/node",
+      "datasourceTemplate": "docker",
+    },
+    {
       "customType": "regex",
       "fileMatch": ["^skaffold\\.yaml$"],
       "matchStrings": [
