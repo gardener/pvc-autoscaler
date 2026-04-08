@@ -586,7 +586,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 		return pvca.SetCondition(ctx, r.client, condition)
 	}
 
-	if policy.ScaleUp.CooldownDuration != nil && len(pvca.Status.VolumeRecommendations) > 0 {
+	if policy.ScaleUp.CooldownDuration != nil {
 		lastResizeTime := pvca.Status.VolumeRecommendations[0].LastResizeTime
 		if lastResizeTime != nil {
 			elapsed := time.Since(lastResizeTime.Time)
