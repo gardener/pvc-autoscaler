@@ -327,9 +327,13 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 	obj.Status.LastCheck = metav1.NewTime(now)
 	obj.Status.NextCheck = metav1.NewTime(now.Add(r.interval))
 
-	volumeRecommendation := v1alpha1.VolumeRecommendation{
-		Name: obj.Spec.TargetRef.Name,
+	// Start with existing recommendation to preserve fields set during resize,
+	// or create a new one if none exists
+	var volumeRecommendation v1alpha1.VolumeRecommendation
+	if len(obj.Status.VolumeRecommendations) > 0 {
+		volumeRecommendation = obj.Status.VolumeRecommendations[0]
 	}
+	volumeRecommendation.Name = obj.Spec.TargetRef.Name
 
 	if volInfo != nil {
 		usedSpace, err := volInfo.UsedSpacePercentage()
