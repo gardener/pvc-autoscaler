@@ -251,7 +251,7 @@ function _test_cooldown() {
 
   # Wait for cooldown to expire and resize to complete
   _msg_info "waiting for cooldown to expire (3 minutes) and resize to 3Gi..."
-  _wait_for_pvca_cooldown_exit_and_resize "${_pvca_name}" "${_pvc_name}" "3Gi" "${_namespace}" 30 20
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi 30 7 # Wait up to 3.5 minutes (0.5 buffer) for resize to complete after cooldown expires
 
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_cooldown_low_3Gi
   _msg_info "cooldown test completed successfully"

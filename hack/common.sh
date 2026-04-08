@@ -129,22 +129,26 @@ function _pvc_capacity() {
 # $1: pvc name
 # $2: namespace
 # $3: capacity
+# $4: poll interval (defaults to 30)
+# $5: max attempts (defaults to 2)
 function _ensure_pvc_capacity() {
   local _pvc_name="${1}"
   local _namespace="${2}"
   local _want_capacity="${3}"
-  local _got_capacity=$( _pvc_capacity "${_pvc_name}" "${_namespace}" )
+  local _poll_sec=${4:-30}
+  local _max_attempts=${5:-2}
 
-  # retry 1 time on fail
-  for attempt in 1 2; do
+  for i in $( seq 1 "${_max_attempts}" ); do
     local _got_capacity=$( _pvc_capacity "${_pvc_name}" "${_namespace}" )
     
     if [ "${_want_capacity}" = "${_got_capacity}" ]; then
+      _msg_info "PVC ${_pvc_name} capacity is ${_got_capacity}"
       return 0
     fi
     
-    if [ ${attempt} -eq 1 ]; then
-      sleep 30
+    if [ ${i} -lt ${_max_attempts} ]; then
+      _msg_info "[${i}/${_max_attempts}] PVC ${_pvc_name} capacity is ${_got_capacity}, waiting for ${_want_capacity}..."
+      sleep "${_poll_sec}"
     else
       _msg_error "pvc ${_namespace}/${_pvc_name} capacity is ${_got_capacity} (want ${_want_capacity})" 1
     fi
@@ -191,35 +195,6 @@ function _wait_for_pvca_cooldown() {
   done
 
   _msg_error "PVCA ${_pvca_name} did not enter cooldown state" 1
-}
-
-# Wait for PVCA to exit cooldown and resize
-#
-# $1: pvca name  
-# $2: pvc name
-# $3: expected capacity
-# $4: namespace (defaults to "pvc-autoscaler-system")
-# $5: poll interval (defaults to 30)
-# $6: max attempts (defaults to 20)
-function _wait_for_pvca_cooldown_exit_and_resize() {
-  local _pvca_name="${1}"
-  local _pvc_name="${2}"
-  local _expected_capacity="${3}"
-  local _namespace=${4:-"pvc-autoscaler-system"}
-  local _poll_sec=${5:-30}
-  local _max_attempts=${6:-20}
-
-  for i in $( seq 1 "${_max_attempts}" ); do
-    _msg_info "[${i}/${_max_attempts}] waiting for PVCA ${_pvca_name} to exit cooldown and resize to ${_expected_capacity} ..."
-    local _capacity=$( kubectl get pvc "${_pvc_name}" -n "${_namespace}" -o jsonpath='{.status.capacity.storage}' )
-    if [ "${_capacity}" == "${_expected_capacity}" ]; then
-      _msg_info "PVC ${_pvc_name} has been resized to ${_expected_capacity}"
-      return
-    fi
-    sleep "${_poll_sec}"
-  done
-
-  _msg_error "PVC ${_pvc_name} was not resized to ${_expected_capacity}" 1
 }
 
 export_artifacts() {
