@@ -2,14 +2,14 @@
 apiVersion: autoscaling.gardener.cloud/v1alpha1
 kind: PersistentVolumeClaimAutoscaler
 metadata:
-  name: test-pvca-2
+  name: test-pvca-3
   namespace: pvc-autoscaler-system
 spec:
   targetRef:
     apiVersion: v1
     kind: PersistentVolumeClaim
-    name: test-pvc-2
+    name: test-pvc-3
   volumePolicies:
   - maxCapacity: 3Gi
     scaleUp:
-      cooldownDuration: 30s
+      cooldownDuration: 3m

@@ -185,6 +185,80 @@ function _test_consume_inodes_and_resize() {
   _cleanup "${_pod_name}" "${_pvc_name}" "${_pvca_name}" "${_namespace}"
 }
 
+# Tests the cooldown functionality by verifying that a resize is blocked
+# during the cooldown period and succeeds after it expires.
+function _test_cooldown() {
+  local _pvc_yaml="${_TEST_MANIFESTS_DIR}/pvc-3.yaml"
+  local _pvca_yaml="${_TEST_MANIFESTS_DIR}/pvca-3.yaml"
+  local _pod_yaml="${_TEST_MANIFESTS_DIR}/pod-3.yaml"
+  local _pod_name=$( yq '.metadata.name' "${_pod_yaml}" )
+  local _pvca_name=$( yq '.metadata.name' "${_pvca_yaml}" )
+  local _pvc_name=$( yq '.metadata.name' "${_pvc_yaml}" )
+  local _namespace=$( yq '.metadata.namespace // "default"' "${_pod_yaml}" )
+
+  _msg_info "starting cooldown test: 3m cooldown duration"
+  _msg_info "creating test pvc, pvca and pod ..."
+  kubectl create -f "${_pvc_yaml}"
+  kubectl create -f "${_pvca_yaml}"
+  kubectl create -f "${_pod_yaml}"
+
+  _msg_info "waiting for test pod to be ready ..."
+  kubectl wait "pod/${_pod_name}" \
+          --for condition=Ready \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_cooldown_low_1Gi
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
+  kubectl wait "pvca/${_pvca_name}" \
+          --for condition=RecommendationAvailable \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  # The test pod initially comes with a PVC of size 1Gi.
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 1Gi
+
+  # Consume 90% of the PVC capacity to trigger first resize.
+  _msg_info "triggering first resize (not blocked by cooldown)..."
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_cooldown_high_1Gi
+
+  # Once we consume the space we expect to see these events for the PVC object.
+  _wait_for_event Warning FreeSpaceThresholdReached "pvc/${_pvc_name}"
+  _wait_for_event Normal ResizingStorage "pvc/${_pvc_name}"
+  _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
+
+  # We should be at 2Gi now
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
+  _msg_info "first resize completed, cooldown timer started (3 minutes)"
+
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_cooldown_low_2Gi
+
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
+  kubectl wait "pvca/${_pvca_name}" \
+          --for condition=RecommendationAvailable \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  _msg_info "triggering second resize (should be blocked by cooldown)..."
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_cooldown_high_2Gi
+
+  _msg_info "verifying resize is blocked by cooldown..."
+  _wait_for_pvca_cooldown "${_pvca_name}" "${_namespace}" 10 30
+
+  # PVC should still be at 2Gi
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
+  _msg_info "confirmed: resize blocked by cooldown"
+
+  # Wait for cooldown to expire and resize to complete
+  _msg_info "waiting for cooldown to expire (3 minutes) and resize to 3Gi..."
+  _wait_for_pvca_cooldown_exit_and_resize "${_pvca_name}" "${_pvc_name}" "3Gi" "${_namespace}" 30 20
+
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_cooldown_low_3Gi
+  _msg_info "cooldown test completed successfully"
+
+  _cleanup "${_pod_name}" "${_pvc_name}" "${_pvca_name}" "${_namespace}"
+}
+
 # Main entrypoint
 function _main() {  
   _msg_info "Waiting for pvc-autoscaler pods to become ready ..."
@@ -202,6 +276,11 @@ function _main() {
 
   if ! _test_consume_inodes_and_resize; then
     _msg_error "test consume inodes and resize has failed" 0
+    _has_failed="true"
+  fi
+
+  if ! _test_cooldown; then
+    _msg_error "test cooldown has failed" 0
     _has_failed="true"
   fi
 
