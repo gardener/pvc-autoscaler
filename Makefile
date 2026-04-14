@@ -275,7 +275,7 @@ YQ_VERSION ?= v4.44.6
 # renovate: datasource=github-releases depName=helm/helm
 HELM_VERSION ?= v3.16.4
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
-KIND_VERSION ?= v0.30.0
+KIND_VERSION ?= v0.31.0
 # renovate: datasource=github-releases depName=GoogleContainerTools/skaffold
 SKAFFOLD_VERSION ?= v2.16.1
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
