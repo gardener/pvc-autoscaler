@@ -281,7 +281,7 @@ SKAFFOLD_VERSION ?= v2.16.1
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
 KUBECTL_VERSION ?= v1.33.4
 # renovate: datasource=github-releases depName=securego/gosec
-GOSEC_VERSION ?= v2.22.10
+GOSEC_VERSION ?= v2.22.11
 # renovate: datasource=github-releases depName=incu6us/goimports-reviser
 GOIMPORTSREVISER_VERSION ?= v3.11.0
 # renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
