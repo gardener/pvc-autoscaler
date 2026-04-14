@@ -30,7 +30,7 @@ deploy:
       - name: cert-manager
         repo: https://charts.jetstack.io
         remoteChart: cert-manager
-        version: v1.17.1
+        version: v1.17.4
         namespace: cert-manager
         createNamespace: true
         setValues:
