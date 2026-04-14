@@ -4,17 +4,72 @@
     "config:recommended",
     ":semanticCommitsDisabled",
     "regexManagers:githubActionsVersions",
-    "group:monorepos"
+    "group:monorepos",
+    'github>gardener/ci-infra//config/renovate/makefile-versions.json5',
+    'github>gardener/ci-infra//config/renovate/group-go-updates.json5',
+    'github>gardener/ci-infra//config/renovate/automerge-with-tide.json5',
   ],
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
-  "automergeStrategy": "squash",
+  "separateMinorPatch": true,
+  // Only rebase when there are conflicts. Prow tests against the latest state of master branch anyway before merging the PR.
+  "rebaseWhen": "conflicted",
+  // Add PR footer with empty release note by default.
+  "prFooter": "**Release note**:\n```other dependency\nNONE\n```",
+  customManagers: [
+    {
+      // Generic detection for pod-like image specifications.
+      "customType": "regex",
+      managerFilePatterns: [
+        "/^.github/workflows/.+\\.yaml$/",
+        "/^example/.+\\.yaml$/",
+        "/^config/.+\\.yaml$/",
+        "/^hack/.+\\.yaml$/",
+        "/^test/manifests/.+\\.yaml$/",
+      ],
+      "matchStrings": [
+        '["|\']?image["|\']?: ["|\']?(?<depName>.*?):(?<currentValue>.*?)["|\']?\\s',
+      ],
+      "datasourceTemplate": "docker",
+    },
+    {
+      // Detection for kindest/node image tag in Makefile.
+      "customType": "regex",
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": [
+        'KINDEST_NODE_IMAGE_TAG\\s*\\?=\\s*(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)',
+      ],
+      "depNameTemplate": "kindest/node",
+      "datasourceTemplate": "docker",
+    },
+    {
+      "customType": "regex",
+      "fileMatch": ["^skaffold\\.yaml$"],
+      "matchStrings": [
+        "repo: (?<registryUrl>https?://[^\\s]+)\\s+remoteChart: (?<depName>[^\\s]+)\\s+version: (?<currentValue>[^\\s]+)",
+      ],
+      "datasourceTemplate": "helm",
+    },
+  ],
   "packageRules": [
     {
-      // Group golang updates in one PR.
-      "groupName": "golang",
-      "matchDatasources": ["docker", "go", "golang-version"],
-      "matchPackageNames": ["go", "golang"],
+      // automerge patch updates
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+    },
+    {
+      // automerge k8s.io/utils updates
+      "matchDatasources": ["go"],
+      "matchPackageNames": ["k8s.io/utils"],
+      "matchUpdateTypes": ["digest"],
+      "automerge": true,
+    },
+    {
+      // automerge non-major golang.org/x updates
+      "matchDatasources": ["go"],
+      matchPackageNames: ["golang.org/x/*"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
     },
     {
       // Update only patchlevels of major dependencies like kubernetes and controller-runtime.
@@ -28,10 +83,23 @@
       "enabled": false
     },
     {
-      // Ignore dependency updates from k8s.io/kube-openapi because it depends on k8s.io/apiserver.
+      // Ask for manual approval to create PRs for minor and major updates of dependencies which most likely
+      // require manual adaptations of the code.
       "matchDatasources": ["go"],
-      "matchPackagePatterns": ["k8s\\.io\/kube-openapi"],
-      "enabled": false
+      "matchUpdateTypes": ["major","minor"],
+      "dependencyDashboardApproval": true,
+      "matchPackageNames": [
+        "/k8s\\.io/.+/",
+        "/sigs\\.k8s\\.io/controller-runtime/",
+      ],
+    },
+    {
+      // Ask for manual approval to create PRs for kindest/node image. Minor and major versions are updated when new
+      // versions of Kubernetes are introduced only.
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["major","minor"],
+      "dependencyDashboardApproval": true,
+      "matchPackageNames": ["/kindest/node/"],
     },
     {
       // Group github-actions minor updates in one PR

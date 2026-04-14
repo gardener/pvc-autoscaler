@@ -37,7 +37,7 @@ SHELL = /usr/bin/env bash -o pipefail
 REPO_ROOT                         := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 KIND_KUBECONFIG                   := $(REPO_ROOT)/example/kind/local/kubeconfig
 DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
-KINDEST_NODE_IAMGE_TAG		      ?= v1.33.4@sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
+KINDEST_NODE_IMAGE_TAG		      ?= v1.33.4@sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
 
 ## Rules
 tools-for-generate: controller-gen golangci-lint goimports yq
@@ -137,7 +137,7 @@ lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 kind-up: kind kustomize kubectl
 	./hack/kind-up.sh \
 	--with-lpp-resize-support $(DEV_SETUP_WITH_LPP_RESIZE_SUPPORT) \
-	--kindest-node-image-tag $(KINDEST_NODE_IAMGE_TAG)
+	--kindest-node-image-tag $(KINDEST_NODE_IMAGE_TAG)
 
 .PHONY: kind-down
 kind-down: kind
@@ -264,19 +264,32 @@ GOIMPORTS ?= $(LOCALBIN)/goimports
 GOIMPORTSREVISER ?= $(LOCALBIN)/goimports-reviser
 
 ## Tool Versions
+# renovate: datasource=github-releases depName=kubernetes-sigs/kustomize extractVersion=^kustomize\/(?<version>.*)$
 KUSTOMIZE_VERSION ?= v5.5.0
-CONTROLLER_TOOLS_VERSION ?= v0.16.4
-ENVTEST_VERSION ?= release-0.19
+# renovate: datasource=github-releases depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.7.2
+# renovate: datasource=github-releases depName=kubernetes/minikube
 MINIKUBE_VERSION ?= v1.34.0
+# renovate: datasource=github-releases depName=mikefarah/yq
 YQ_VERSION ?= v4.44.3
+# renovate: datasource=github-releases depName=helm/helm
 HELM_VERSION ?= v3.16.2
+# renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION ?= v0.30.0
+# renovate: datasource=github-releases depName=GoogleContainerTools/skaffold
 SKAFFOLD_VERSION ?= v2.16.1
+# renovate: datasource=github-releases depName=kubernetes/kubernetes
 KUBECTL_VERSION ?= v1.33.4
+# renovate: datasource=github-releases depName=securego/gosec
 GOSEC_VERSION ?= v2.22.10
-GOIMPORTS_VERSION ?= v0.38.0
+# renovate: datasource=github-releases depName=incu6us/goimports-reviser
 GOIMPORTSREVISER_VERSION ?= v3.11.0
+# renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
+CONTROLLER_TOOLS_VERSION ?= v0.16.4
+
+# tool versions from go.mod
+ENVTEST_VERSION ?= $(subst v,release-,$(call major_minor_version_gomod,sigs.k8s.io/controller-runtime))
+GOIMPORTS_VERSION ?= $(call version_gomod,golang.org/x/tools)
 
 # minikube settings
 MINIKUBE_PROFILE ?= pvc-autoscaler
@@ -291,6 +304,14 @@ $(LOCALBIN)/.version_%: | $(LOCALBIN)
 # $1 - target binary path
 # $2 - version of the tool
 gen-tool-version = $(LOCALBIN)/.version_$(subst $(LOCALBIN)/,,$(1))_$(2)
+
+# Use this function to get the version of a go module from go.mod
+# $1 - go module
+version_gomod = $(shell go list -f '{{ .Version }}' -m $(1))
+
+# Use this function to get the major and minor version of a go module from go.mod
+# $1 - go module
+major_minor_version_gomod = $(shell go list -f '{{ .Version }}' -m $(1) | awk -F. '{ printf "%s.%s", $$1, $$2 }')
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) | $(LOCALBIN)  ## Download kustomize locally if necessary.
