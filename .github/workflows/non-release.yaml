@@ -17,7 +17,7 @@ jobs:
 
   component-descriptor:
     if: ${{ github.repository == 'gardener/pvc-autoscaler' }}
-    uses: gardener/cc-utils/.github/workflows/post-build.yaml@master
+    uses: gardener/cc-utils/.github/workflows/post-build.yaml@v1
     needs:
       - build
     permissions:
