@@ -283,7 +283,7 @@ KUBECTL_VERSION ?= v1.33.10
 # renovate: datasource=github-releases depName=securego/gosec
 GOSEC_VERSION ?= v2.22.11
 # renovate: datasource=github-releases depName=incu6us/goimports-reviser
-GOIMPORTSREVISER_VERSION ?= v3.11.0
+GOIMPORTSREVISER_VERSION ?= v3.12.6
 # renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
 CONTROLLER_TOOLS_VERSION ?= v0.16.4
 
