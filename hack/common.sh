@@ -187,7 +187,7 @@ function _wait_for_pvca_cooldown() {
   for i in $( seq 1 "${_max_attempts}" ); do
     _msg_info "[${i}/${_max_attempts}] waiting for PVCA ${_pvca_name} to be in cooldown ..."
     local _reason=$( kubectl get pvca "${_pvca_name}" -n "${_namespace}" -o jsonpath='{.status.conditions[?(@.type=="Resizing")].reason}' )
-    if [ "${_reason}" == "PersistentVolumeClaimAutoscalerInCooldown" ]; then
+    if [ "${_reason}" == "PersistentVolumeClaimResizeCooldown" ]; then
       _msg_info "PVCA ${_pvca_name} is in cooldown"
       return
     fi
