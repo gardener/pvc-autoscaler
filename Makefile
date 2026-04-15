@@ -277,7 +277,7 @@ HELM_VERSION ?= v3.20.2
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION ?= v0.30.0
 # renovate: datasource=github-releases depName=GoogleContainerTools/skaffold
-SKAFFOLD_VERSION ?= v2.16.1
+SKAFFOLD_VERSION ?= v2.18.3
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
 KUBECTL_VERSION ?= v1.33.10
 # renovate: datasource=github-releases depName=securego/gosec
