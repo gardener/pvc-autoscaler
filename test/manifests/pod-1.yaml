@@ -11,7 +11,7 @@ spec:
         claimName: test-pvc-1
   containers:
     - name: test-pod-1
-      image: alpine:3.20
+      image: alpine:3.23.3
       command:
         - sleep
         - infinity
