@@ -37,7 +37,7 @@ SHELL = /usr/bin/env bash -o pipefail
 REPO_ROOT                         := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 KIND_KUBECONFIG                   := $(REPO_ROOT)/example/kind/local/kubeconfig
 DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
-KINDEST_NODE_IMAGE_TAG		      ?= v1.33.4@sha256:25a6018e48dfcaee478f4a59af81157a437f15e6e140bf103f85a2e7cd0cbbf2
+KINDEST_NODE_IMAGE_TAG		      ?= v1.33.7@sha256:d26ef333bdb2cbe9862a0f7c3803ecc7b4303d8cea8e814b481b09949d353040
 
 ## Rules
 tools-for-generate: controller-gen golangci-lint goimports yq
