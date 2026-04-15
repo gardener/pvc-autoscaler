@@ -91,7 +91,7 @@ The following properties must be specified when creating a new
 | `.spec.volumePolicies[].scaleUp.utilizationThresholdPercent` | Threshold percentage for used space/inodes that triggers a resize               | `80`    |
 | `.spec.volumePolicies[].scaleUp.stepPercent`                 | Percentage by which to increase the PVC during resize                           | `10`    |
 | `.spec.volumePolicies[].scaleUp.minStepAbsolute`             | Minimum absolute increase in capacity during scale-up                           | `1Gi`   |
-| `.spec.volumePolicies[].scaleUp.cooldownDuration`            | Duration to wait before another scale-up operation for the targeted PVC objects | `10m`   |
+| `.spec.volumePolicies[].scaleUp.cooldownDuration`            | Duration to wait before another scale-up operation for the targeted PVC objects | N/A     |
 
 In order to watch the status of the autoscaler you can `kubectl describe` your
 `PersistentVolumeClaimAutoscaler` resource, where you will find information

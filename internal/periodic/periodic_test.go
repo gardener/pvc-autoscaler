@@ -206,7 +206,7 @@ var _ = Describe("Periodic Runner", func() {
 		})
 
 		Describe("#shouldReconcilePVC", func() {
-			DescribeTable("Error scenarios",
+			DescribeTable("error scenarios",
 				func(targetPVCName string, volInfo *metricssource.VolumeInfo, expectedErr error) {
 					if targetPVCName != "" {
 						By("Patching shared pvca to target " + targetPVCName)
@@ -685,7 +685,7 @@ var _ = Describe("Periodic Runner", func() {
 		})
 
 		Describe("#resizePVC", func() {
-			DescribeTable("Should handle resize based on PVC conditions and threshold type",
+			DescribeTable("should handle resize based on PVC conditions and threshold type",
 				func(
 					pvcConditionType *corev1.PersistentVolumeClaimConditionType,
 					recommendedSize string,
@@ -870,7 +870,7 @@ var _ = Describe("Periodic Runner", func() {
 				)))
 			})
 
-			DescribeTable("Should handle cooldown period",
+			DescribeTable("should handle cooldown duration",
 				func(lastResizeOffset time.Duration, expectResize bool, expectedLog string) {
 					pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 					lastResizeTime := metav1.NewTime(time.Now().Add(lastResizeOffset))

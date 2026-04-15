@@ -74,8 +74,8 @@ const (
 	ReasonRecommendationError = "RecommendationError"
 	// ReasonReconcile condition reason for the Resizing condition.
 	ReasonReconcile = "Reconcile"
-	// ReasonPVCAInCooldown indicates that the PVCA is in cooldown period.
-	ReasonPVCAInCooldown = "PersistentVolumeClaimAutoscalerInCooldown"
+	// ReasonPVCResizeCooldown indicates that the PVC resize is in cooldown period.
+	ReasonPVCResizeCooldown = "PersistentVolumeClaimResizeCooldown"
 )
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
@@ -601,8 +601,8 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 				condition := metav1.Condition{
 					Type:    string(v1alpha1.ConditionTypeResizing),
 					Status:  metav1.ConditionFalse,
-					Reason:  ReasonPVCAInCooldown,
-					Message: fmt.Sprintf("- %s: cooldown period not elapsed, %s remaining", pvcObj.Name, remaining.Round(time.Second).String()),
+					Reason:  ReasonPVCResizeCooldown,
+					Message: fmt.Sprintf("- %s: cooldown duration has not elapsed yet", pvcObj.Name),
 				}
 
 				return pvca.SetCondition(ctx, r.client, condition)
@@ -632,8 +632,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 	pvca.Status.VolumeRecommendations[0].Current.Size = currStatusSize
 	pvca.Status.VolumeRecommendations[0].Target.Size = targetSize
-	lastResizeTime := metav1.Now()
-	pvca.Status.VolumeRecommendations[0].LastResizeTime = &lastResizeTime
+	pvca.Status.VolumeRecommendations[0].LastResizeTime = ptr.To(metav1.Now())
 	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
 		return err
 	}

@@ -113,7 +113,6 @@ type ScalingRules struct {
 	// CooldownDuration specifies the minimum time that must elapse after a scaling
 	// operation before another scaling operation can be triggered for the targeted PVC objects.
 	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
-	// +kubebuilder:default="10m"
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }
