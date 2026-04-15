@@ -269,7 +269,7 @@ KUSTOMIZE_VERSION ?= v5.5.0
 # renovate: datasource=github-releases depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.7.2
 # renovate: datasource=github-releases depName=kubernetes/minikube
-MINIKUBE_VERSION ?= v1.34.0
+MINIKUBE_VERSION ?= v1.38.1
 # renovate: datasource=github-releases depName=mikefarah/yq
 YQ_VERSION ?= v4.44.6
 # renovate: datasource=github-releases depName=helm/helm
