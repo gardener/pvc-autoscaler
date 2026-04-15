@@ -273,7 +273,7 @@ MINIKUBE_VERSION ?= v1.34.0
 # renovate: datasource=github-releases depName=mikefarah/yq
 YQ_VERSION ?= v4.44.6
 # renovate: datasource=github-releases depName=helm/helm
-HELM_VERSION ?= v3.16.4
+HELM_VERSION ?= v3.20.2
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION ?= v0.30.0
 # renovate: datasource=github-releases depName=GoogleContainerTools/skaffold
