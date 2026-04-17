@@ -117,8 +117,8 @@ spec:
                       properties:
                         cooldownDuration:
                           description: |-
-                            This field is currenntly not used (NOOP), but will be implemented at a later stage.
-                            CooldownDuration specifies the duration to wait before another scaling operation.
+                            CooldownDuration specifies the minimum time that must elapse after a scaling
+                            operation before another scaling operation can be triggered for the targeted PVC objects.
                           type: string
                           x-kubernetes-validations:
                           - message: cooldownDuration must be > 0s
@@ -265,6 +265,12 @@ spec:
                             as a percentage.
                           type: integer
                       type: object
+                    lastResizeTime:
+                      description: |-
+                        LastResizeTime specifies the timestamp when the last resize operation
+                        was initiated for this PVC. Used for cooldown calculation.
+                      format: date-time
+                      type: string
                     name:
                       description: Name specifies the name of the PVC.
                       type: string
@@ -694,6 +700,86 @@ data:
     # HELP fake_metrics_stage Current stage information
     # TYPE fake_metrics_stage gauge
     fake_metrics_pod_bytes_low_3Gi{stage="5",description="bytes_low"} 1
+  pod_cooldown_high_1Gi.txt: |
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 129023424
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 65536
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 65536
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_cooldown_high_1Gi{stage="2",description="cooldown_high"} 1
+  pod_cooldown_high_2Gi.txt: |
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 260046848
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 2147483648
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 131000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 131000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_cooldown_high_2Gi{stage="4",description="cooldown_high"} 1
+  pod_cooldown_low_1Gi.txt: |
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 1073741824
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 65536
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 65536
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_cooldown_low_1Gi{stage="1",description="cooldown_low"} 1
+  pod_cooldown_low_2Gi.txt: |
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 1203765248
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 2147483648
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 131000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 131000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_cooldown_low_2Gi{stage="3",description="cooldown_low"} 1
+  pod_cooldown_low_3Gi.txt: |
+    # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
+    # TYPE kubelet_volume_stats_available_bytes gauge
+    kubelet_volume_stats_available_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 1333788672
+    # HELP kubelet_volume_stats_capacity_bytes Total capacity of the volume in bytes
+    # TYPE kubelet_volume_stats_capacity_bytes gauge
+    kubelet_volume_stats_capacity_bytes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 3221225472
+    # HELP kubelet_volume_stats_inodes_free Number of free inodes in the volume
+    # TYPE kubelet_volume_stats_inodes_free gauge
+    kubelet_volume_stats_inodes_free{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 196000
+    # HELP kubelet_volume_stats_inodes Total number of inodes in the volume
+    # TYPE kubelet_volume_stats_inodes gauge
+    kubelet_volume_stats_inodes{namespace="pvc-autoscaler-system",persistentvolumeclaim="test-pvc-3",type="fake"} 196000
+    # HELP fake_metrics_stage Current stage information
+    # TYPE fake_metrics_stage gauge
+    fake_metrics_pod_cooldown_low_3Gi{stage="5",description="cooldown_low"} 1
   pod_inode_high_1Gi.txt: |-
     # HELP kubelet_volume_stats_available_bytes Number of available bytes in the volume
     # TYPE kubelet_volume_stats_available_bytes gauge
@@ -792,7 +878,7 @@ data:
     fake_metrics_pod_inode_low_3Gi{stage="11",description="inode_low"} 1
 kind: ConfigMap
 metadata:
-  name: pvc-autoscaler-minimal-fake-metrics-config-b7f56kmbbb
+  name: pvc-autoscaler-minimal-fake-metrics-config-65kckf6g5t
   namespace: pvc-autoscaler-system
 ---
 apiVersion: v1
@@ -1106,7 +1192,7 @@ spec:
           name: nginx-served-metrics
       volumes:
       - configMap:
-          name: pvc-autoscaler-minimal-fake-metrics-config-b7f56kmbbb
+          name: pvc-autoscaler-minimal-fake-metrics-config-65kckf6g5t
         name: config
       - emptyDir: {}
         name: nginx-served-metrics

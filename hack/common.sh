@@ -129,22 +129,26 @@ function _pvc_capacity() {
 # $1: pvc name
 # $2: namespace
 # $3: capacity
+# $4: poll interval (defaults to 30)
+# $5: max attempts (defaults to 2)
 function _ensure_pvc_capacity() {
   local _pvc_name="${1}"
   local _namespace="${2}"
   local _want_capacity="${3}"
-  local _got_capacity=$( _pvc_capacity "${_pvc_name}" "${_namespace}" )
+  local _poll_sec=${4:-30}
+  local _max_attempts=${5:-2}
 
-  # retry 1 time on fail
-  for attempt in 1 2; do
+  for i in $( seq 1 "${_max_attempts}" ); do
     local _got_capacity=$( _pvc_capacity "${_pvc_name}" "${_namespace}" )
     
     if [ "${_want_capacity}" = "${_got_capacity}" ]; then
+      _msg_info "PVC ${_pvc_name} capacity is ${_got_capacity}"
       return 0
     fi
     
-    if [ ${attempt} -eq 1 ]; then
-      sleep 30
+    if [ ${i} -lt ${_max_attempts} ]; then
+      _msg_info "[${i}/${_max_attempts}] PVC ${_pvc_name} capacity is ${_got_capacity}, waiting for ${_want_capacity}..."
+      sleep "${_poll_sec}"
     else
       _msg_error "pvc ${_namespace}/${_pvc_name} capacity is ${_got_capacity} (want ${_want_capacity})" 1
     fi
@@ -166,6 +170,31 @@ function _cleanup() {
   kubectl --namespace "${_namespace}" delete pod "${_pod_name}"
   kubectl --namespace "${_namespace}" delete pvc "${_pvc_name}"
   kubectl --namespace "${_namespace}" delete pvca "${_pvca_name}"
+}
+
+# Wait for PVCA to be in cooldown state
+#
+# $1: pvca name
+# $2: namespace (defaults to "pvc-autoscaler-system")
+# $3: poll interval (defaults to 10)
+# $4: max attempts (defaults to 30)
+function _wait_for_pvca_cooldown() {
+  local _pvca_name="${1}"
+  local _namespace=${2:-"pvc-autoscaler-system"}
+  local _poll_sec=${3:-10}
+  local _max_attempts=${4:-30}
+
+  for i in $( seq 1 "${_max_attempts}" ); do
+    _msg_info "[${i}/${_max_attempts}] waiting for PVCA ${_pvca_name} to be in cooldown ..."
+    local _reason=$( kubectl get pvca "${_pvca_name}" -n "${_namespace}" -o jsonpath='{.status.conditions[?(@.type=="Resizing")].reason}' )
+    if [ "${_reason}" == "PersistentVolumeClaimResizeCooldown" ]; then
+      _msg_info "PVCA ${_pvca_name} is in cooldown"
+      return
+    fi
+    sleep "${_poll_sec}"
+  done
+
+  _msg_error "PVCA ${_pvca_name} did not enter cooldown state" 1
 }
 
 export_artifacts() {

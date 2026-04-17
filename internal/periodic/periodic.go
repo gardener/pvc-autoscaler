@@ -74,6 +74,8 @@ const (
 	ReasonRecommendationError = "RecommendationError"
 	// ReasonReconcile condition reason for the Resizing condition.
 	ReasonReconcile = "Reconcile"
+	// ReasonPVCResizeCooldown indicates that the PVC resize is in cooldown period.
+	ReasonPVCResizeCooldown = "PersistentVolumeClaimResizeCooldown"
 )
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
@@ -325,9 +327,13 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 	obj.Status.LastCheck = metav1.NewTime(now)
 	obj.Status.NextCheck = metav1.NewTime(now.Add(r.interval))
 
-	volumeRecommendation := v1alpha1.VolumeRecommendation{
-		Name: obj.Spec.TargetRef.Name,
+	// Start with existing recommendation to preserve fields set during resize,
+	// or create a new one if none exists
+	var volumeRecommendation v1alpha1.VolumeRecommendation
+	if len(obj.Status.VolumeRecommendations) > 0 {
+		volumeRecommendation = obj.Status.VolumeRecommendations[0]
 	}
+	volumeRecommendation.Name = obj.Spec.TargetRef.Name
 
 	if volInfo != nil {
 		usedSpace, err := volInfo.UsedSpacePercentage()
@@ -584,6 +590,26 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 		return pvca.SetCondition(ctx, r.client, condition)
 	}
 
+	if policy.ScaleUp.CooldownDuration != nil {
+		lastResizeTime := pvca.Status.VolumeRecommendations[0].LastResizeTime
+		if lastResizeTime != nil {
+			elapsed := time.Since(lastResizeTime.Time)
+			cooldown := policy.ScaleUp.CooldownDuration.Duration
+			if elapsed < cooldown {
+				remaining := cooldown - elapsed
+				logger.Info("cooldown period not elapsed", "remaining", remaining.String())
+				condition := metav1.Condition{
+					Type:    string(v1alpha1.ConditionTypeResizing),
+					Status:  metav1.ConditionFalse,
+					Reason:  ReasonPVCResizeCooldown,
+					Message: fmt.Sprintf("- %s: cooldown duration has not elapsed yet", pvcObj.Name),
+				}
+
+				return pvca.SetCondition(ctx, r.client, condition)
+			}
+		}
+	}
+
 	// And finally we should be good to resize now
 	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", targetSize.String())
 	metrics.ResizedTotal.WithLabelValues(pvcObj.Namespace, pvcObj.Name).Inc()
@@ -606,6 +632,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 	pvca.Status.VolumeRecommendations[0].Current.Size = currStatusSize
 	pvca.Status.VolumeRecommendations[0].Target.Size = targetSize
+	pvca.Status.VolumeRecommendations[0].LastResizeTime = ptr.To(metav1.Now())
 	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
 		return err
 	}

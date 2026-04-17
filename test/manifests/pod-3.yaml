@@ -2,15 +2,15 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: test-pod-2
+  name: test-pod-3
   namespace: pvc-autoscaler-system
 spec:
   volumes:
     - name: app-vol
       persistentVolumeClaim:
-        claimName: test-pvc-2
+        claimName: test-pvc-3
   containers:
-    - name: test-pod-2
+    - name: test-pod-3
       image: alpine:3.23.3
       command:
         - sleep
