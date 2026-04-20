@@ -94,7 +94,8 @@ linters:
           arguments:
             - []
             - []
-            - - skip-package-name-checks: true
+        - name: package-naming
+          disabled: true
         - name: unhandled-error
           disabled: false
           exclude: [""]
@@ -110,33 +111,34 @@ linters:
         - name: context-as-argument
         - name: early-return
         - name: exported
+  exclusions:
+    generated: lax
+    rules:
+      # errcheck: Most programs ignore errors on these functions and it's usually ok
+      - path: (.+)\.go$
+        text: Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*print(f|ln)?|os\.(Un)?Setenv). is not checked
+        linters:
+          - errcheck
+      # revive: Allow certain common patterns
+      - path: (.+)\.go$
+        text: var-naming # ((var|const|struct field|func) .* should be .*
+        linters:
+          - revive
+      - path: (.+)\.go$
+        text: package-comments # package comment should be of the form
+        linters:
+          - revive
+      - path: (.+)\.go$
+        text: 'exported: (type|func) name will be used as .* by other packages, and that stutters;'
+        linters:
+          - revive
+      # staticcheck: Allow deprecated usage in some cases
+      - linters:
+          - staticcheck
+        text: 'SA1019:' # Excludes messages where deprecated variables are used
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # errcheck: Most programs ignore errors on these functions and it's usually ok
-    - path: (.+)\.go$
-      text: Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*print(f|ln)?|os\.(Un)?Setenv). is not checked
-      linters:
-        - errcheck
-    # revive: Allow certain common patterns
-    - path: (.+)\.go$
-      text: var-naming # ((var|const|struct field|func) .* should be .*
-      linters:
-        - revive
-    - path: (.+)\.go$
-      text: package-comments # package comment should be of the form
-      linters:
-        - revive
-    - path: (.+)\.go$
-      text: 'exported: (type|func) name will be used as .* by other packages, and that stutters;'
-      linters:
-        - revive
-    # staticcheck: Allow deprecated usage in some cases
-    - linters:
-        - staticcheck
-      text: 'SA1019:' # Excludes messages where deprecated variables are used
-
 formatters:
   enable:
     - gci
