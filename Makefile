@@ -285,7 +285,7 @@ GOSEC_VERSION ?= v2.25.0
 # renovate: datasource=github-releases depName=incu6us/goimports-reviser
 GOIMPORTSREVISER_VERSION ?= v3.12.6
 # renovate: datasource=github-releases depName=kubernetes-sigs/controller-tools
-CONTROLLER_TOOLS_VERSION ?= v0.16.4
+CONTROLLER_TOOLS_VERSION ?= v0.20.1
 
 # tool versions from go.mod
 ENVTEST_VERSION ?= $(subst v,release-,$(call major_minor_version_gomod,sigs.k8s.io/controller-runtime))
