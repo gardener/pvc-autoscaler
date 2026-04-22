@@ -13,7 +13,7 @@ threshold.
 - Storage class with enabled
   [volume expansion](https://kubernetes.io/docs/concepts/storage/storage-classes/#allow-volume-expansion)
 - Metrics source (currently only [Prometheus](https://prometheus.io/) is supported)
-- [minikube](https://minikube.sigs.k8s.io/docs/) (for local development)
+- [minikube](https://minikube.sigs.k8s.io/docs/) or [KinD](https://kind.sigs.k8s.io) (for local development)
 
 # Installation
 
@@ -35,16 +35,16 @@ kubectl apply -f https://raw.githubusercontent.com/gardener/pvc-autoscaler/maste
 Note, that the provided install bundle uses
 [cert-manager](https://cert-manager.io/) for issuing TLS certificates for the
 admission webhook server. If you intend on using another approach for issuing
-TLS certificates, make sure to adjust the `default` kustomization instead.
+TLS certificates, make sure to adjust the `default` kustomization overlay instead.
 
 In addition to that you could also install `pvc-autoscaler` using the default
 [kustomization](https://kubectl.docs.kubernetes.io/references/kustomize/glossary/#kustomization)
-located in [config/default](./config/default). Note that the `default`
-kustomization is meant to be used in dev setups. For non-dev setups it is
-recommended that you create an overlay using the default kustomization as a base.
+overlay located in [config/overlay/default](./config/overlay/default). Note that the `default`
+kustomization overlay is meant to be used in dev setups. For non-dev setups it is
+recommended that you create a different overlay that uses [config/base](./config/base) as base.
 
 ``` shell
-kustomize build config/default | kubectl apply -f -
+kustomize build config/overlays/default | kubectl apply -f -
 ```
 
 `pvc-autoscaler` uses Prometheus as a metrics source in order to monitor the
@@ -202,34 +202,19 @@ Run the unit tests.
 make test
 ```
 
-In order to run the end-to-end tests we need a clean test environment.  The
-following command will create a new test environment, build and deploy the
-operator image, run the e2e tests against it and finally destroy the test
-environment.
+In order to run the end-to-end tests we need a clean test environment. After you have
+created a development cluster with KinD, you can run the e2e tests against it using
+the following command.
 
 ``` shell
-make test-e2e
+make test-e2e-local
 ```
 
-If you need to create a clean environment for e2e tests and run the tests
-manually, then you can run the following command which will setup the test
-environment, load the Docker images into the minikube nodes and deploy the
-operator in the cluster.
+If you want to automate the entire creation of the KinD dev cluster and execution of the e2e tests,
+you can directly run the following command.
 
-``` shell
-make e2e-env-setup
-```
-
-Then you can manually run the e2e tests by executing the following script.
-
-``` shell
-./hack/run-e2e-tests.sh
-```
-
-In order to remove the test e2e environment execute the following.
-
-``` shell
-make e2e-env-teardown
+```shell
+make ci-e2e-kind
 ```
 
 # Contributing

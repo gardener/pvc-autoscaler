@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: minimal-fake-metrics-server
-  namespace: monitoring
+  namespace: system
   labels:
     app: minimal-fake-metrics-server
 spec:
@@ -152,7 +152,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: minimal-fake-metrics-server
-  namespace: monitoring
+  namespace: system
   annotations:
     networking.resources.monitoringer.cloud/from-all-seed-scrape-targets-allowed-ports: '[{"protocol":"TCP","port":8080}]'
   labels:
@@ -172,7 +172,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: minimal-fake-metrics-server
-  namespace: monitoring
+  namespace: system
   labels:
     release: kind-prometheus
     app: minimal-fake-metrics-server

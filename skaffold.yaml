@@ -1,6 +1,35 @@
 apiVersion: skaffold/v4beta12
 kind: Config
 metadata:
+  name: pvc-autoscaler-deps
+deploy:
+  helm:
+    releases:
+      - name: cert-manager
+        repo: https://charts.jetstack.io
+        remoteChart: cert-manager
+        version: v1.20.2
+        namespace: cert-manager
+        createNamespace: true
+        setValues:
+          crds.enabled: "true"
+      - name: kind-prometheus
+        repo: https://prometheus-community.github.io/helm-charts
+        remoteChart: kube-prometheus-stack
+        version: 83.7.0
+        namespace: monitoring
+        createNamespace: true
+        setValues:
+          alertmanager.enabled: "false"
+          grafana.enabled: "false"
+          kubeStateMetrics.enabled: "false"
+          nodeExporter.enabled: "false"
+          prometheusOperator.enabled: "true"
+          prometheus.enabled: "true"
+---
+apiVersion: skaffold/v4beta12
+kind: Config
+metadata:
   name: pvc-autoscaler
 build:
   artifacts:
@@ -23,24 +52,8 @@ build:
 manifests:
   kustomize:
     paths:
-      - config/default
+      - config/overlays/kind
 deploy:
-  helm:
-    releases:
-      - name: cert-manager
-        repo: https://charts.jetstack.io
-        remoteChart: cert-manager
-        version: v1.20.2
-        namespace: cert-manager
-        createNamespace: true
-        setValues:
-          crds.enabled: "true"
-      - name: kind-prometheus
-        repo: https://prometheus-community.github.io/helm-charts
-        remoteChart: kube-prometheus-stack
-        version: 83.7.0
-        namespace: monitoring
-        createNamespace: true
   kubectl:
     flags:
       apply:
