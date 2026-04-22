@@ -233,11 +233,11 @@ var _ = Describe("Periodic Runner", func() {
 					nil,
 					common.ErrNoMetrics,
 				),
-				Entry("should return ErrStaleMetrics when metrics capacity does not match PVC",
+				Entry("should return ErrStaleMetrics when metrics capacity deviates by more than max(2%, 0.5Gi)",
 					"",
 					&metricssource.VolumeInfo{
 						AvailableBytes:  9 * 1024 * 1024,
-						CapacityBytes:   200 * 1024 * 1024,
+						CapacityBytes:   200 * 1024 * 1024, // delta ~824MiB > 0.5Gi tolerance
 						AvailableInodes: 1000,
 						CapacityInodes:  1000,
 					},

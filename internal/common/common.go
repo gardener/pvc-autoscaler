@@ -47,4 +47,9 @@ const (
 	// request set by the autoscaler is guaranteed to be divisible by that
 	// value. ScalingResolutionBytes is guaranteed to be an even number.
 	ScalingResolutionBytes = 1024 * 1024 * 1024
+
+	// MaxCapacityDeviationRatio is the maximum allowed deviation ratio between the PVC size
+	// as reported by the metrics source and the PVC size as indicated by the PVC status.
+	// If the deviation is bigger than this ratio, the metrics are considered stale.
+	MaxCapacityDeviationRatio = 0.02
 )
