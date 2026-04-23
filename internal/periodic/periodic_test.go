@@ -233,7 +233,7 @@ var _ = Describe("Periodic Runner", func() {
 					nil,
 					common.ErrNoMetrics,
 				),
-				Entry("should return ErrStaleMetrics when metrics capacity deviates by more than max(2%, 0.5Gi)",
+				Entry("should return ErrStaleMetrics when metrics capacity deviates by more than 0.5Gi (small PVC)",
 					"",
 					&metricssource.VolumeInfo{
 						AvailableBytes:  9 * 1024 * 1024,
@@ -244,6 +244,32 @@ var _ = Describe("Periodic Runner", func() {
 					common.ErrStaleMetrics,
 				),
 			)
+
+			It("should return ErrStaleMetrics when metrics capacity deviates by more than 2% (large PVC)", func() {
+				By("Patching PVC to 100Gi and PVCA maxCapacity to 200Gi")
+				specPatch := client.MergeFrom(pvc.DeepCopy())
+				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("100Gi")
+				Expect(k8sClient.Patch(parentCtx, pvc, specPatch)).To(Succeed())
+
+				statusPatch := client.MergeFrom(pvc.DeepCopy())
+				pvc.Status.Capacity[corev1.ResourceStorage] = resource.MustParse("100Gi")
+				Expect(k8sClient.Status().Patch(parentCtx, pvc, statusPatch)).To(Succeed())
+
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("200Gi")
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+				By("Calling shouldReconcilePVC with metrics deviating by 3Gi")
+				volInfo := &metricssource.VolumeInfo{
+					AvailableBytes:  9 * 1024 * 1024,
+					CapacityBytes:   97 * 1024 * 1024 * 1024, // delta 3Gi > 2% tolerance
+					AvailableInodes: 1000,
+					CapacityInodes:  1000,
+				}
+				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
+				Expect(ok).To(BeFalse())
+				Expect(err).To(MatchError(common.ErrStaleMetrics))
+			})
 
 			It("should return ErrStorageClassNotFound", func() {
 				By("Creating a PVC without a StorageClass")
