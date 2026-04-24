@@ -245,7 +245,7 @@ var _ = Describe("Periodic Runner", func() {
 				),
 			)
 
-			It("should return ErrStaleMetrics when metrics capacity deviates by more than 2% (large PVC)", func() {
+			It("should apply 2% tolerance for stale metrics detection (large PVC)", func() {
 				By("Patching PVC to 100Gi and PVCA maxCapacity to 200Gi")
 				specPatch := client.MergeFrom(pvc.DeepCopy())
 				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("100Gi")
@@ -269,6 +269,17 @@ var _ = Describe("Periodic Runner", func() {
 				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
 				Expect(ok).To(BeFalse())
 				Expect(err).To(MatchError(common.ErrStaleMetrics))
+
+				By("Calling shouldReconcilePVC with metrics deviating by 1Gi")
+				volInfo = &metricssource.VolumeInfo{
+					AvailableBytes:  9 * 1024 * 1024,
+					CapacityBytes:   99 * 1024 * 1024 * 1024, // delta 1Gi < 2% tolerance
+					AvailableInodes: 1000,
+					CapacityInodes:  1000,
+				}
+				ok, _, err = runner.shouldReconcilePVC(parentCtx, pvca, volInfo)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(ok).To(BeTrue())
 			})
 
 			It("should return ErrStorageClassNotFound", func() {
