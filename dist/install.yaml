@@ -142,7 +142,7 @@ spec:
                           description: StepPercent specifies the percentage by which
                             to change the PVC storage capacity when scaling.
                           maximum: 100
-                          minimum: 1
+                          minimum: 5
                           type: integer
                         utilizationThresholdPercent:
                           default: 80
