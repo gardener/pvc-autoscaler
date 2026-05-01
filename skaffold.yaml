@@ -16,7 +16,7 @@ deploy:
       - name: kind-prometheus
         repo: https://prometheus-community.github.io/helm-charts
         remoteChart: kube-prometheus-stack
-        version: 83.7.0
+        version: 84.5.0
         namespace: monitoring
         createNamespace: true
         setValues:
