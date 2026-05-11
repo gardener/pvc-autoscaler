@@ -404,15 +404,13 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 
 	// Detect whether the metrics source is reporting stale data. Stale
 	// metrics data would be when the volume info metrics reported by the
-	// metrics source are deviate from the current PVC size indicated by
+	// metrics source deviate from the current PVC size indicated by
 	// `.status.capacity.storage'
 	if statusSize, ok := currStatusSize.AsInt64(); ok {
-		delta := statusSize - int64(volInfo.CapacityBytes)
-		if delta < 0 {
-			delta = -delta
-		}
-		if delta > common.ScalingResolutionBytes/2 {
-			return false, "", fmt.Errorf("stale metrics data detected: pvc size=%d bytes, metrics size=%d bytes:%w", statusSize, volInfo.CapacityBytes, common.ErrStaleMetrics)
+		delta := math.Abs(float64(statusSize) - float64(volInfo.CapacityBytes))
+		tolerance := math.Max(common.MaxCapacityDeviationRatio*float64(statusSize), float64(common.ScalingResolutionBytes)/2)
+		if delta > tolerance {
+			return false, "", fmt.Errorf("stale metrics data detected: pvc size=%d bytes, metrics size=%d bytes: %w", statusSize, volInfo.CapacityBytes, common.ErrStaleMetrics)
 		}
 	}
 

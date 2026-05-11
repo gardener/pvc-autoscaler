@@ -97,7 +97,7 @@ type ScalingRules struct {
 	UtilizationThresholdPercent *int `json:"utilizationThresholdPercent,omitempty"`
 
 	// StepPercent specifies the percentage by which to change the PVC storage capacity when scaling.
-	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Minimum=5
 	// +kubebuilder:validation:Maximum=100
 	// +kubebuilder:default=10
 	// +optional
