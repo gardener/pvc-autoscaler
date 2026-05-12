@@ -8,10 +8,10 @@ require (
 	github.com/onsi/gomega v1.40.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/common v0.67.5
-	k8s.io/api v0.34.7
-	k8s.io/apiextensions-apiserver v0.34.7
-	k8s.io/apimachinery v0.34.7
-	k8s.io/client-go v0.34.7
+	k8s.io/api v0.34.8
+	k8s.io/apiextensions-apiserver v0.34.8
+	k8s.io/apimachinery v0.34.8
+	k8s.io/client-go v0.34.8
 	k8s.io/utils v0.0.0-20260507154919-ff6756f316d2
 	sigs.k8s.io/controller-runtime v0.22.5
 )
