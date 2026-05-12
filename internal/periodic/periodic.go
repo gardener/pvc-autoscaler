@@ -209,73 +209,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 	pvcaToPVCsMap, pvcToOwnersMap := r.fetchPVCsForPVCAs(ctx, logger, pvcaList.Items)
 
 	for pvca, pvcs := range pvcaToPVCsMap {
-		logger := logger.WithValues("pvca", client.ObjectKeyFromObject(pvca))
-
-		// TODO(plkokanov): When multi-PVC support is added, this must be updated to iterate over all PVCs.
-		// Currently, the PVCA can only target one PVC, so we only get the first element.
-		// Because of that, we can also skip reconciling the PVCA resource if
-		// other PVCAs also target the same PVC.
-		pvc := pvcs[0]
-		pvcObjKey := client.ObjectKeyFromObject(pvc)
-		logger = logger.WithValues("pvc", pvcObjKey)
-
-		if owners, ok := pvcToOwnersMap[pvcObjKey.String()]; ok && len(owners) > 1 {
-			logger.Info("skipping persistentvolumeclaim because it is scaled by multiple persistentvolumeclaimautoscalers", "pvcas", strings.Join(owners, ", "))
-			condition := metav1.Condition{
-				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-				Status:  metav1.ConditionFalse,
-				Reason:  ReasonAmbiguousPVCA,
-				Message: fmt.Sprintf("PersistentVolumeClaim %s is scaled by multiple PersistentVolumeClaimAutoscalers: %s", pvcObjKey, strings.Join(owners, ", ")),
-			}
-			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-				logger.Info("failed to update status condition", "reason", err.Error())
-			}
-
-			continue
-		}
-
-		volInfo := metricsData[pvcObjKey]
-
-		ok, scalingReason, err := r.shouldReconcilePVC(ctx, pvca, volInfo)
-		if err != nil {
-			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
-			metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
-			var conditionReason string
-			if errors.Is(err, common.ErrNoMetrics) {
-				conditionReason = ReasonMetricsFetchError
-			} else {
-				conditionReason = ReasonRecommendationError
-			}
-			condition := metav1.Condition{
-				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-				Status:  metav1.ConditionFalse,
-				Reason:  conditionReason,
-				Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
-			}
-			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-				logger.Info("failed to update status condition", "reason", err.Error())
-			}
-
-			continue
-		}
-
-		if ok {
-			if err := r.resizePVC(ctx, pvca, scalingReason); err != nil {
-				logger.Error(err, "failed to resize pvc")
-			}
-		} else if err := pvca.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
-			logger.Info("failed to remove status condition", "reason", err.Error())
-		}
-
-		condition := metav1.Condition{
-			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-			Status:  metav1.ConditionTrue,
-			Reason:  ReasonMetricsFetched,
-			Message: " - All metrics fetched successfully",
-		}
-		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-			logger.Info("failed to update status condition", "reason", err.Error())
-		}
+		r.reconcilePVCA(ctx, logger, pvca, pvcs, pvcToOwnersMap, metricsData)
 	}
 
 	return nil
@@ -316,6 +250,83 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 	}
 
 	return pvcaToPVCsMap, pvcToOwnersMap
+}
+
+func (r *Runner) reconcilePVCA(
+	ctx context.Context,
+	logger logr.Logger,
+	pvca *v1alpha1.PersistentVolumeClaimAutoscaler,
+	pvcs []*corev1.PersistentVolumeClaim,
+	pvcToOwnersMap map[string][]string,
+	metricsData metricssource.Metrics,
+) {
+	logger = logger.WithValues("pvca", client.ObjectKeyFromObject(pvca))
+
+	// TODO(plkokanov): When multi-PVC support is added, this must be updated to iterate over all PVCs.
+	// Currently, the PVCA can only target one PVC, so we only get the first element.
+	// Because of that, we can also skip reconciling the PVCA resource if
+	// other PVCAs also target the same PVC.
+	pvc := pvcs[0]
+	pvcObjKey := client.ObjectKeyFromObject(pvc)
+	logger = logger.WithValues("pvc", pvcObjKey)
+
+	if owners, ok := pvcToOwnersMap[pvcObjKey.String()]; ok && len(owners) > 1 {
+		logger.Info("skipping persistentvolumeclaim because it is scaled by multiple persistentvolumeclaimautoscalers", "pvcas", strings.Join(owners, ", "))
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonAmbiguousPVCA,
+			Message: fmt.Sprintf("PersistentVolumeClaim %s is scaled by multiple PersistentVolumeClaimAutoscalers: %s", pvcObjKey, strings.Join(owners, ", ")),
+		}
+		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
+			logger.Info("failed to update status condition", "reason", err.Error())
+		}
+
+		return
+	}
+
+	volInfo := metricsData[pvcObjKey]
+
+	ok, scalingReason, err := r.shouldReconcilePVC(ctx, pvca, volInfo)
+	if err != nil {
+		logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
+		metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
+		var conditionReason string
+		if errors.Is(err, common.ErrNoMetrics) {
+			conditionReason = ReasonMetricsFetchError
+		} else {
+			conditionReason = ReasonRecommendationError
+		}
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+			Status:  metav1.ConditionFalse,
+			Reason:  conditionReason,
+			Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
+		}
+		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
+			logger.Info("failed to update status condition", "reason", err.Error())
+		}
+
+		return
+	}
+
+	if ok {
+		if err := r.resizePVC(ctx, pvca, scalingReason); err != nil {
+			logger.Error(err, "failed to resize pvc")
+		}
+	} else if err := pvca.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
+		logger.Info("failed to remove status condition", "reason", err.Error())
+	}
+
+	condition := metav1.Condition{
+		Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+		Status:  metav1.ConditionTrue,
+		Reason:  ReasonMetricsFetched,
+		Message: " - All metrics fetched successfully",
+	}
+	if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
+		logger.Info("failed to update status condition", "reason", err.Error())
+	}
 }
 
 // updatePVCAStatus updates the status of the
