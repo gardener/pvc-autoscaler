@@ -215,7 +215,7 @@ var _ = Describe("Periodic Runner", func() {
 						Expect(k8sClient.Patch(parentCtx, pvca, patch)).To(Succeed())
 					}
 
-					ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+					ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 					Expect(ok).To(BeFalse())
 					if expectedErr != nil {
 						Expect(err).To(MatchError(expectedErr))
@@ -261,7 +261,7 @@ var _ = Describe("Periodic Runner", func() {
 					AvailableInodes: 1000,
 					CapacityInodes:  1000,
 				}
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 				Expect(ok).To(BeFalse())
 				Expect(err).To(MatchError(common.ErrStaleMetrics))
 
@@ -272,7 +272,7 @@ var _ = Describe("Periodic Runner", func() {
 					AvailableInodes: 1000,
 					CapacityInodes:  1000,
 				}
-				ok, _, err = runner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+				ok, _, err = runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(ok).To(BeTrue())
 			})
@@ -319,7 +319,7 @@ var _ = Describe("Periodic Runner", func() {
 					CapacityInodes:  1000,
 					AvailableInodes: 500,
 				}
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 				Expect(ok).To(BeFalse())
 				Expect(err).To(MatchError(ErrStorageClassNotFound))
 			})
@@ -383,7 +383,7 @@ var _ = Describe("Periodic Runner", func() {
 					CapacityInodes:  1000,
 					AvailableInodes: 500,
 				}
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 				Expect(ok).To(BeFalse())
 				Expect(err).To(MatchError(ErrStorageClassDoesNotSupportExpansion))
 			})
@@ -430,7 +430,7 @@ var _ = Describe("Periodic Runner", func() {
 					CapacityInodes:  1000,
 				}
 
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 				Expect(ok).To(BeFalse())
 				Expect(err).To(MatchError(ErrVolumeModeIsNotFilesystem))
 			})
@@ -443,7 +443,7 @@ var _ = Describe("Periodic Runner", func() {
 					CapacityInodes:  10000,
 				}
 
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 				Expect(ok).To(BeFalse())
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -461,7 +461,7 @@ var _ = Describe("Periodic Runner", func() {
 					CapacityInodes:  1000,
 				}
 
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 				Expect(ok).To(BeFalse())
 				Expect(err).ToNot(HaveOccurred())
 			})
@@ -489,7 +489,7 @@ var _ = Describe("Periodic Runner", func() {
 						CapacityInodes:  1000,
 					}
 
-					ok, reason, err := testRunner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+					ok, reason, err := testRunner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 					Expect(ok).To(BeTrue())
 					Expect(reason).To(Equal("passing storage threshold"))
 					Expect(err).ToNot(HaveOccurred())
@@ -507,7 +507,7 @@ var _ = Describe("Periodic Runner", func() {
 						CapacityInodes:  1000,
 					}
 
-					ok, reason, err := testRunner.shouldReconcilePVC(parentCtx, pvca, pvc, volInfo)
+					ok, reason, err := testRunner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
 					Expect(ok).To(BeTrue())
 					Expect(reason).To(Equal("passing inodes threshold"))
 					Expect(err).ToNot(HaveOccurred())
@@ -856,7 +856,7 @@ var _ = Describe("Periodic Runner", func() {
 					logger := zap.New(zap.WriteTo(w))
 					newCtx := log.IntoContext(parentCtx, logger)
 
-					Expect(runner.resizePVC(newCtx, pvca, pvc, reason)).To(Succeed())
+					Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), reason)).To(Succeed())
 					Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
 
 					By("Verifying PVC was resized")
@@ -909,7 +909,7 @@ var _ = Describe("Periodic Runner", func() {
 				newCtx := log.IntoContext(parentCtx, logger)
 
 				By("Performing first resize")
-				Expect(runner.resizePVC(newCtx, pvca, pvc, "passing storage threshold")).To(Succeed())
+				Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold")).To(Succeed())
 
 				wantLog := `"resizing persistent volume claim","pvc":"test-pvc","from":"1Gi","to":"2Gi"}`
 				Expect(buf.String()).To(ContainSubstring(wantLog))
@@ -928,7 +928,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
 
 				By("Performing second resize")
-				Expect(runner.resizePVC(newCtx, pvca, &resizedPvc, "passing storage threshold")).To(Succeed())
+				Expect(runner.resizePVC(newCtx, pvca, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold")).To(Succeed())
 
 				wantLog = `"resizing persistent volume claim","pvc":"test-pvc","from":"2Gi","to":"3Gi"}`
 				Expect(buf.String()).To(ContainSubstring(wantLog))
@@ -944,7 +944,7 @@ var _ = Describe("Periodic Runner", func() {
 
 				By("Expecting third attempt to fail with max capacity reached")
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
-				Expect(runner.resizePVC(newCtx, pvca, &resizedPvc, "passing storage threshold")).To(Succeed())
+				Expect(runner.resizePVC(newCtx, pvca, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold")).To(Succeed())
 				Expect(buf.String()).To(ContainSubstring("max capacity reached"))
 
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
@@ -981,7 +981,7 @@ var _ = Describe("Periodic Runner", func() {
 					newCtx := log.IntoContext(parentCtx, logger)
 
 					beforeResize := time.Now()
-					Expect(runner.resizePVC(newCtx, pvca, pvc, "passing storage threshold")).To(Succeed())
+					Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold")).To(Succeed())
 					Expect(buf.String()).To(ContainSubstring(expectedLog))
 
 					var pvcObj corev1.PersistentVolumeClaim

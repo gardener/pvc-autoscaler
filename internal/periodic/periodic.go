@@ -292,7 +292,9 @@ func (r *Runner) reconcilePVCA(
 		return
 	}
 
-	ok, scalingReason, err := r.shouldReconcilePVC(ctx, pvca, pvc, volInfo)
+	policy := volumePolicyForPVC(pvca, pvc)
+
+	ok, scalingReason, err := r.shouldReconcilePVC(ctx, pvca, pvc, policy, volInfo)
 	if err != nil {
 		logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 		metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
@@ -323,7 +325,7 @@ func (r *Runner) reconcilePVCA(
 	}
 
 	if ok && !inProgress {
-		if err := r.resizePVC(ctx, pvca, pvc, scalingReason); err != nil {
+		if err := r.resizePVC(ctx, pvca, pvc, policy, scalingReason); err != nil {
 			logger.Error(err, "failed to resize pvc")
 		}
 	} else if err := pvca.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
@@ -377,11 +379,20 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 	return r.client.Status().Patch(ctx, obj, patch)
 }
 
+// volumePolicyForPVC returns the volume policy from the given
+// [v1alpha1.PersistentVolumeClaimAutoscaler] that applies to the specified PVC.
+// Currently only one volume policy is supported, so the first policy is always
+// returned. When multi-PVC support is added, this function will match the
+// policy to the specific PVC.
+func volumePolicyForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, _ *corev1.PersistentVolumeClaim) v1alpha1.VolumePolicy {
+	return pvca.Spec.VolumePolicies[0]
+}
+
 // shouldReconcilePVC is a predicate which checks whether the
 // [corev1.PersistentVolumeClaim] object targeted by
 // [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
 // reconciliation. When it returns true, it also returns the scaling reason.
-func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, volInfo *metricssource.VolumeInfo) (bool, string, error) {
+func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volInfo *metricssource.VolumeInfo) (bool, string, error) {
 	if err := r.updatePVCAStatus(ctx, pvca, volInfo); err != nil {
 		return false, "", err
 	}
@@ -397,8 +408,6 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, "", fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
 	}
 
-	// Only one volume policy is supported currently
-	policy := pvca.Spec.VolumePolicies[0]
 	if policy.MaxCapacity.Value() < currStatusSize.Value() {
 		return false, "", fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
 	}
@@ -559,12 +568,9 @@ func (r *Runner) isResizeInProgress(ctx context.Context, pvca *v1alpha1.Persiste
 
 // resizePVC performs the actual resize of the PVC targeted by the given
 // [v1alpha1.PersistentVolumeClaimAutoscaler].
-func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, scalingReason string) error {
+func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, scalingReason string) error {
 	logger := log.FromContext(ctx).WithValues("pvc", pvc.Name)
 	currSpecSize := pvc.Spec.Resources.Requests.Storage()
-
-	// Currently only one policy is supported, since only one PVC can be targeted by a PVCA object
-	policy := pvca.Spec.VolumePolicies[0]
 
 	// Calculate the new size
 	stepPercent := float64(*policy.ScaleUp.StepPercent)
