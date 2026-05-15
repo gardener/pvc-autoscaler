@@ -481,7 +481,7 @@ var _ = Describe("Periodic Runner", func() {
 					WithEventRecorder(eventRecorder)(testRunner)
 				})
 
-				It("should reconcile - free space threshold reached", func() {
+				It("should reconcile - used space threshold reached", func() {
 					volInfo := &metricssource.VolumeInfo{
 						AvailableBytes:  90 * 1024 * 1024,
 						CapacityBytes:   1024 * 1024 * 1024,
@@ -495,11 +495,11 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(err).ToNot(HaveOccurred())
 
 					event := <-eventRecorder.Events
-					wantEvent := `Warning FreeSpaceThresholdReached free space (8%) is less than the configured threshold (20%)`
+					wantEvent := `Warning UsedSpaceThresholdReached used space (92%) exceeds the configured threshold (80%)`
 					Expect(event).To(Equal(wantEvent))
 				})
 
-				It("should reconcile when free inodes threshold reached", func() {
+				It("should reconcile when used inodes threshold reached", func() {
 					volInfo := &metricssource.VolumeInfo{
 						AvailableBytes:  1024 * 1024 * 1024,
 						CapacityBytes:   1024 * 1024 * 1024,
@@ -513,7 +513,7 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(err).ToNot(HaveOccurred())
 
 					event := <-eventRecorder.Events
-					wantEvent := `Warning FreeInodesThresholdReached free inodes (9%) are less than the configured threshold (20%)`
+					wantEvent := `Warning UsedInodesThresholdReached used inodes (91%) exceeds the configured threshold (80%)`
 					Expect(event).To(Equal(wantEvent))
 				})
 			})

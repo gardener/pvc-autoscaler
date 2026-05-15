@@ -54,7 +54,7 @@ function _test_consume_space_and_resize() {
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_bytes_high_1Gi
 
   # Once we consume the space we expect to see these events for the PVC object.
-  _wait_for_event Warning FreeSpaceThresholdReached "pvc/${_pvc_name}"
+  _wait_for_event Warning UsedSpaceThresholdReached "pvc/${_pvc_name}"
   _wait_for_event Normal ResizingStorage "pvc/${_pvc_name}"
   _wait_for_event Normal Resizing "pvc/${_pvc_name}"
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
@@ -139,7 +139,7 @@ function _test_consume_inodes_and_resize() {
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_inode_high_1Gi
 
   # We should see these events
-  _wait_for_event Warning FreeInodesThresholdReached "pvc/${_pvc_name}"
+  _wait_for_event Warning UsedInodesThresholdReached "pvc/${_pvc_name}"
   _wait_for_event Normal ResizingStorage "pvc/${_pvc_name}"
   _wait_for_event Normal Resizing "pvc/${_pvc_name}"
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
@@ -223,7 +223,7 @@ function _test_cooldown() {
   ${_SCRIPT_DIR}/set-volume-metrics-stage.sh pod_cooldown_high_1Gi
 
   # Once we consume the space we expect to see these events for the PVC object.
-  _wait_for_event Warning FreeSpaceThresholdReached "pvc/${_pvc_name}"
+  _wait_for_event Warning UsedSpaceThresholdReached "pvc/${_pvc_name}"
   _wait_for_event Normal ResizingStorage "pvc/${_pvc_name}"
   _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_name}"
 

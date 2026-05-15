@@ -431,23 +431,23 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		}
 	}
 
-	// Getting an error from FreeSpacePercentage() means that the
+	// Getting an error from UsedSpacePercentage() means that the
 	// capacity for the volume is zero, which in turn means that we
 	// didn't get any metrics for it.
-	freeSpace, err := volInfo.FreeSpacePercentage()
+	usedSpace, err := volInfo.UsedSpacePercentage()
 	if err != nil {
 		return false, "", common.ErrNoMetrics
 	}
 
 	// Even, if we don't have inode metrics we still want to proceed here.
-	freeInodes, err := volInfo.FreeInodesPercentage()
+	usedInodes, err := volInfo.UsedInodesPercentage()
 	if err != nil {
 		return false, "", common.ErrNoMetrics
 	}
 
 	// Get threshold from volume policy
 	// Currently only one policy is supported and is enforced by the CRD schema
-	threshold := 100 - *policy.ScaleUp.UtilizationThresholdPercent
+	threshold := *policy.ScaleUp.UtilizationThresholdPercent
 
 	// VolumeMode should be Filesystem
 	if pvc.Spec.VolumeMode == nil {
@@ -463,28 +463,28 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	}
 
 	switch {
-	// Free space reached threshold
-	case freeSpace < threshold:
+	// Used space reached threshold
+	case usedSpace > threshold:
 		r.eventRecorder.Eventf(
 			pvc,
 			corev1.EventTypeWarning,
-			"FreeSpaceThresholdReached",
-			"free space (%d%%) is less than the configured threshold (%d%%)",
-			freeSpace,
+			"UsedSpaceThresholdReached",
+			"used space (%d%%) exceeds the configured threshold (%d%%)",
+			usedSpace,
 			threshold,
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name, "space").Inc()
 
 		return true, "passing storage threshold", nil
 
-	// Free inodes reached threshold
-	case volInfo.CapacityInodes > 0.0 && (freeInodes < threshold):
+	// Used inodes reached threshold
+	case volInfo.CapacityInodes > 0.0 && (usedInodes > threshold):
 		r.eventRecorder.Eventf(
 			pvc,
 			corev1.EventTypeWarning,
-			"FreeInodesThresholdReached",
-			"free inodes (%d%%) are less than the configured threshold (%d%%)",
-			freeInodes,
+			"UsedInodesThresholdReached",
+			"used inodes (%d%%) exceeds the configured threshold (%d%%)",
+			usedInodes,
 			threshold,
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name, "inodes").Inc()
