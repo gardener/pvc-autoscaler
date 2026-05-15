@@ -288,7 +288,6 @@ func (r *Runner) reconcilePVCA(
 		return
 	}
 
-	volInfo := metricsData[pvcObjKey]
 	// Get a fresh copy of the pvc object.
 	if err := r.client.Get(ctx, pvcObjKey, pvc); err != nil {
 		logger.Info("failed to get persistentvolumeclaim", "reason", err.Error())
@@ -313,7 +312,7 @@ func (r *Runner) reconcilePVCA(
 		return
 	}
 
-	ok, scalingReason, err := r.shouldReconcilePVC(ctx, pvca, pvc, policy, volInfo)
+	volumeRecommendation, err := r.updateVolumeRecommendationForPVC(ctx, pvca, pvc, metricsData[pvcObjKey])
 	if err != nil {
 		logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 		metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
@@ -330,20 +329,6 @@ func (r *Runner) reconcilePVCA(
 		return
 	}
 
-	inProgress, err := r.isResizeInProgress(ctx, pvca, pvc, scalingReason)
-	if err != nil {
-		logger.Info("failed to determine whether persistentvolumeclaim is being resized", "reason", err.Error())
-		return
-	}
-
-	if ok && !inProgress {
-		if err := r.resizePVC(ctx, pvca, pvc, policy, scalingReason); err != nil {
-			logger.Error(err, "failed to resize pvc")
-		}
-	} else if err := pvca.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
-		logger.Info("failed to remove status condition", "reason", err.Error())
-	}
-
 	condition := metav1.Condition{
 		Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
 		Status:  metav1.ConditionTrue,
@@ -353,42 +338,68 @@ func (r *Runner) reconcilePVCA(
 	if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
 		logger.Info("failed to update status condition", "reason", err.Error())
 	}
+
+	shouldResize, scalingReason := r.shouldResizePVC(ctx, pvca, pvc, policy, volumeRecommendation)
+
+	inProgress, err := r.isResizeInProgress(ctx, pvca, pvc, scalingReason)
+	if err != nil {
+		logger.Info("failed to determine whether persistentvolumeclaim is being resized", "reason", err.Error())
+		return
+	}
+
+	if shouldResize && !inProgress {
+		if err := r.resizePVC(ctx, pvca, pvc, policy, scalingReason, volumeRecommendation); err != nil {
+			logger.Error(err, "failed to resize pvc")
+		}
+	} else if err := pvca.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
+		logger.Info("failed to remove status condition", "reason", err.Error())
+	}
 }
 
-// updatePVCAStatus updates the status of the
+// updateVolumeRecommendations updates the status of the
 // [v1alpha1.PersistentVolumeClaimAutoscaler] with the latest observed
 // information about the target [corev1.PersistentVolumeClaim].
-func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentVolumeClaimAutoscaler, volInfo *metricssource.VolumeInfo) error {
+func (r *Runner) updateVolumeRecommendationForPVC(ctx context.Context, obj *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, volInfo *metricssource.VolumeInfo) (v1alpha1.VolumeRecommendation, error) {
 	patch := client.MergeFrom(obj.DeepCopy())
 	now := time.Now()
 	obj.Status.LastCheck = metav1.NewTime(now)
 	obj.Status.NextCheck = metav1.NewTime(now.Add(r.interval))
 
-	// Start with existing recommendation to preserve fields set during resize,
-	// or create a new one if none exists
-	var volumeRecommendation v1alpha1.VolumeRecommendation
-	if len(obj.Status.VolumeRecommendations) > 0 {
-		volumeRecommendation = obj.Status.VolumeRecommendations[0]
-	}
-	volumeRecommendation.Name = obj.Spec.TargetRef.Name
+	volumeRecommendation := getOrCreateVolumeRecommendationForPVC(obj, pvc.Name)
 
-	if volInfo != nil {
-		usedSpace, err := volInfo.UsedSpacePercentage()
-		if err != nil {
-			return fmt.Errorf("failed to get used space percentage: %w", err)
-		}
-		volumeRecommendation.Current.UsedSpacePercent = &usedSpace
-
-		usedInodes, err := volInfo.UsedInodesPercentage()
-		if err != nil {
-			return fmt.Errorf("failed to get used inodes percentage: %w", err)
-		}
-		volumeRecommendation.Current.UsedInodesPercent = &usedInodes
+	// No metrics found, nothing to do for now
+	if volInfo == nil {
+		return v1alpha1.VolumeRecommendation{}, common.ErrNoMetrics
 	}
 
-	obj.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{volumeRecommendation}
+	usedSpace, err := volInfo.UsedSpacePercentage()
+	if err != nil {
+		return v1alpha1.VolumeRecommendation{}, fmt.Errorf("failed to get used space percentage: %w", err)
+	}
+	volumeRecommendation.Current.UsedSpacePercent = &usedSpace
 
-	return r.client.Status().Patch(ctx, obj, patch)
+	usedInodes, err := volInfo.UsedInodesPercentage()
+	if err != nil {
+		return v1alpha1.VolumeRecommendation{}, fmt.Errorf("failed to get used inodes percentage: %w", err)
+	}
+	volumeRecommendation.Current.UsedInodesPercent = &usedInodes
+
+	currStatusSize := pvc.Status.Capacity.Storage()
+
+	// Detect whether the metrics source is reporting stale data. Stale
+	// metrics data would be when the volume info metrics reported by the
+	// metrics source deviate from the current PVC size indicated by
+	// `.status.capacity.storage'
+	if statusSize, ok := currStatusSize.AsInt64(); ok {
+		delta := math.Abs(float64(statusSize) - float64(volInfo.CapacityBytes))
+		tolerance := math.Max(common.MaxCapacityDeviationRatio*float64(statusSize), float64(common.ScalingResolutionBytes)/2)
+		if delta > tolerance {
+			return v1alpha1.VolumeRecommendation{}, fmt.Errorf("stale metrics data detected: pvc size=%d bytes, metrics size=%d bytes: %w", statusSize, volInfo.CapacityBytes, common.ErrStaleMetrics)
+		}
+	}
+
+	setVolumeRecommendationForPVC(obj, pvc.Name, volumeRecommendation)
+	return volumeRecommendation, r.client.Status().Patch(ctx, obj, patch)
 }
 
 // volumePolicyForPVC returns the volume policy from the given
@@ -398,6 +409,33 @@ func (r *Runner) updatePVCAStatus(ctx context.Context, obj *v1alpha1.PersistentV
 // policy to the specific PVC.
 func volumePolicyForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, _ *corev1.PersistentVolumeClaim) v1alpha1.VolumePolicy {
 	return pvca.Spec.VolumePolicies[0]
+}
+
+// getOrCreateVolumeRecommendationForPVC returns the VolumeRecommendation for
+// the given PVC name. If no recommendation exists yet, a new one is created and returned.
+func getOrCreateVolumeRecommendationForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvcName string) v1alpha1.VolumeRecommendation {
+	for i := range pvca.Status.VolumeRecommendations {
+		if pvca.Status.VolumeRecommendations[i].Name == pvcName {
+			return pvca.Status.VolumeRecommendations[i]
+		}
+	}
+
+	return v1alpha1.VolumeRecommendation{
+		Name: pvcName,
+	}
+}
+
+// setVolumeRecommendationForPVC sets the volumeRecommendation for the PVC in the PVCA.
+// If it did not exist before, it is appended to the list of volume recommendations
+func setVolumeRecommendationForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvcName string, volumeRecommendation v1alpha1.VolumeRecommendation) {
+	for i := range pvca.Status.VolumeRecommendations {
+		if pvca.Status.VolumeRecommendations[i].Name == pvcName {
+			pvca.Status.VolumeRecommendations[i] = volumeRecommendation
+			return
+		}
+	}
+
+	pvca.Status.VolumeRecommendations = append(pvca.Status.VolumeRecommendations, volumeRecommendation)
 }
 
 // validatePVC checks whether the [corev1.PersistentVolumeClaim] is valid for
@@ -441,84 +479,49 @@ func (r *Runner) validatePVC(ctx context.Context, pvc *corev1.PersistentVolumeCl
 	return nil
 }
 
-// shouldReconcilePVC is a predicate which checks whether the
+// shouldResizePVC is a predicate which checks whether the
 // [corev1.PersistentVolumeClaim] object targeted by
 // [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
 // reconciliation. When it returns true, it also returns the scaling reason.
-func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volInfo *metricssource.VolumeInfo) (bool, string, error) {
-	if err := r.updatePVCAStatus(ctx, pvca, volInfo); err != nil {
-		return false, "", err
-	}
-
-	// No metrics found, nothing to do for now
-	if volInfo == nil {
-		return false, "", common.ErrNoMetrics
-	}
-
-	currStatusSize := pvc.Status.Capacity.Storage()
-
-	// Detect whether the metrics source is reporting stale data. Stale
-	// metrics data would be when the volume info metrics reported by the
-	// metrics source deviate from the current PVC size indicated by
-	// `.status.capacity.storage'
-	if statusSize, ok := currStatusSize.AsInt64(); ok {
-		delta := math.Abs(float64(statusSize) - float64(volInfo.CapacityBytes))
-		tolerance := math.Max(common.MaxCapacityDeviationRatio*float64(statusSize), float64(common.ScalingResolutionBytes)/2)
-		if delta > tolerance {
-			return false, "", fmt.Errorf("stale metrics data detected: pvc size=%d bytes, metrics size=%d bytes: %w", statusSize, volInfo.CapacityBytes, common.ErrStaleMetrics)
-		}
-	}
-
-	// Getting an error from UsedSpacePercentage() means that the
-	// capacity for the volume is zero, which in turn means that we
-	// didn't get any metrics for it.
-	usedSpace, err := volInfo.UsedSpacePercentage()
-	if err != nil {
-		return false, "", common.ErrNoMetrics
-	}
-
-	// Even, if we don't have inode metrics we still want to proceed here.
-	usedInodes, err := volInfo.UsedInodesPercentage()
-	if err != nil {
-		return false, "", common.ErrNoMetrics
-	}
-
-	// Get threshold from volume policy
-	// Currently only one policy is supported and is enforced by the CRD schema
-	threshold := *policy.ScaleUp.UtilizationThresholdPercent
+func (r *Runner) shouldResizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) (bool, string) {
+	var (
+		threshold         = *policy.ScaleUp.UtilizationThresholdPercent
+		usedSpacePercent  = ptr.Deref(volumeRecommendation.Current.UsedSpacePercent, 0)
+		usedInodesPercent = ptr.Deref(volumeRecommendation.Current.UsedInodesPercent, 0)
+	)
 
 	switch {
 	// Used space reached threshold
-	case usedSpace > threshold:
+	case usedSpacePercent > threshold:
 		r.eventRecorder.Eventf(
 			pvc,
 			corev1.EventTypeWarning,
 			"UsedSpaceThresholdReached",
 			"used space (%d%%) exceeds the configured threshold (%d%%)",
-			usedSpace,
+			usedSpacePercent,
 			threshold,
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name, "space").Inc()
 
-		return true, "passing storage threshold", nil
+		return true, "passing storage threshold"
 
 	// Used inodes reached threshold
-	case volInfo.CapacityInodes > 0.0 && (usedInodes > threshold):
+	case usedInodesPercent > threshold:
 		r.eventRecorder.Eventf(
 			pvc,
 			corev1.EventTypeWarning,
 			"UsedInodesThresholdReached",
 			"used inodes (%d%%) exceeds the configured threshold (%d%%)",
-			usedInodes,
+			usedInodesPercent,
 			threshold,
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name, "inodes").Inc()
 
-		return true, "passing inodes threshold", nil
+		return true, "passing inodes threshold"
 
 	// No need to reconcile the PVC for now
 	default:
-		return false, "", nil
+		return false, ""
 	}
 }
 
@@ -566,8 +569,9 @@ func (r *Runner) isResizeInProgress(ctx context.Context, pvca *v1alpha1.Persiste
 
 	// If previously recorded size is equal to the current status it means
 	// we are still waiting for the resize to complete
-	if pvca.Status.VolumeRecommendations[0].Current.Size != nil &&
-		pvca.Status.VolumeRecommendations[0].Current.Size.Equal(*currStatusSize) {
+	volumeRecommendation := getOrCreateVolumeRecommendationForPVC(pvca, pvc.Name)
+	if volumeRecommendation.Current.Size != nil &&
+		volumeRecommendation.Current.Size.Equal(*currStatusSize) {
 		logger.Info("persistent volume claim is still being resized")
 		condition := metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
@@ -584,7 +588,7 @@ func (r *Runner) isResizeInProgress(ctx context.Context, pvca *v1alpha1.Persiste
 
 // resizePVC performs the actual resize of the PVC targeted by the given
 // [v1alpha1.PersistentVolumeClaimAutoscaler].
-func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, scalingReason string) error {
+func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation) error {
 	logger := log.FromContext(ctx).WithValues("pvc", pvc.Name)
 	currSpecSize := pvc.Spec.Resources.Requests.Storage()
 
@@ -629,7 +633,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	if policy.ScaleUp.CooldownDuration != nil {
-		lastResizeTime := pvca.Status.VolumeRecommendations[0].LastResizeTime
+		lastResizeTime := volumeRecommendation.LastResizeTime
 		if lastResizeTime != nil {
 			elapsed := time.Since(lastResizeTime.Time)
 			cooldown := policy.ScaleUp.CooldownDuration.Duration
@@ -668,9 +672,11 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-	pvca.Status.VolumeRecommendations[0].Current.Size = pvc.Status.Capacity.Storage()
-	pvca.Status.VolumeRecommendations[0].Target.Size = targetSize
-	pvca.Status.VolumeRecommendations[0].LastResizeTime = ptr.To(metav1.Now())
+	volumeRecommendation.Current.Size = pvc.Status.Capacity.Storage()
+	volumeRecommendation.Target.Size = targetSize
+	volumeRecommendation.LastResizeTime = ptr.To(metav1.Now())
+	setVolumeRecommendationForPVC(pvca, pvc.Name, volumeRecommendation)
+
 	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
 		return err
 	}

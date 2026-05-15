@@ -172,27 +172,84 @@ var _ = Describe("Periodic Runner", func() {
 			})
 		})
 
-		Describe("#updatePVCAStatus", func() {
-			It("should update the pvca with unknown values", func() {
-				Expect(runner.updatePVCAStatus(parentCtx, pvca, nil)).To(Succeed())
-				Expect(pvca.Status.LastCheck).NotTo(Equal(metav1.Time{}))
-				Expect(pvca.Status.NextCheck).NotTo(Equal(metav1.Time{}))
-				Expect(pvca.Status.VolumeRecommendations).To(ConsistOf(v1alpha1.VolumeRecommendation{
+		Describe("#updateVolumeRecommendationForPVC", func() {
+			It("should return ErrNoMetrics when volInfo is nil", func() {
+				volumeRecommendation, err := runner.updateVolumeRecommendationForPVC(parentCtx, pvca, pvc, nil)
+				Expect(volumeRecommendation).To(Equal(v1alpha1.VolumeRecommendation{}))
+				Expect(err).To(MatchError(common.ErrNoMetrics))
+			})
+
+			It("should return ErrStaleMetrics when metrics capacity deviates by more than 0.5Gi (small PVC)", func() {
+				volInfo := &metricssource.VolumeInfo{
+					AvailableBytes:  9 * 1024 * 1024,
+					CapacityBytes:   200 * 1024 * 1024, // delta ~824MiB > 0.5Gi tolerance
+					AvailableInodes: 1000,
+					CapacityInodes:  1000,
+				}
+
+				volumeRecommendation, err := runner.updateVolumeRecommendationForPVC(parentCtx, pvca, pvc, volInfo)
+				Expect(volumeRecommendation).To(Equal(v1alpha1.VolumeRecommendation{}))
+				Expect(err).To(MatchError(common.ErrStaleMetrics))
+			})
+
+			It("should apply 2% tolerance for stale metrics detection (large PVC)", func() {
+				By("Patching PVC to 100Gi and PVCA maxCapacity to 200Gi")
+				specPatch := client.MergeFrom(pvc.DeepCopy())
+				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("100Gi")
+				Expect(k8sClient.Patch(parentCtx, pvc, specPatch)).To(Succeed())
+
+				statusPatch := client.MergeFrom(pvc.DeepCopy())
+				pvc.Status.Capacity[corev1.ResourceStorage] = resource.MustParse("100Gi")
+				Expect(k8sClient.Status().Patch(parentCtx, pvc, statusPatch)).To(Succeed())
+
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("200Gi")
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+				By("Calling updateVolumeRecommendationForPVC with metrics deviating by 3Gi")
+				volInfo := &metricssource.VolumeInfo{
+					AvailableBytes:  9 * 1024 * 1024,
+					CapacityBytes:   97 * 1024 * 1024 * 1024, // delta 3Gi > 2% tolerance
+					AvailableInodes: 1000,
+					CapacityInodes:  1000,
+				}
+				volumeRecommendation, err := runner.updateVolumeRecommendationForPVC(parentCtx, pvca, pvc, volInfo)
+				Expect(volumeRecommendation).To(Equal(v1alpha1.VolumeRecommendation{}))
+				Expect(err).To(MatchError(common.ErrStaleMetrics))
+
+				By("Calling updateVolumeRecommendationForPVC with metrics deviating by 1Gi")
+				volInfo = &metricssource.VolumeInfo{
+					AvailableBytes:  9 * 1024 * 1024,
+					CapacityBytes:   99 * 1024 * 1024 * 1024, // delta 1Gi < 2% tolerance
+					AvailableInodes: 1000,
+					CapacityInodes:  1000,
+				}
+				usedSpace, _ := volInfo.UsedSpacePercentage()
+				usedInodes, _ := volInfo.UsedInodesPercentage()
+
+				volumeRecommendation, err = runner.updateVolumeRecommendationForPVC(parentCtx, pvca, pvc, volInfo)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(volumeRecommendation).To(Equal(v1alpha1.VolumeRecommendation{
 					Name: pvc.Name,
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedSpacePercent:  ptr.To(usedSpace),
+						UsedInodesPercent: ptr.To(usedInodes),
+					},
 				}))
 			})
 
 			It("should update the pvca with valid percentage values", func() {
 				volInfo := &metricssource.VolumeInfo{
-					AvailableBytes:  1234,
-					CapacityBytes:   123450,
-					CapacityInodes:  2000,
-					AvailableInodes: 12345,
+					AvailableBytes:  9 * 1024 * 1024,
+					CapacityBytes:   1024 * 1024 * 1024,
+					CapacityInodes:  1000,
+					AvailableInodes: 1000,
 				}
 				usedSpace, _ := volInfo.UsedSpacePercentage()
 				usedInodes, _ := volInfo.UsedInodesPercentage()
 
-				Expect(runner.updatePVCAStatus(parentCtx, pvca, volInfo)).To(Succeed())
+				_, err := runner.updateVolumeRecommendationForPVC(parentCtx, pvca, pvc, volInfo)
+				Expect(err).NotTo(HaveOccurred())
 				Expect(pvca.Status.LastCheck).NotTo(Equal(metav1.Time{}))
 				Expect(pvca.Status.NextCheck).NotTo(Equal(metav1.Time{}))
 				Expect(pvca.Status.VolumeRecommendations).To(ConsistOf(v1alpha1.VolumeRecommendation{
@@ -352,89 +409,19 @@ var _ = Describe("Periodic Runner", func() {
 			})
 		})
 
-		Describe("#shouldReconcilePVC", func() {
-			DescribeTable("error scenarios",
-				func(targetPVCName string, volInfo *metricssource.VolumeInfo, expectedErr error) {
-					if targetPVCName != "" {
-						By("Patching shared pvca to target " + targetPVCName)
-						patch := client.MergeFrom(pvca.DeepCopy())
-						pvca.Spec.TargetRef.Name = targetPVCName
-						Expect(k8sClient.Patch(parentCtx, pvca, patch)).To(Succeed())
-					}
-
-					ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
-					Expect(ok).To(BeFalse())
-					if expectedErr != nil {
-						Expect(err).To(MatchError(expectedErr))
-					} else {
-						Expect(err).To(HaveOccurred())
-					}
-				},
-				Entry("should return ErrNoMetrics when volInfo is nil",
-					"",
-					nil,
-					common.ErrNoMetrics,
-				),
-				Entry("should return ErrStaleMetrics when metrics capacity deviates by more than 0.5Gi (small PVC)",
-					"",
-					&metricssource.VolumeInfo{
-						AvailableBytes:  9 * 1024 * 1024,
-						CapacityBytes:   200 * 1024 * 1024, // delta ~824MiB > 0.5Gi tolerance
-						AvailableInodes: 1000,
-						CapacityInodes:  1000,
-					},
-					common.ErrStaleMetrics,
-				),
-			)
-
-			It("should apply 2% tolerance for stale metrics detection (large PVC)", func() {
-				By("Patching PVC to 100Gi and PVCA maxCapacity to 200Gi")
-				specPatch := client.MergeFrom(pvc.DeepCopy())
-				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("100Gi")
-				Expect(k8sClient.Patch(parentCtx, pvc, specPatch)).To(Succeed())
-
-				statusPatch := client.MergeFrom(pvc.DeepCopy())
-				pvc.Status.Capacity[corev1.ResourceStorage] = resource.MustParse("100Gi")
-				Expect(k8sClient.Status().Patch(parentCtx, pvc, statusPatch)).To(Succeed())
-
-				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-				pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("200Gi")
-				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
-
-				By("Calling shouldReconcilePVC with metrics deviating by 3Gi")
-				volInfo := &metricssource.VolumeInfo{
-					AvailableBytes:  9 * 1024 * 1024,
-					CapacityBytes:   97 * 1024 * 1024 * 1024, // delta 3Gi > 2% tolerance
-					AvailableInodes: 1000,
-					CapacityInodes:  1000,
-				}
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
-				Expect(ok).To(BeFalse())
-				Expect(err).To(MatchError(common.ErrStaleMetrics))
-
-				By("Calling shouldReconcilePVC with metrics deviating by 1Gi")
-				volInfo = &metricssource.VolumeInfo{
-					AvailableBytes:  9 * 1024 * 1024,
-					CapacityBytes:   99 * 1024 * 1024 * 1024, // delta 1Gi < 2% tolerance
-					AvailableInodes: 1000,
-					CapacityInodes:  1000,
-				}
-				ok, _, err = runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(ok).To(BeTrue())
-			})
-
+		Describe("#shouldResizePVC", func() {
 			It("should not reconcile when threshold is not reached", func() {
-				volInfo := &metricssource.VolumeInfo{
-					AvailableBytes:  1024 * 1024 * 1024,
-					CapacityBytes:   1024 * 1024 * 1024,
-					AvailableInodes: 10000,
-					CapacityInodes:  10000,
+				volumeRecommendation := v1alpha1.VolumeRecommendation{
+					Name: pvc.Name,
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedSpacePercent:  ptr.To(50),
+						UsedInodesPercent: ptr.To(50),
+					},
 				}
 
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
+				ok, reason := runner.shouldResizePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volumeRecommendation)
 				Expect(ok).To(BeFalse())
-				Expect(err).ToNot(HaveOccurred())
+				Expect(reason).To(BeEmpty())
 			})
 
 			Context("Should reconcile when thresholds are reached", func() {
@@ -453,17 +440,17 @@ var _ = Describe("Periodic Runner", func() {
 				})
 
 				It("should reconcile - used space threshold reached", func() {
-					volInfo := &metricssource.VolumeInfo{
-						AvailableBytes:  90 * 1024 * 1024,
-						CapacityBytes:   1024 * 1024 * 1024,
-						AvailableInodes: 1000,
-						CapacityInodes:  1000,
+					volumeRecommendation := v1alpha1.VolumeRecommendation{
+						Name: pvc.Name,
+						Current: v1alpha1.CurrentVolumeStatus{
+							UsedSpacePercent:  ptr.To(92),
+							UsedInodesPercent: ptr.To(0),
+						},
 					}
 
-					ok, reason, err := testRunner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
+					ok, reason := testRunner.shouldResizePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volumeRecommendation)
 					Expect(ok).To(BeTrue())
 					Expect(reason).To(Equal("passing storage threshold"))
-					Expect(err).ToNot(HaveOccurred())
 
 					event := <-eventRecorder.Events
 					wantEvent := `Warning UsedSpaceThresholdReached used space (92%) exceeds the configured threshold (80%)`
@@ -471,17 +458,17 @@ var _ = Describe("Periodic Runner", func() {
 				})
 
 				It("should reconcile when used inodes threshold reached", func() {
-					volInfo := &metricssource.VolumeInfo{
-						AvailableBytes:  1024 * 1024 * 1024,
-						CapacityBytes:   1024 * 1024 * 1024,
-						AvailableInodes: 90,
-						CapacityInodes:  1000,
+					volumeRecommendation := v1alpha1.VolumeRecommendation{
+						Name: pvc.Name,
+						Current: v1alpha1.CurrentVolumeStatus{
+							UsedSpacePercent:  ptr.To(0),
+							UsedInodesPercent: ptr.To(91),
+						},
 					}
 
-					ok, reason, err := testRunner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
+					ok, reason := testRunner.shouldResizePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volumeRecommendation)
 					Expect(ok).To(BeTrue())
 					Expect(reason).To(Equal("passing inodes threshold"))
-					Expect(err).ToNot(HaveOccurred())
 
 					event := <-eventRecorder.Events
 					wantEvent := `Warning UsedInodesThresholdReached used inodes (91%) exceeds the configured threshold (80%)`
@@ -827,7 +814,7 @@ var _ = Describe("Periodic Runner", func() {
 					logger := zap.New(zap.WriteTo(w))
 					newCtx := log.IntoContext(parentCtx, logger)
 
-					Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), reason)).To(Succeed())
+					Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), reason, getOrCreateVolumeRecommendationForPVC(pvca, pvc.Name))).To(Succeed())
 					Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
 
 					By("Verifying PVC was resized")
@@ -880,7 +867,7 @@ var _ = Describe("Periodic Runner", func() {
 				newCtx := log.IntoContext(parentCtx, logger)
 
 				By("Performing first resize")
-				Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold")).To(Succeed())
+				Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold", getOrCreateVolumeRecommendationForPVC(pvca, pvc.Name))).To(Succeed())
 
 				wantLog := `"resizing persistent volume claim","pvc":"test-pvc","from":"1Gi","to":"2Gi"}`
 				Expect(buf.String()).To(ContainSubstring(wantLog))
@@ -899,7 +886,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
 
 				By("Performing second resize")
-				Expect(runner.resizePVC(newCtx, pvca, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold")).To(Succeed())
+				Expect(runner.resizePVC(newCtx, pvca, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold", getOrCreateVolumeRecommendationForPVC(pvca, resizedPvc.Name))).To(Succeed())
 
 				wantLog = `"resizing persistent volume claim","pvc":"test-pvc","from":"2Gi","to":"3Gi"}`
 				Expect(buf.String()).To(ContainSubstring(wantLog))
@@ -915,7 +902,7 @@ var _ = Describe("Periodic Runner", func() {
 
 				By("Expecting third attempt to fail with max capacity reached")
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
-				Expect(runner.resizePVC(newCtx, pvca, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold")).To(Succeed())
+				Expect(runner.resizePVC(newCtx, pvca, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold", getOrCreateVolumeRecommendationForPVC(pvca, resizedPvc.Name))).To(Succeed())
 				Expect(buf.String()).To(ContainSubstring("max capacity reached"))
 
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
@@ -952,7 +939,7 @@ var _ = Describe("Periodic Runner", func() {
 					newCtx := log.IntoContext(parentCtx, logger)
 
 					beforeResize := time.Now()
-					Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold")).To(Succeed())
+					Expect(runner.resizePVC(newCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold", getOrCreateVolumeRecommendationForPVC(pvca, pvc.Name))).To(Succeed())
 					Expect(buf.String()).To(ContainSubstring(expectedLog))
 
 					var pvcObj corev1.PersistentVolumeClaim
