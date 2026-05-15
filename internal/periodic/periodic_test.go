@@ -716,8 +716,8 @@ var _ = Describe("Periodic Runner", func() {
 			})
 		})
 
-		Describe("#resizePVC", func() {
-			DescribeTable("should handle resize based on PVC conditions and threshold type",
+		Describe("#isResizeInProgress", func() {
+			DescribeTable("should detect whether resize is in progress based on PVC conditions",
 				func(
 					pvcConditionType *corev1.PersistentVolumeClaimConditionType,
 					recommendedSize string,
@@ -726,7 +726,7 @@ var _ = Describe("Periodic Runner", func() {
 					reason string,
 					expectedLogSubstring string,
 					expectedMessageRegex string,
-					expectResize bool,
+					expectInProgress bool,
 				) {
 					if pvcConditionType != nil {
 						By("Patching shared pvc with condition")
@@ -756,15 +756,113 @@ var _ = Describe("Periodic Runner", func() {
 					logger := zap.New(zap.WriteTo(w))
 					newCtx := log.IntoContext(parentCtx, logger)
 
+					inProgress, err := runner.isResizeInProgress(newCtx, pvca, pvc, reason)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(inProgress).To(Equal(expectInProgress))
+
+					if expectInProgress {
+						if expectedLogSubstring != "" {
+							Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
+						}
+
+						Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
+						Expect(pvca.Status.Conditions).To(ContainElement(And(
+							HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
+							HaveField("Status", metav1.ConditionTrue),
+							HaveField("Reason", ReasonReconcile),
+							HaveField("Message", MatchRegexp(expectedMessageRegex)),
+						)))
+					}
+				},
+				Entry("should detect resize has been started",
+					ptr.To(corev1.PersistentVolumeClaimResizing),
+					"1Gi",
+					ptr.To(95),
+					nil,
+					"passing storage threshold",
+					"resize has been started",
+					`storage threshold.*resize has been started`,
+					true,
+				),
+				Entry("should detect filesystem resize is pending",
+					ptr.To(corev1.PersistentVolumeClaimFileSystemResizePending),
+					"1Gi",
+					nil,
+					ptr.To(95),
+					"passing inodes threshold",
+					"filesystem resize is pending",
+					`passing inodes threshold.*file system resize is pending`,
+					true,
+				),
+				Entry("should detect volume is being modified",
+					ptr.To(corev1.PersistentVolumeClaimVolumeModifyingVolume),
+					"1Gi",
+					ptr.To(95),
+					nil,
+					"passing storage threshold",
+					"volume is being modified",
+					`storage threshold.*volume is being modified`,
+					true,
+				),
+				Entry("should detect pvc is still being resized",
+					nil,
+					"1Gi",
+					nil,
+					ptr.To(95),
+					"passing inodes threshold",
+					"persistent volume claim is still being resized",
+					`passing inodes threshold.*persistent volume claim is still being resized`,
+					true,
+				),
+				Entry("should return false when no resize is in progress",
+					nil,
+					"2Gi",
+					ptr.To(95),
+					nil,
+					"passing storage threshold",
+					"",
+					"",
+					false,
+				),
+			)
+		})
+
+		Describe("#resizePVC", func() {
+			DescribeTable("should resize based on threshold type",
+				func(
+					recommendedSize string,
+					usedSpacePercent *int,
+					usedInodesPercent *int,
+					reason string,
+					expectedLogSubstring string,
+					expectedMessageRegex string,
+				) {
+					By("Patching shared pvca with volume recommendation")
+					pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+					pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{
+						{
+							Name: "test-pvc",
+							Current: v1alpha1.CurrentVolumeStatus{
+								Size:              ptr.To(resource.MustParse(recommendedSize)),
+								UsedSpacePercent:  usedSpacePercent,
+								UsedInodesPercent: usedInodesPercent,
+							},
+						},
+					}
+					Expect(k8sClient.Status().Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+					var buf strings.Builder
+					w := io.MultiWriter(GinkgoWriter, &buf)
+					logger := zap.New(zap.WriteTo(w))
+					newCtx := log.IntoContext(parentCtx, logger)
+
 					Expect(runner.resizePVC(newCtx, pvca, pvc, reason)).To(Succeed())
 					Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
 
-					if expectResize {
-						By("Verifying PVC was resized")
-						var resizedPvc corev1.PersistentVolumeClaim
-						Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
-						Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(recommendedSize)))
-					}
+					By("Verifying PVC was resized")
+					var resizedPvc corev1.PersistentVolumeClaim
+					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
+					Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(recommendedSize)))
 
 					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)).To(Succeed())
 					Expect(pvca.Status.Conditions).To(ContainElement(And(
@@ -774,65 +872,21 @@ var _ = Describe("Periodic Runner", func() {
 						HaveField("Message", MatchRegexp(expectedMessageRegex)),
 					)))
 				},
-				Entry("should skip resize if pvc resize has been started",
-					ptr.To(corev1.PersistentVolumeClaimResizing),
-					"1Gi",
-					ptr.To(95),
-					nil,
-					"passing storage threshold",
-					"resize has been started",
-					`storage threshold.*resize has been started`,
-					false,
-				),
-				Entry("should skip resize if filesystem resize is pending",
-					ptr.To(corev1.PersistentVolumeClaimFileSystemResizePending),
-					"1Gi",
-					nil,
-					ptr.To(95),
-					"passing inodes threshold",
-					"filesystem resize is pending",
-					`passing inodes threshold.*file system resize is pending`,
-					false,
-				),
-				Entry("should skip resize if volume is being modified",
-					ptr.To(corev1.PersistentVolumeClaimVolumeModifyingVolume),
-					"1Gi",
-					ptr.To(95),
-					nil,
-					"passing storage threshold",
-					"volume is being modified",
-					`storage threshold.*volume is being modified`,
-					false,
-				),
-				Entry("should skip resize if pvc is still being resized",
-					nil,
-					"1Gi",
-					nil,
-					ptr.To(95),
-					"passing inodes threshold",
-					"persistent volume claim is still being resized",
-					`passing inodes threshold.*persistent volume claim is still being resized`,
-					false,
-				),
 				Entry("should successfully resize the pvc based on storage threshold",
-					nil,
 					"2Gi",
 					ptr.To(95),
 					nil,
 					"passing storage threshold",
 					"resizing persistent volume claim",
 					`resizing from 1Gi to 2Gi.*passing storage threshold`,
-					true,
 				),
 				Entry("should successfully resize the pvc based on inodes threshold",
-					nil,
 					"2Gi",
 					nil,
 					ptr.To(95),
 					"passing inodes threshold",
 					"resizing persistent volume claim",
 					`resizing from 1Gi to 2Gi.*passing inodes threshold`,
-					true,
 				),
 			)
 

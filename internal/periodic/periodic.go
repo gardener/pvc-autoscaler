@@ -313,9 +313,16 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		return
+
 	}
 
-	if ok {
+	inProgress, err := r.isResizeInProgress(ctx, pvca, pvc, scalingReason)
+	if err != nil {
+		logger.Info("failed to determine whether persistentvolumeclaim is being resized", "reason", err.Error())
+		return
+	}
+
+	if ok && !inProgress {
 		if err := r.resizePVC(ctx, pvca, pvc, scalingReason); err != nil {
 			logger.Error(err, "failed to resize pvc")
 		}
@@ -490,17 +497,12 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	}
 }
 
-// resizePVC performs the actual resize of the PVC targeted by the given
-// [v1alpha1.PersistentVolumeClaimAutoscaler].
-func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, scalingReason string) error {
+// isResizeInProgress checks whether the PVC is currently being resized.
+// Returns true if a resize operation is in progress.
+func (r *Runner) isResizeInProgress(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, scalingReason string) (bool, error) {
 	logger := log.FromContext(ctx).WithValues("pvc", pvc.Name)
-	currSpecSize := pvc.Spec.Resources.Requests.Storage()
 	currStatusSize := pvc.Status.Capacity.Storage()
 
-	// Currently only one policy is supported, since only one PVC can be targeted by a PVCA object
-	policy := pvca.Spec.VolumePolicies[0]
-
-	// Make sure that the PVC is not being modified at the moment.
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimResizing) {
 		logger.Info("resize has been started")
 		condition := metav1.Condition{
@@ -510,7 +512,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 			Message: fmt.Sprintf(" - %s: is being scaled due to %s, resize has been started", pvc.Name, scalingReason),
 		}
 
-		return pvca.SetCondition(ctx, r.client, condition)
+		return true, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending) {
@@ -522,7 +524,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 			Message: fmt.Sprintf(" - %s: is being scaled due to %s, file system resize is pending", pvc.Name, scalingReason),
 		}
 
-		return pvca.SetCondition(ctx, r.client, condition)
+		return true, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimVolumeModifyingVolume) {
@@ -534,7 +536,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 			Message: fmt.Sprintf(" - %s: is being scaled due to %s, volume is being modified", pvc.Name, scalingReason),
 		}
 
-		return pvca.SetCondition(ctx, r.client, condition)
+		return true, pvca.SetCondition(ctx, r.client, condition)
 	}
 
 	// If previously recorded size is equal to the current status it means
@@ -549,8 +551,20 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 			Message: fmt.Sprintf(" - %s: is being scaled due to %s, persistent volume claim is still being resized", pvc.Name, scalingReason),
 		}
 
-		return pvca.SetCondition(ctx, r.client, condition)
+		return true, pvca.SetCondition(ctx, r.client, condition)
 	}
+
+	return false, nil
+}
+
+// resizePVC performs the actual resize of the PVC targeted by the given
+// [v1alpha1.PersistentVolumeClaimAutoscaler].
+func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, scalingReason string) error {
+	logger := log.FromContext(ctx).WithValues("pvc", pvc.Name)
+	currSpecSize := pvc.Spec.Resources.Requests.Storage()
+
+	// Currently only one policy is supported, since only one PVC can be targeted by a PVCA object
+	policy := pvca.Spec.VolumePolicies[0]
 
 	// Calculate the new size
 	stepPercent := float64(*policy.ScaleUp.StepPercent)
@@ -632,7 +646,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-	pvca.Status.VolumeRecommendations[0].Current.Size = currStatusSize
+	pvca.Status.VolumeRecommendations[0].Current.Size = pvc.Status.Capacity.Storage()
 	pvca.Status.VolumeRecommendations[0].Target.Size = targetSize
 	pvca.Status.VolumeRecommendations[0].LastResizeTime = ptr.To(metav1.Now())
 	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
