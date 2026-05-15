@@ -205,6 +205,153 @@ var _ = Describe("Periodic Runner", func() {
 			})
 		})
 
+		Describe("#validatePVC", func() {
+			It("should return ErrStorageClassNotFound", func() {
+				By("Creating a PVC without a StorageClass")
+				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-without-storageclass", "1Gi", nil, nil)
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					By("Deleting PVC without a StorageClass")
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				By("Creating PVCA targeting the PVC without StorageClass")
+				targetRef := autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "v1",
+					Kind:       "PersistentVolumeClaim",
+					Name:       "pvc-without-storageclass",
+				}
+
+				pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+					parentCtx,
+					k8sClient,
+					"pvca-without-storageclass",
+					targetRef,
+					defaultVolumePolicies,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(pvca).NotTo(BeNil())
+				DeferCleanup(func() {
+					By("Deleting PVCA targeting the PVC without StorageClass")
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				err = runner.validatePVC(parentCtx, pvc, volumePolicyForPVC(pvca, pvc))
+				Expect(err).To(MatchError(ErrStorageClassNotFound))
+			})
+
+			It("should return ErrStorageClassDoesNotSupportExpansion", func() {
+				By("Creating a StorageClass that does not support volume expansion")
+				scName := "storageclass-without-expansion"
+				sc := &storagev1.StorageClass{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: scName,
+					},
+					Provisioner:          "no-provisioner",
+					VolumeBindingMode:    ptr.To(storagev1.VolumeBindingImmediate),
+					AllowVolumeExpansion: ptr.To(false),
+					ReclaimPolicy:        ptr.To(corev1.PersistentVolumeReclaimDelete),
+				}
+				Expect(k8sClient.Create(parentCtx, sc)).To(Succeed())
+				DeferCleanup(func() {
+					By("Deleting StorageClass that does not support volume expansion")
+					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, sc))).To(Succeed())
+				})
+
+				By("Creating a test PVC using the StorageClass")
+				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-sc-no-expansion", "1Gi", ptr.To(scName), nil)
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					By("Deleting the PVC with StorageClass")
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				By("Creating PVCA targeting the PVC with StorageClass")
+				targetRef := autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "v1",
+					Kind:       "PersistentVolumeClaim",
+					Name:       "pvc-sc-no-expansion",
+				}
+
+				pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+					parentCtx,
+					k8sClient,
+					"pvca-sc-no-expansion",
+					targetRef,
+					defaultVolumePolicies,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(pvca).NotTo(BeNil())
+				DeferCleanup(func() {
+					By("Deleting PVCA targeting the PVC with StorageClass")
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				err = runner.validatePVC(parentCtx, pvc, volumePolicyForPVC(pvca, pvc))
+				Expect(err).To(MatchError(ErrStorageClassDoesNotSupportExpansion))
+			})
+
+			It("should return ErrVolumeModeIsNotFilesystem", func() {
+				By("Creating PVC with block volume")
+				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-block-mode", "1Gi", ptr.To(testutils.StorageClassName), ptr.To(corev1.PersistentVolumeBlock))
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				By("Creating PVCA targeting the PVC with block volume")
+				targetRef := autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "v1",
+					Kind:       "PersistentVolumeClaim",
+					Name:       "pvc-block-mode",
+				}
+				pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
+					parentCtx,
+					k8sClient,
+					"pvca-block-mode",
+					targetRef,
+					defaultVolumePolicies,
+				)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(pvca).NotTo(BeNil())
+				DeferCleanup(func() {
+					By("Deleting the PVCA targeting the PVC with block volume")
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				err = runner.validatePVC(parentCtx, pvc, volumePolicyForPVC(pvca, pvc))
+				Expect(err).To(MatchError(ErrVolumeModeIsNotFilesystem))
+			})
+
+			It("should return ErrPVCNotBound when PVC is not bound", func() {
+				By("Patching test PVC to simulate lost claim")
+				patch := client.MergeFrom(pvc.DeepCopy())
+				pvc.Status.Phase = corev1.ClaimLost
+				Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
+
+				err := runner.validatePVC(parentCtx, pvc, volumePolicyForPVC(pvca, pvc))
+				Expect(err).To(MatchError(ErrPVCNotBound))
+			})
+		})
+
 		Describe("#shouldReconcilePVC", func() {
 			DescribeTable("error scenarios",
 				func(targetPVCName string, volInfo *metricssource.VolumeInfo, expectedErr error) {
@@ -277,188 +424,12 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(ok).To(BeTrue())
 			})
 
-			It("should return ErrStorageClassNotFound", func() {
-				By("Creating a PVC without a StorageClass")
-				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-without-storageclass", "1Gi", nil, nil)
-				Expect(err).NotTo(HaveOccurred())
-				DeferCleanup(func() {
-					By("Deleting PVC without a StorageClass")
-					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
-					Eventually(func() error {
-						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
-					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
-				})
-
-				By("Creating PVCA targeting the PVC without StorageClass")
-				targetRef := autoscalingv1.CrossVersionObjectReference{
-					APIVersion: "v1",
-					Kind:       "PersistentVolumeClaim",
-					Name:       "pvc-without-storageclass",
-				}
-
-				pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
-					parentCtx,
-					k8sClient,
-					"pvca-without-storageclass",
-					targetRef,
-					defaultVolumePolicies,
-				)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(pvca).NotTo(BeNil())
-				DeferCleanup(func() {
-					By("Deleting PVCA targeting the PVC without StorageClass")
-					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
-					Eventually(func() error {
-						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
-					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
-				})
-
-				volInfo := &metricssource.VolumeInfo{
-					CapacityBytes:   1073741824, // 1Gi
-					AvailableBytes:  536870912,  // 512Mi
-					CapacityInodes:  1000,
-					AvailableInodes: 500,
-				}
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
-				Expect(ok).To(BeFalse())
-				Expect(err).To(MatchError(ErrStorageClassNotFound))
-			})
-
-			It("should return ErrStorageClassDoesNotSupportExpansion", func() {
-				By("Creating a StorageClass that does not support volume expansion")
-				scName := "storageclass-without-expansion"
-				sc := &storagev1.StorageClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: scName,
-					},
-					Provisioner:          "no-provisioner",
-					VolumeBindingMode:    ptr.To(storagev1.VolumeBindingImmediate),
-					AllowVolumeExpansion: ptr.To(false),
-					ReclaimPolicy:        ptr.To(corev1.PersistentVolumeReclaimDelete),
-				}
-				Expect(k8sClient.Create(parentCtx, sc)).To(Succeed())
-				DeferCleanup(func() {
-					By("Deleting StorageClass that does not support volume expansion")
-					Expect(client.IgnoreNotFound(k8sClient.Delete(parentCtx, sc))).To(Succeed())
-				})
-
-				By("Creating a test PVC using the StorageClass")
-				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-sc-no-expansion", "1Gi", ptr.To(scName), nil)
-				Expect(err).NotTo(HaveOccurred())
-				DeferCleanup(func() {
-					By("Deleting the PVC with StorageClass")
-					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
-					Eventually(func() error {
-						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
-					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
-				})
-
-				By("Creating PVCA targeting the PVC with StorageClass")
-				targetRef := autoscalingv1.CrossVersionObjectReference{
-					APIVersion: "v1",
-					Kind:       "PersistentVolumeClaim",
-					Name:       "pvc-sc-no-expansion",
-				}
-
-				pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
-					parentCtx,
-					k8sClient,
-					"pvca-sc-no-expansion",
-					targetRef,
-					defaultVolumePolicies,
-				)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(pvca).NotTo(BeNil())
-				DeferCleanup(func() {
-					By("Deleting PVCA targeting the PVC with StorageClass")
-					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
-					Eventually(func() error {
-						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
-					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
-				})
-
-				volInfo := &metricssource.VolumeInfo{
-					CapacityBytes:   1073741824, // 1Gi
-					AvailableBytes:  536870912,  // 512Mi
-					CapacityInodes:  1000,
-					AvailableInodes: 500,
-				}
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
-				Expect(ok).To(BeFalse())
-				Expect(err).To(MatchError(ErrStorageClassDoesNotSupportExpansion))
-			})
-
-			It("should return ErrVolumeModeIsNotFilesystem", func() {
-				By("Creating PVC with block volume")
-				pvc, err := testutils.CreatePVC(parentCtx, k8sClient, "pvc-block-mode", "1Gi", ptr.To(testutils.StorageClassName), ptr.To(corev1.PersistentVolumeBlock))
-				Expect(err).NotTo(HaveOccurred())
-				DeferCleanup(func() {
-					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvc)).To(Succeed())
-					Eventually(func() error {
-						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), pvc)
-					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
-				})
-
-				By("Creating PVCA targeting the PVC with block volume")
-				targetRef := autoscalingv1.CrossVersionObjectReference{
-					APIVersion: "v1",
-					Kind:       "PersistentVolumeClaim",
-					Name:       "pvc-block-mode",
-				}
-				pvca, err := testutils.CreatePersistentVolumeClaimAutoscaler(
-					parentCtx,
-					k8sClient,
-					"pvca-block-mode",
-					targetRef,
-					defaultVolumePolicies,
-				)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(pvca).NotTo(BeNil())
-				DeferCleanup(func() {
-					By("Deleting the PVCA targeting the PVC with block volume")
-					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvca)).To(Succeed())
-					Eventually(func() error {
-						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), pvca)
-					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
-				})
-
-				By("Calling shouldReconcilePVC with sample volume info metrics")
-				volInfo := &metricssource.VolumeInfo{
-					AvailableBytes:  1000,
-					CapacityBytes:   1024 * 1024 * 1024,
-					AvailableInodes: 1000,
-					CapacityInodes:  1000,
-				}
-
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
-				Expect(ok).To(BeFalse())
-				Expect(err).To(MatchError(ErrVolumeModeIsNotFilesystem))
-			})
-
 			It("should not reconcile when threshold is not reached", func() {
 				volInfo := &metricssource.VolumeInfo{
 					AvailableBytes:  1024 * 1024 * 1024,
 					CapacityBytes:   1024 * 1024 * 1024,
 					AvailableInodes: 10000,
 					CapacityInodes:  10000,
-				}
-
-				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)
-				Expect(ok).To(BeFalse())
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("should not reconcile - lost pvc claim", func() {
-				By("Patching test PVC to simulate lost claim")
-				patch := client.MergeFrom(pvc.DeepCopy())
-				pvc.Status.Phase = corev1.ClaimLost
-				Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
-
-				volInfo := &metricssource.VolumeInfo{
-					AvailableBytes:  1000,
-					CapacityBytes:   1024 * 1024 * 1024,
-					AvailableInodes: 1000,
-					CapacityInodes:  1000,
 				}
 
 				ok, _, err := runner.shouldReconcilePVC(parentCtx, pvca, pvc, volumePolicyForPVC(pvca, pvc), volInfo)

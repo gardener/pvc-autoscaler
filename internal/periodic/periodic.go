@@ -60,6 +60,9 @@ var ErrNoClient = errors.New("no client provided")
 // configured without a [pvcfetcher.Fetcher].
 var ErrNoPVCFetcher = errors.New("no PersistentVolumeClaim fetcher provided")
 
+// ErrPVCNotBound is returned when the PVC is not in the Bound phase.
+var ErrPVCNotBound = errors.New("PersistentVolumeClaim is not bound")
+
 // Condition reasons for the RecommendationAvailable condition
 const (
 	// ReasonMetricsFetched indicates that metrics were successfully fetched and computed.
@@ -294,20 +297,13 @@ func (r *Runner) reconcilePVCA(
 
 	policy := volumePolicyForPVC(pvca, pvc)
 
-	ok, scalingReason, err := r.shouldReconcilePVC(ctx, pvca, pvc, policy, volInfo)
-	if err != nil {
+	if err := r.validatePVC(ctx, pvc, policy); err != nil {
 		logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 		metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
-		var conditionReason string
-		if errors.Is(err, common.ErrNoMetrics) {
-			conditionReason = ReasonMetricsFetchError
-		} else {
-			conditionReason = ReasonRecommendationError
-		}
 		condition := metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
 			Status:  metav1.ConditionFalse,
-			Reason:  conditionReason,
+			Reason:  ReasonRecommendationError,
 			Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
 		}
 		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
@@ -315,7 +311,23 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		return
+	}
 
+	ok, scalingReason, err := r.shouldReconcilePVC(ctx, pvca, pvc, policy, volInfo)
+	if err != nil {
+		logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
+		metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
+		condition := metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonMetricsFetchError,
+			Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
+		}
+		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
+			logger.Info("failed to update status condition", "reason", err.Error())
+		}
+
+		return
 	}
 
 	inProgress, err := r.isResizeInProgress(ctx, pvca, pvc, scalingReason)
@@ -388,6 +400,47 @@ func volumePolicyForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, _ *corev
 	return pvca.Spec.VolumePolicies[0]
 }
 
+// validatePVC checks whether the [corev1.PersistentVolumeClaim] is valid for
+// reconciliation based on its current state and the associated volume policy.
+func (r *Runner) validatePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy) error {
+	currStatusSize := pvc.Status.Capacity.Storage()
+	if currStatusSize.IsZero() {
+		return fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
+	}
+
+	if policy.MaxCapacity.Value() < currStatusSize.Value() {
+		return fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
+	}
+
+	// We need a StorageClass with expansion support
+	scName := ptr.Deref(pvc.Spec.StorageClassName, "")
+	if scName == "" {
+		return ErrStorageClassNotFound
+	}
+
+	var sc storagev1.StorageClass
+	scKey := types.NamespacedName{Name: scName}
+	if err := r.client.Get(ctx, scKey, &sc); err != nil {
+		return err
+	}
+
+	if !ptr.Deref(sc.AllowVolumeExpansion, false) {
+		return ErrStorageClassDoesNotSupportExpansion
+	}
+
+	// VolumeMode should be Filesystem
+	if pvc.Spec.VolumeMode != nil && *pvc.Spec.VolumeMode != corev1.PersistentVolumeFilesystem {
+		return ErrVolumeModeIsNotFilesystem
+	}
+
+	// The PVC should be bound
+	if pvc.Status.Phase != corev1.ClaimBound {
+		return ErrPVCNotBound
+	}
+
+	return nil
+}
+
 // shouldReconcilePVC is a predicate which checks whether the
 // [corev1.PersistentVolumeClaim] object targeted by
 // [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
@@ -402,31 +455,7 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 		return false, "", common.ErrNoMetrics
 	}
 
-	// Validate the PVC itself against the spec
 	currStatusSize := pvc.Status.Capacity.Storage()
-	if currStatusSize.IsZero() {
-		return false, "", fmt.Errorf(".status.capacity.storage is invalid: %s", currStatusSize.String())
-	}
-
-	if policy.MaxCapacity.Value() < currStatusSize.Value() {
-		return false, "", fmt.Errorf("max capacity (%s) cannot be less than current size (%s)", policy.MaxCapacity.String(), currStatusSize.String())
-	}
-
-	// We need a StorageClass with expansion support
-	scName := ptr.Deref(pvc.Spec.StorageClassName, "")
-	if scName == "" {
-		return false, "", ErrStorageClassNotFound
-	}
-
-	var sc storagev1.StorageClass
-	scKey := types.NamespacedName{Name: scName}
-	if err := r.client.Get(ctx, scKey, &sc); err != nil {
-		return false, "", err
-	}
-
-	if !ptr.Deref(sc.AllowVolumeExpansion, false) {
-		return false, "", ErrStorageClassDoesNotSupportExpansion
-	}
 
 	// Detect whether the metrics source is reporting stale data. Stale
 	// metrics data would be when the volume info metrics reported by the
@@ -457,19 +486,6 @@ func (r *Runner) shouldReconcilePVC(ctx context.Context, pvca *v1alpha1.Persiste
 	// Get threshold from volume policy
 	// Currently only one policy is supported and is enforced by the CRD schema
 	threshold := *policy.ScaleUp.UtilizationThresholdPercent
-
-	// VolumeMode should be Filesystem
-	if pvc.Spec.VolumeMode == nil {
-		return false, "", nil
-	}
-	if *pvc.Spec.VolumeMode != corev1.PersistentVolumeFilesystem {
-		return false, "", ErrVolumeModeIsNotFilesystem
-	}
-
-	// The PVC should be bound
-	if pvc.Status.Phase != corev1.ClaimBound {
-		return false, "", nil
-	}
 
 	switch {
 	// Used space reached threshold
