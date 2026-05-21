@@ -321,6 +321,7 @@ func (r *Runner) reconcilePVCA(
 				Reason:  ReasonPVCFetchError,
 				Message: fmt.Sprintf("Failed to get PersistentVolumeClaim %s: %s", pvcObjKey, err.Error()),
 			})
+
 			continue
 		}
 
@@ -363,7 +364,6 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
-
 	}
 
 	if err := r.setStatus(ctx, pvca, recommendationConditons.getAggregatedCondition(), resizingConditions.getAggregatedCondition(), volumeRecommendations); err != nil {
@@ -440,6 +440,7 @@ func setVolumeRecommendationForPVC(volumeRecommendations *[]v1alpha1.VolumeRecom
 	for i := range *volumeRecommendations {
 		if (*volumeRecommendations)[i].Name == pvcName {
 			(*volumeRecommendations)[i] = volumeRecommendation
+
 			return
 		}
 	}
@@ -682,6 +683,7 @@ func (r *Runner) resizePVC(ctx context.Context, pvc *corev1.PersistentVolumeClai
 			Reason:  ReasonReconcile,
 			Message: fmt.Sprintf("%s: could not patch PersistentVolumeClaim with new target size %s", pvc.Name, targetSize.String()),
 		})
+
 		return volumeRecommendation, err
 	}
 

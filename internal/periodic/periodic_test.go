@@ -32,6 +32,8 @@ import (
 	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 )
 
+const nonExistentPVCName = "non-existent-pvc"
+
 // creates a new test periodic runner
 func newRunner() (*Runner, error) {
 	metricsSource := fake.New(
@@ -52,7 +54,7 @@ func newRunner() (*Runner, error) {
 // createPodWithPVC creates a Pod in the "default" namespace with the given
 // labels and a single PVC volume referencing claimName. The Pod is registered
 // for cleanup via DeferCleanup.
-func createPodWithPVC(ctx context.Context, name string, labels map[string]string, claimName string) *corev1.Pod {
+func createPodWithPVC(ctx context.Context, name string, labels map[string]string, claimName string) {
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
@@ -73,7 +75,6 @@ func createPodWithPVC(ctx context.Context, name string, labels map[string]string
 	DeferCleanup(func() {
 		Expect(testutils.CleanupObject(ctx, k8sClient, pod)).To(Succeed())
 	})
-	return pod
 }
 
 var _ = Describe("Periodic Runner", func() {
@@ -507,7 +508,7 @@ var _ = Describe("Periodic Runner", func() {
 			It("should not reconcile when PVCA targets non-existent PVC", func() {
 				By("Patching PVCA to target a non-existent PVC")
 				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-				pvca.Spec.TargetRef.Name = "non-existent-pvc"
+				pvca.Spec.TargetRef.Name = nonExistentPVCName
 				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
 
 				By("Registering metrics for the test PVC")
@@ -696,7 +697,7 @@ var _ = Describe("Periodic Runner", func() {
 
 				By("Patching PVCA to target a non-existent PVC so the fetcher fails")
 				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-				pvca.Spec.TargetRef.Name = "non-existent-pvc"
+				pvca.Spec.TargetRef.Name = nonExistentPVCName
 				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
 
 				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
@@ -720,7 +721,7 @@ var _ = Describe("Periodic Runner", func() {
 			It("should not set a Resizing condition on PVC fetch failure when none existed before", func() {
 				By("Patching PVCA to target a non-existent PVC so the fetcher fails")
 				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
-				pvca.Spec.TargetRef.Name = "non-existent-pvc"
+				pvca.Spec.TargetRef.Name = nonExistentPVCName
 				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
 
 				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
@@ -985,7 +986,7 @@ var _ = Describe("Periodic Runner", func() {
 				})
 
 				By("Creating a Pod that references a PVC which does not exist")
-				createPodWithPVC(parentCtx, "missing-pvc-pod", selectorLabels, "non-existent-pvc")
+				createPodWithPVC(parentCtx, "missing-pvc-pod", selectorLabels, nonExistentPVCName)
 
 				By("Patching the PVCA to target the Deployment")
 				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
