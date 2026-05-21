@@ -243,7 +243,7 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
 				Status:  metav1.ConditionFalse,
 				Reason:  ReasonPVCFetchError,
-				Message: fmt.Sprintf("failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler: %s", err.Error()),
+				Message: fmt.Sprintf("Failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler: %s", err.Error()),
 			}
 
 			resizingCondition := metav1.Condition{Type: string(v1alpha1.ConditionTypeResizing)}
@@ -256,7 +256,7 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 				}
 			}
 
-			if err := r.setStatus(ctx, &pvca, recommendationsCondition, resizingCondition, pvca.Status.VolumeRecommendations); err != nil {
+			if err := r.setStatus(ctx, &pvca, recommendationsCondition, resizingCondition, []v1alpha1.VolumeRecommendation{}); err != nil {
 				logger.Error(err, "failed to update PVCA status", "pvca", pvcaKey)
 			}
 
