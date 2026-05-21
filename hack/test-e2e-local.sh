@@ -259,6 +259,85 @@ function _test_cooldown() {
   _cleanup "${_pod_name}" "${_pvc_name}" "${_pvca_name}" "${_namespace}"
 }
 
+# Tests the PVC autoscaler when targeting a StatefulSet. The PVCA selects a
+# StatefulSet via its scale subresource, the controller resolves the matching
+# pods and the PVCs they reference, and resizes all of them when the threshold
+# is reached.
+function _test_consume_space_and_resize_statefulset() {
+  local _sts_yaml="${_TEST_MANIFESTS_DIR}/sts-4.yaml"
+  local _pvca_yaml="${_TEST_MANIFESTS_DIR}/pvca-4.yaml"
+  local _sts_name=$( yq '.metadata.name' "${_sts_yaml}" )
+  local _pvca_name=$( yq '.metadata.name' "${_pvca_yaml}" )
+  local _namespace=$( yq '.metadata.namespace // "default"' "${_sts_yaml}" )
+  local _pvc_0="data-${_sts_name}-0"
+  local _pvc_1="data-${_sts_name}-1"
+
+  _msg_info "starting test: target StatefulSet, consume space and resize"
+  _msg_info "creating test statefulset and pvca ..."
+  kubectl create -f "${_sts_yaml}"
+  kubectl create -f "${_pvca_yaml}"
+
+  _msg_info "waiting for statefulset pods to be ready ..."
+  kubectl rollout status "statefulset/${_sts_name}" \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh sts_bytes_low_1Gi
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
+  kubectl wait "pvca/${_pvca_name}" \
+          --for condition=RecommendationAvailable \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  # The StatefulSet's volumeClaimTemplate provisions PVCs at 1Gi.
+  _ensure_pvc_capacity "${_pvc_0}" "${_namespace}" 1Gi
+  _ensure_pvc_capacity "${_pvc_1}" "${_namespace}" 1Gi
+
+  # Drive both PVCs above the threshold simultaneously.
+  _msg_info "consuming 90% of the space on both PVCs ..."
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh sts_bytes_high_1Gi
+
+  # Both PVCs should be picked up and resized by the same PVCA.
+  _wait_for_event Warning UsedSpaceThresholdReached "pvc/${_pvc_0}"
+  _wait_for_event Normal ResizingStorage "pvc/${_pvc_0}"
+  _wait_for_event Normal Resizing "pvc/${_pvc_0}"
+  _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_0}"
+
+  _wait_for_event Warning UsedSpaceThresholdReached "pvc/${_pvc_1}"
+  _wait_for_event Normal ResizingStorage "pvc/${_pvc_1}"
+  _wait_for_event Normal Resizing "pvc/${_pvc_1}"
+  _wait_for_event Normal FileSystemResizeSuccessful "pvc/${_pvc_1}"
+
+  # Both PVCs should be at 2Gi now.
+  _ensure_pvc_capacity "${_pvc_0}" "${_namespace}" 2Gi
+  _ensure_pvc_capacity "${_pvc_1}" "${_namespace}" 2Gi
+
+  ${_SCRIPT_DIR}/set-volume-metrics-stage.sh sts_bytes_low_2Gi
+
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
+  kubectl wait "pvca/${_pvca_name}" \
+          --for condition=RecommendationAvailable \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  _cleanup_statefulset "${_sts_name}" "${_pvca_name}" "${_namespace}" "${_pvc_0}" "${_pvc_1}"
+}
+
+# Cleanup helper for the StatefulSet-based test. StatefulSets do not delete
+# their PVCs, so we drop them explicitly.
+function _cleanup_statefulset() {
+  local _sts_name="${1}"
+  local _pvca_name="${2}"
+  local _namespace="${3}"
+  shift 3
+
+  kubectl --namespace "${_namespace}" delete pvca "${_pvca_name}"
+  kubectl --namespace "${_namespace}" delete statefulset "${_sts_name}"
+  for _pvc_name in "$@"; do
+    kubectl --namespace "${_namespace}" delete pvc "${_pvc_name}"
+  done
+}
+
 # Main entrypoint
 function _main() {  
   _msg_info "Waiting for pvc-autoscaler pods to become ready ..."
@@ -281,6 +360,11 @@ function _main() {
 
   if ! _test_cooldown; then
     _msg_error "test cooldown has failed" 0
+    _has_failed="true"
+  fi
+
+  if ! _test_consume_space_and_resize_statefulset; then
+    _msg_error "test consume space and resize for statefulset has failed" 0
     _has_failed="true"
   fi
 
