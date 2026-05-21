@@ -12,6 +12,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	appsv1 "k8s.io/api/apps/v1"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
@@ -46,6 +47,33 @@ func newRunner() (*Runner, error) {
 	)
 
 	return runner, err
+}
+
+// createPodWithPVC creates a Pod in the "default" namespace with the given
+// labels and a single PVC volume referencing claimName. The Pod is registered
+// for cleanup via DeferCleanup.
+func createPodWithPVC(ctx context.Context, name string, labels map[string]string, claimName string) *corev1.Pod {
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: "default",
+			Labels:    labels,
+		},
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "main", Image: "busybox"}},
+			Volumes: []corev1.Volume{{
+				Name: "data",
+				VolumeSource: corev1.VolumeSource{
+					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: claimName},
+				},
+			}},
+		},
+	}
+	Expect(k8sClient.Create(ctx, pod)).To(Succeed())
+	DeferCleanup(func() {
+		Expect(testutils.CleanupObject(ctx, k8sClient, pod)).To(Succeed())
+	})
+	return pod
 }
 
 var _ = Describe("Periodic Runner", func() {
@@ -702,6 +730,390 @@ var _ = Describe("Periodic Runner", func() {
 				for _, cond := range updatedPVCA.Status.Conditions {
 					Expect(cond.Type).NotTo(Equal(string(v1alpha1.ConditionTypeResizing)))
 				}
+			})
+
+			It("should aggregate recommendations for multiple PVCs when targeting a Deployment", func() {
+				selectorLabels := map[string]string{"app": "deployment-target"}
+
+				By("Creating PVCs referenced by the Deployment's pods")
+				pvcA, err := testutils.CreatePVC(parentCtx, k8sClient, "deploy-pvc-a", "1Gi", ptr.To(testutils.StorageClassName), nil)
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvcA)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvcA), pvcA)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				pvcB, err := testutils.CreatePVC(parentCtx, k8sClient, "deploy-pvc-b", "1Gi", ptr.To(testutils.StorageClassName), nil)
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvcB)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvcB), pvcB)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				By("Creating a Deployment with a label selector")
+				deployment := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "deployment-target", Namespace: "default"},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(2)),
+						Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Labels: selectorLabels},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: "main", Image: "busybox"}},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(parentCtx, deployment)).To(Succeed())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, deployment)).To(Succeed())
+				})
+
+				By("Creating Pods with PVC volumes that match the Deployment selector")
+				createPodWithPVC(parentCtx, "deploy-pod-a", selectorLabels, pvcA.Name)
+				createPodWithPVC(parentCtx, "deploy-pod-b", selectorLabels, pvcB.Name)
+
+				By("Patching the PVCA to target the Deployment")
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.TargetRef = autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       deployment.Name,
+				}
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+				By("Registering metrics for both PVCs")
+				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
+				for _, p := range []*corev1.PersistentVolumeClaim{pvcA, pvcB} {
+					metricsSource.Register(&fake.Item{
+						NamespacedName:         client.ObjectKeyFromObject(p),
+						CapacityBytes:          1073741824,
+						AvailableBytes:         1073741824,
+						CapacityInodes:         10000,
+						AvailableInodes:        10000,
+						ConsumeBytesIncrement:  1000,
+						ConsumeInodesIncrement: 1000,
+					})
+				}
+				metricsCtx, metricsCancel := context.WithCancel(parentCtx)
+				go func() {
+					<-time.After(500 * time.Millisecond)
+					metricsCancel()
+				}()
+				metricsSource.Start(metricsCtx)
+				WithMetricsSource(metricsSource)(runner)
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				By("Verifying aggregated RecommendationAvailable condition and per-PVC recommendations")
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionTrue),
+					HaveField("Reason", ReasonRecommendationsProvided),
+					HaveField("Message", Equal("Recommendations have been provided")),
+				)))
+				names := make([]string, 0, len(updatedPVCA.Status.VolumeRecommendations))
+				for _, vr := range updatedPVCA.Status.VolumeRecommendations {
+					names = append(names, vr.Name)
+				}
+				Expect(names).To(ConsistOf(pvcA.Name, pvcB.Name))
+			})
+
+			It("should aggregate recommendations for multiple PVCs when targeting a StatefulSet", func() {
+				selectorLabels := map[string]string{"app": "statefulset-target"}
+
+				By("Creating PVCs referenced by the StatefulSet's pods")
+				pvcA, err := testutils.CreatePVC(parentCtx, k8sClient, "sts-pvc-a", "1Gi", ptr.To(testutils.StorageClassName), nil)
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvcA)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvcA), pvcA)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				pvcB, err := testutils.CreatePVC(parentCtx, k8sClient, "sts-pvc-b", "1Gi", ptr.To(testutils.StorageClassName), nil)
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvcB)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvcB), pvcB)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				By("Creating a StatefulSet with a label selector")
+				statefulSet := &appsv1.StatefulSet{
+					ObjectMeta: metav1.ObjectMeta{Name: "statefulset-target", Namespace: "default"},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    ptr.To(int32(2)),
+						ServiceName: "statefulset-target",
+						Selector:    &metav1.LabelSelector{MatchLabels: selectorLabels},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Labels: selectorLabels},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: "main", Image: "busybox"}},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(parentCtx, statefulSet)).To(Succeed())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, statefulSet)).To(Succeed())
+				})
+
+				By("Creating Pods with PVC volumes that match the StatefulSet selector")
+				createPodWithPVC(parentCtx, "sts-pod-a", selectorLabels, pvcA.Name)
+				createPodWithPVC(parentCtx, "sts-pod-b", selectorLabels, pvcB.Name)
+
+				By("Patching the PVCA to target the StatefulSet")
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.TargetRef = autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "apps/v1",
+					Kind:       "StatefulSet",
+					Name:       statefulSet.Name,
+				}
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+				By("Registering metrics for both PVCs")
+				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
+				for _, p := range []*corev1.PersistentVolumeClaim{pvcA, pvcB} {
+					metricsSource.Register(&fake.Item{
+						NamespacedName:         client.ObjectKeyFromObject(p),
+						CapacityBytes:          1073741824,
+						AvailableBytes:         1073741824,
+						CapacityInodes:         10000,
+						AvailableInodes:        10000,
+						ConsumeBytesIncrement:  1000,
+						ConsumeInodesIncrement: 1000,
+					})
+				}
+				metricsCtx, metricsCancel := context.WithCancel(parentCtx)
+				go func() {
+					<-time.After(500 * time.Millisecond)
+					metricsCancel()
+				}()
+				metricsSource.Start(metricsCtx)
+				WithMetricsSource(metricsSource)(runner)
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				By("Verifying aggregated RecommendationAvailable condition and per-PVC recommendations")
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionTrue),
+					HaveField("Reason", ReasonRecommendationsProvided),
+					HaveField("Message", Equal("Recommendations have been provided")),
+				)))
+				names := make([]string, 0, len(updatedPVCA.Status.VolumeRecommendations))
+				for _, vr := range updatedPVCA.Status.VolumeRecommendations {
+					names = append(names, vr.Name)
+				}
+				Expect(names).To(ConsistOf(pvcA.Name, pvcB.Name))
+			})
+
+			It("should set PVCFetchError when targeting a Deployment with no matching pods", func() {
+				selectorLabels := map[string]string{"app": "no-matching-pods"}
+
+				By("Creating a Deployment with a selector that matches no pods")
+				deployment := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "deployment-no-pods", Namespace: "default"},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(2)),
+						Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Labels: selectorLabels},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: "main", Image: "busybox"}},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(parentCtx, deployment)).To(Succeed())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, deployment)).To(Succeed())
+				})
+
+				By("Patching the PVCA to target the Deployment")
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.TargetRef = autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       deployment.Name,
+				}
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionFalse),
+					HaveField("Reason", ReasonPVCFetchError),
+					HaveField("Message", ContainSubstring("no pods found")),
+				)))
+			})
+
+			It("should set PVCFetchError when matching pods reference a non-existent PVC", func() {
+				selectorLabels := map[string]string{"app": "missing-pvc-target"}
+
+				By("Creating a Deployment with a label selector")
+				deployment := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "deployment-missing-pvc", Namespace: "default"},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(1)),
+						Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Labels: selectorLabels},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: "main", Image: "busybox"}},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(parentCtx, deployment)).To(Succeed())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, deployment)).To(Succeed())
+				})
+
+				By("Creating a Pod that references a PVC which does not exist")
+				createPodWithPVC(parentCtx, "missing-pvc-pod", selectorLabels, "non-existent-pvc")
+
+				By("Patching the PVCA to target the Deployment")
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.TargetRef = autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       deployment.Name,
+				}
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionFalse),
+					HaveField("Reason", ReasonPVCFetchError),
+				)))
+			})
+
+			It("should set PVCFetchError when targeting a non-existent Deployment", func() {
+				By("Patching the PVCA to target a Deployment that does not exist")
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.TargetRef = autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "non-existent-deployment",
+				}
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionFalse),
+					HaveField("Reason", ReasonPVCFetchError),
+				)))
+			})
+
+			It("should aggregate to False listing only the failing PVC when one of multiple PVCs has no metrics", func() {
+				selectorLabels := map[string]string{"app": "partial-metrics"}
+
+				By("Creating two PVCs referenced by the Deployment's pods")
+				pvcA, err := testutils.CreatePVC(parentCtx, k8sClient, "partial-pvc-a", "1Gi", ptr.To(testutils.StorageClassName), nil)
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvcA)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvcA), pvcA)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				pvcB, err := testutils.CreatePVC(parentCtx, k8sClient, "partial-pvc-b", "1Gi", ptr.To(testutils.StorageClassName), nil)
+				Expect(err).NotTo(HaveOccurred())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, pvcB)).To(Succeed())
+					Eventually(func() error {
+						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvcB), pvcB)
+					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
+				})
+
+				By("Creating a Deployment with a label selector")
+				deployment := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: "deployment-partial-metrics", Namespace: "default"},
+					Spec: appsv1.DeploymentSpec{
+						Replicas: ptr.To(int32(2)),
+						Selector: &metav1.LabelSelector{MatchLabels: selectorLabels},
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{Labels: selectorLabels},
+							Spec: corev1.PodSpec{
+								Containers: []corev1.Container{{Name: "main", Image: "busybox"}},
+							},
+						},
+					},
+				}
+				Expect(k8sClient.Create(parentCtx, deployment)).To(Succeed())
+				DeferCleanup(func() {
+					Expect(testutils.CleanupObject(parentCtx, k8sClient, deployment)).To(Succeed())
+				})
+
+				By("Creating Pods with PVC volumes that match the Deployment selector")
+				createPodWithPVC(parentCtx, "partial-pod-a", selectorLabels, pvcA.Name)
+				createPodWithPVC(parentCtx, "partial-pod-b", selectorLabels, pvcB.Name)
+
+				By("Patching the PVCA to target the Deployment")
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.TargetRef = autoscalingv1.CrossVersionObjectReference{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       deployment.Name,
+				}
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+				By("Registering metrics for only one of the two PVCs")
+				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
+				metricsSource.Register(&fake.Item{
+					NamespacedName:         client.ObjectKeyFromObject(pvcA),
+					CapacityBytes:          1073741824,
+					AvailableBytes:         1073741824,
+					CapacityInodes:         10000,
+					AvailableInodes:        10000,
+					ConsumeBytesIncrement:  1000,
+					ConsumeInodesIncrement: 1000,
+				})
+				metricsCtx, metricsCancel := context.WithCancel(parentCtx)
+				go func() {
+					<-time.After(500 * time.Millisecond)
+					metricsCancel()
+				}()
+				metricsSource.Start(metricsCtx)
+				WithMetricsSource(metricsSource)(runner)
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
+					HaveField("Status", metav1.ConditionFalse),
+					HaveField("Reason", ReasonMetricsFetchError),
+					HaveField("Message", And(
+						ContainSubstring(pvcB.Name),
+						Not(ContainSubstring(pvcA.Name+":")),
+					)),
+				)))
 			})
 		})
 
