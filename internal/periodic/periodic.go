@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -75,6 +77,10 @@ const (
 	ReasonAmbiguousPVCA = "AmbiguousPersistentVolumeClaimAutoscaler"
 	// ReasonRecommendationError indicates an error occurred during recommendation computation.
 	ReasonRecommendationError = "RecommendationError"
+	// ReasonRecommendationsProvided indicates that all recommendations have been computed and added to the status.
+	ReasonRecommendationsProvided = "RecommendationsProvided"
+	// ReasonRecommendationsNotProvided is a generic reason that not all recommendations have been computed and added to the status.
+	ReasonRecommendationsNotProvided = "RecommendationsNotProvided"
 	// ReasonReconcile condition reason for the Resizing condition.
 	ReasonReconcile = "Reconcile"
 	// ReasonPVCResizeCooldown indicates that the PVC resize is in cooldown period.
@@ -228,17 +234,30 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 	)
 
 	for _, pvca := range persistentVolumeClaimAutoscalers {
+		pvcaKey := client.ObjectKeyFromObject(&pvca)
 		persistentVolumeClaims, err := r.pvcFetcher.Fetch(ctx, &pvca)
 		if err != nil {
-			logger.Error(err, "failed to fetch persistentvolumeclaims for persistentvolumeclaimautoscaler", "pvca", client.ObjectKeyFromObject(&pvca))
-			condition := metav1.Condition{
+			logger.Error(err, "failed to fetch persistentvolumeclaims for persistentvolumeclaimautoscaler", "pvca", pvcaKey)
+
+			recommendationsCondition := metav1.Condition{
 				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
 				Status:  metav1.ConditionFalse,
 				Reason:  ReasonPVCFetchError,
 				Message: fmt.Sprintf("failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler: %s", err.Error()),
 			}
-			if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-				logger.Info("failed to update status condition", "pvca", client.ObjectKeyFromObject(&pvca), "reason", err.Error())
+
+			resizingCondition := metav1.Condition{Type: string(v1alpha1.ConditionTypeResizing)}
+			if existing := meta.FindStatusCondition(pvca.Status.Conditions, resizingCondition.Type); existing != nil {
+				resizingCondition = metav1.Condition{
+					Type:    string(v1alpha1.ConditionTypeResizing),
+					Status:  metav1.ConditionUnknown,
+					Reason:  ReasonPVCFetchError,
+					Message: "Resizing state is unknown: failed to fetch PersistentVolumeClaims",
+				}
+			}
+
+			if err := r.setStatus(ctx, &pvca, recommendationsCondition, resizingCondition, pvca.Status.VolumeRecommendations); err != nil {
+				logger.Error(err, "failed to update PVCA status", "pvca", pvcaKey)
 			}
 
 			continue
@@ -248,7 +267,7 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 
 		for _, pvc := range persistentVolumeClaims {
 			key := client.ObjectKeyFromObject(pvc).String()
-			pvcToOwnersMap[key] = append(pvcToOwnersMap[key], client.ObjectKeyFromObject(&pvca).String())
+			pvcToOwnersMap[key] = append(pvcToOwnersMap[key], pvcaKey.String())
 		}
 	}
 
@@ -265,107 +284,98 @@ func (r *Runner) reconcilePVCA(
 ) {
 	logger = logger.WithValues("pvca", client.ObjectKeyFromObject(pvca))
 
-	// TODO(plkokanov): When multi-PVC support is added, this must be updated to iterate over all PVCs.
-	// Currently, the PVCA can only target one PVC, so we only get the first element.
-	// Because of that, we can also skip reconciling the PVCA resource if
-	// other PVCAs also target the same PVC.
-	pvc := pvcs[0]
-	pvcObjKey := client.ObjectKeyFromObject(pvc)
-	logger = logger.WithValues("pvc", pvcObjKey)
+	resizingConditions := &resizingConditionAggregator{}
+	recommendationConditons := &recommendationsConditionAggregator{}
 
-	if owners, ok := pvcToOwnersMap[pvcObjKey.String()]; ok && len(owners) > 1 {
-		logger.Info("skipping persistentvolumeclaim because it is scaled by multiple persistentvolumeclaimautoscalers", "pvcas", strings.Join(owners, ", "))
-		condition := metav1.Condition{
-			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-			Status:  metav1.ConditionFalse,
-			Reason:  ReasonAmbiguousPVCA,
-			Message: fmt.Sprintf("PersistentVolumeClaim %s is scaled by multiple PersistentVolumeClaimAutoscalers: %s", pvcObjKey, strings.Join(owners, ", ")),
+	volumeRecommendations := make([]v1alpha1.VolumeRecommendation, 0, len(pvcs))
+	for _, volumeRecommendation := range pvca.Status.VolumeRecommendations {
+		if slices.ContainsFunc(pvcs, func(pvc *corev1.PersistentVolumeClaim) bool {
+			return pvc.Name == volumeRecommendation.Name
+		}) {
+			volumeRecommendations = append(volumeRecommendations, volumeRecommendation)
 		}
-		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-			logger.Info("failed to update status condition", "reason", err.Error())
-		}
-
-		return
 	}
 
-	// Get a fresh copy of the pvc object.
-	if err := r.client.Get(ctx, pvcObjKey, pvc); err != nil {
-		logger.Info("failed to get persistentvolumeclaim", "reason", err.Error())
-		return
-	}
+	for _, pvc := range pvcs {
+		pvcObjKey := client.ObjectKeyFromObject(pvc)
+		logger := logger.WithValues("pvc", pvcObjKey)
 
-	policy := volumePolicyForPVC(pvca, pvc)
+		if owners, ok := pvcToOwnersMap[pvcObjKey.String()]; ok && len(owners) > 1 {
+			logger.Info("skipping persistentvolumeclaim because it is scaled by multiple persistentvolumeclaimautoscalers", "pvcas", strings.Join(owners, ", "))
+			recommendationConditons.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonAmbiguousPVCA,
+				Message: fmt.Sprintf("PersistentVolumeClaim %s is scaled by multiple PersistentVolumeClaimAutoscalers: %s", pvcObjKey, strings.Join(owners, ", ")),
+			})
 
-	if err := r.validatePVC(ctx, pvc, policy); err != nil {
-		logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
-		metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
-		condition := metav1.Condition{
-			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-			Status:  metav1.ConditionFalse,
-			Reason:  ReasonRecommendationError,
-			Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
-		}
-		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-			logger.Info("failed to update status condition", "reason", err.Error())
+			continue
 		}
 
-		return
-	}
-
-	volumeRecommendation, err := r.updateVolumeRecommendationForPVC(ctx, pvca, pvc, metricsData[pvcObjKey])
-	if err != nil {
-		logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
-		metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
-		condition := metav1.Condition{
-			Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-			Status:  metav1.ConditionFalse,
-			Reason:  ReasonMetricsFetchError,
-			Message: fmt.Sprintf(" - %s: %s", pvcObjKey.Name, err.Error()),
-		}
-		if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-			logger.Info("failed to update status condition", "reason", err.Error())
+		// Get a fresh copy of the pvc object.
+		if err := r.client.Get(ctx, pvcObjKey, pvc); err != nil {
+			logger.Info("failed to get persistentvolumeclaim", "reason", err.Error())
+			recommendationConditons.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonPVCFetchError,
+				Message: fmt.Sprintf("Failed to get PersistentVolumeClaim %s: %s", pvcObjKey, err.Error()),
+			})
+			continue
 		}
 
-		return
-	}
+		policy := volumePolicyForPVC(pvca, pvc)
 
-	condition := metav1.Condition{
-		Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-		Status:  metav1.ConditionTrue,
-		Reason:  ReasonMetricsFetched,
-		Message: " - All metrics fetched successfully",
-	}
-	if err := pvca.SetCondition(ctx, r.client, condition); err != nil {
-		logger.Info("failed to update status condition", "reason", err.Error())
-	}
+		if err := r.validatePVC(ctx, pvc, policy); err != nil {
+			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
+			recommendationConditons.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonRecommendationError,
+				Message: fmt.Sprintf("%s: %s", pvcObjKey.Name, err.Error()),
+			})
 
-	shouldResize, scalingReason := r.shouldResizePVC(ctx, pvca, pvc, policy, volumeRecommendation)
-
-	inProgress, err := r.isResizeInProgress(ctx, pvca, pvc, scalingReason)
-	if err != nil {
-		logger.Info("failed to determine whether persistentvolumeclaim is being resized", "reason", err.Error())
-		return
-	}
-
-	if shouldResize && !inProgress {
-		if err := r.resizePVC(ctx, pvca, pvc, policy, scalingReason, volumeRecommendation); err != nil {
-			logger.Error(err, "failed to resize pvc")
+			continue
 		}
-	} else if err := pvca.RemoveCondition(ctx, r.client, string(v1alpha1.ConditionTypeResizing)); err != nil {
-		logger.Info("failed to remove status condition", "reason", err.Error())
+
+		volumeRecommendation, err := r.updateVolumeRecommendationForPVC(volumeRecommendations, pvc, metricsData[pvcObjKey])
+		if err != nil {
+			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
+			metrics.SkippedTotal.WithLabelValues(pvca.Namespace, pvca.Name, err.Error()).Inc()
+			recommendationConditons.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonMetricsFetchError,
+				Message: fmt.Sprintf("%s: %s", pvcObjKey.Name, err.Error()),
+			})
+
+			continue
+		}
+
+		shouldResize, scalingReason := r.shouldResizePVC(pvc, policy, volumeRecommendation)
+		inProgress := r.isResizeInProgress(ctx, pvc, scalingReason, volumeRecommendation, resizingConditions)
+
+		if shouldResize && !inProgress {
+			volumeRecommendation, err = r.resizePVC(ctx, pvc, policy, scalingReason, volumeRecommendation, resizingConditions)
+			if err != nil {
+				logger.Error(err, "failed to resize pvc")
+			}
+		}
+
+		setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
+
+	}
+
+	if err := r.setStatus(ctx, pvca, recommendationConditons.getAggregatedCondition(), resizingConditions.getAggregatedCondition(), volumeRecommendations); err != nil {
+		logger.Error(err, "failed to update PVCA status")
 	}
 }
 
 // updateVolumeRecommendations updates the status of the
 // [v1alpha1.PersistentVolumeClaimAutoscaler] with the latest observed
 // information about the target [corev1.PersistentVolumeClaim].
-func (r *Runner) updateVolumeRecommendationForPVC(ctx context.Context, obj *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, volInfo *metricssource.VolumeInfo) (v1alpha1.VolumeRecommendation, error) {
-	patch := client.MergeFrom(obj.DeepCopy())
-	now := time.Now()
-	obj.Status.LastCheck = metav1.NewTime(now)
-	obj.Status.NextCheck = metav1.NewTime(now.Add(r.interval))
-
-	volumeRecommendation := getOrCreateVolumeRecommendationForPVC(obj, pvc.Name)
+func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alpha1.VolumeRecommendation, pvc *corev1.PersistentVolumeClaim, volInfo *metricssource.VolumeInfo) (v1alpha1.VolumeRecommendation, error) {
+	volumeRecommendation := getOrCreateVolumeRecommendationForPVC(volumeRecommendations, pvc.Name)
 
 	// No metrics found, nothing to do for now
 	if volInfo == nil {
@@ -398,8 +408,7 @@ func (r *Runner) updateVolumeRecommendationForPVC(ctx context.Context, obj *v1al
 		}
 	}
 
-	setVolumeRecommendationForPVC(obj, pvc.Name, volumeRecommendation)
-	return volumeRecommendation, r.client.Status().Patch(ctx, obj, patch)
+	return volumeRecommendation, nil
 }
 
 // volumePolicyForPVC returns the volume policy from the given
@@ -413,10 +422,10 @@ func volumePolicyForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, _ *corev
 
 // getOrCreateVolumeRecommendationForPVC returns the VolumeRecommendation for
 // the given PVC name. If no recommendation exists yet, a new one is created and returned.
-func getOrCreateVolumeRecommendationForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvcName string) v1alpha1.VolumeRecommendation {
-	for i := range pvca.Status.VolumeRecommendations {
-		if pvca.Status.VolumeRecommendations[i].Name == pvcName {
-			return pvca.Status.VolumeRecommendations[i]
+func getOrCreateVolumeRecommendationForPVC(volumeRecommendations []v1alpha1.VolumeRecommendation, pvcName string) v1alpha1.VolumeRecommendation {
+	for i := range volumeRecommendations {
+		if volumeRecommendations[i].Name == pvcName {
+			return volumeRecommendations[i]
 		}
 	}
 
@@ -427,15 +436,15 @@ func getOrCreateVolumeRecommendationForPVC(pvca *v1alpha1.PersistentVolumeClaimA
 
 // setVolumeRecommendationForPVC sets the volumeRecommendation for the PVC in the PVCA.
 // If it did not exist before, it is appended to the list of volume recommendations
-func setVolumeRecommendationForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvcName string, volumeRecommendation v1alpha1.VolumeRecommendation) {
-	for i := range pvca.Status.VolumeRecommendations {
-		if pvca.Status.VolumeRecommendations[i].Name == pvcName {
-			pvca.Status.VolumeRecommendations[i] = volumeRecommendation
+func setVolumeRecommendationForPVC(volumeRecommendations *[]v1alpha1.VolumeRecommendation, pvcName string, volumeRecommendation v1alpha1.VolumeRecommendation) {
+	for i := range *volumeRecommendations {
+		if (*volumeRecommendations)[i].Name == pvcName {
+			(*volumeRecommendations)[i] = volumeRecommendation
 			return
 		}
 	}
 
-	pvca.Status.VolumeRecommendations = append(pvca.Status.VolumeRecommendations, volumeRecommendation)
+	*volumeRecommendations = append(*volumeRecommendations, volumeRecommendation)
 }
 
 // validatePVC checks whether the [corev1.PersistentVolumeClaim] is valid for
@@ -483,7 +492,7 @@ func (r *Runner) validatePVC(ctx context.Context, pvc *corev1.PersistentVolumeCl
 // [corev1.PersistentVolumeClaim] object targeted by
 // [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
 // reconciliation. When it returns true, it also returns the scaling reason.
-func (r *Runner) shouldResizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) (bool, string) {
+func (r *Runner) shouldResizePVC(pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) (bool, string) {
 	var (
 		threshold         = *policy.ScaleUp.UtilizationThresholdPercent
 		usedSpacePercent  = ptr.Deref(volumeRecommendation.Current.UsedSpacePercent, 0)
@@ -527,68 +536,67 @@ func (r *Runner) shouldResizePVC(ctx context.Context, pvca *v1alpha1.PersistentV
 
 // isResizeInProgress checks whether the PVC is currently being resized.
 // Returns true if a resize operation is in progress.
-func (r *Runner) isResizeInProgress(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, scalingReason string) (bool, error) {
+func (r *Runner) isResizeInProgress(ctx context.Context, pvc *corev1.PersistentVolumeClaim, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) bool {
 	logger := log.FromContext(ctx).WithValues("pvc", pvc.Name)
 	currStatusSize := pvc.Status.Capacity.Storage()
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimResizing) {
 		logger.Info("resize has been started")
-		condition := metav1.Condition{
+		resizingConditions.addCondition(metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf(" - %s: is being scaled due to %s, resize has been started", pvc.Name, scalingReason),
-		}
+			Message: fmt.Sprintf("%s: is being scaled due to %s, resize has been started", pvc.Name, scalingReason),
+		})
 
-		return true, pvca.SetCondition(ctx, r.client, condition)
+		return true
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending) {
 		logger.Info("filesystem resize is pending")
-		condition := metav1.Condition{
+		resizingConditions.addCondition(metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf(" - %s: is being scaled due to %s, file system resize is pending", pvc.Name, scalingReason),
-		}
+			Message: fmt.Sprintf("%s: is being scaled due to %s, file system resize is pending", pvc.Name, scalingReason),
+		})
 
-		return true, pvca.SetCondition(ctx, r.client, condition)
+		return true
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimVolumeModifyingVolume) {
 		logger.Info("volume is being modified")
-		condition := metav1.Condition{
+		resizingConditions.addCondition(metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf(" - %s: is being scaled due to %s, volume is being modified", pvc.Name, scalingReason),
-		}
+			Message: fmt.Sprintf("%s: is being scaled due to %s, volume is being modified", pvc.Name, scalingReason),
+		})
 
-		return true, pvca.SetCondition(ctx, r.client, condition)
+		return true
 	}
 
 	// If previously recorded size is equal to the current status it means
 	// we are still waiting for the resize to complete
-	volumeRecommendation := getOrCreateVolumeRecommendationForPVC(pvca, pvc.Name)
 	if volumeRecommendation.Current.Size != nil &&
 		volumeRecommendation.Current.Size.Equal(*currStatusSize) {
 		logger.Info("persistent volume claim is still being resized")
-		condition := metav1.Condition{
+		resizingConditions.addCondition(metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf(" - %s: is being scaled due to %s, persistent volume claim is still being resized", pvc.Name, scalingReason),
-		}
+			Message: fmt.Sprintf("%s: is being scaled due to %s, persistent volume claim is still being resized", pvc.Name, scalingReason),
+		})
 
-		return true, pvca.SetCondition(ctx, r.client, condition)
+		return true
 	}
 
-	return false, nil
+	return false
 }
 
 // resizePVC performs the actual resize of the PVC targeted by the given
 // [v1alpha1.PersistentVolumeClaimAutoscaler].
-func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation) error {
+func (r *Runner) resizePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
 	logger := log.FromContext(ctx).WithValues("pvc", pvc.Name)
 	currSpecSize := pvc.Spec.Resources.Requests.Storage()
 
@@ -604,11 +612,11 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	case 0:
 		logger.Info("new and current size are the same")
 
-		return nil
+		return volumeRecommendation, nil
 	case -1:
 		logger.Info("new size is less than current")
 
-		return nil
+		return volumeRecommendation, nil
 	}
 
 	// We don't want to exceed the max capacity
@@ -622,14 +630,14 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 		)
 		logger.Info("max capacity reached")
 		metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
-		condition := metav1.Condition{
+		resizingConditions.addCondition(metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionFalse,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf(" - %s: max capacity reached", pvc.Name),
-		}
+			Message: fmt.Sprintf("%s: max capacity reached", pvc.Name),
+		})
 
-		return pvca.SetCondition(ctx, r.client, condition)
+		return volumeRecommendation, nil
 	}
 
 	if policy.ScaleUp.CooldownDuration != nil {
@@ -640,14 +648,14 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 			if elapsed < cooldown {
 				remaining := cooldown - elapsed
 				logger.Info("cooldown period not elapsed", "remaining", remaining.String())
-				condition := metav1.Condition{
+				resizingConditions.addCondition(metav1.Condition{
 					Type:    string(v1alpha1.ConditionTypeResizing),
 					Status:  metav1.ConditionFalse,
 					Reason:  ReasonPVCResizeCooldown,
-					Message: fmt.Sprintf("- %s: cooldown duration has not elapsed yet", pvc.Name),
-				}
+					Message: fmt.Sprintf("%s: cooldown duration has not elapsed yet", pvc.Name),
+				})
 
-				return pvca.SetCondition(ctx, r.client, condition)
+				return volumeRecommendation, nil
 			}
 		}
 	}
@@ -668,25 +676,57 @@ func (r *Runner) resizePVC(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	pvcPatch := client.MergeFrom(pvc.DeepCopy())
 	pvc.Spec.Resources.Requests[corev1.ResourceStorage] = *targetSize
 	if err := r.client.Patch(ctx, pvc, pvcPatch); err != nil {
-		return err
+		resizingConditions.addCondition(metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeResizing),
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonReconcile,
+			Message: fmt.Sprintf("%s: could not patch PersistentVolumeClaim with new target size %s", pvc.Name, targetSize.String()),
+		})
+		return volumeRecommendation, err
 	}
 
-	pvcaPatch := client.MergeFrom(pvca.DeepCopy())
 	volumeRecommendation.Current.Size = pvc.Status.Capacity.Storage()
 	volumeRecommendation.Target.Size = targetSize
 	volumeRecommendation.LastResizeTime = ptr.To(metav1.Now())
-	setVolumeRecommendationForPVC(pvca, pvc.Name, volumeRecommendation)
 
-	if err := r.client.Status().Patch(ctx, pvca, pvcaPatch); err != nil {
-		return err
-	}
-
-	condition := metav1.Condition{
+	resizingConditions.addCondition(metav1.Condition{
 		Type:    string(v1alpha1.ConditionTypeResizing),
 		Status:  metav1.ConditionTrue,
 		Reason:  ReasonReconcile,
-		Message: fmt.Sprintf("- %s: resizing from %s to %s due to %s", pvc.Name, currSpecSize.String(), targetSize.String(), scalingReason),
+		Message: fmt.Sprintf("%s: resizing from %s to %s due to %s", pvc.Name, currSpecSize.String(), targetSize.String(), scalingReason),
+	})
+
+	return volumeRecommendation, nil
+}
+
+// setStatus updates the status of the [v1alpha1.PersistentVolumeClaimAutoscaler]
+// with the given conditions and the latest volume recommendations. For each
+// condition, an empty Message is treated as a sentinel value: the condition is
+// removed from the status by Type rather than set.
+func (r *Runner) setStatus(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, recommendationsCondition metav1.Condition, resizingCondition metav1.Condition, volumeRecommendations []v1alpha1.VolumeRecommendation) error {
+	patch := client.MergeFrom(pvca.DeepCopy())
+	conditions := pvca.Status.Conditions
+	if len(conditions) == 0 {
+		conditions = make([]metav1.Condition, 0)
+	}
+	now := time.Now()
+	pvca.Status.LastCheck = metav1.NewTime(now)
+	pvca.Status.NextCheck = metav1.NewTime(now.Add(r.interval))
+
+	for _, condition := range []metav1.Condition{resizingCondition, recommendationsCondition} {
+		if condition.Message == "" {
+			meta.RemoveStatusCondition(&conditions, condition.Type)
+		} else {
+			meta.SetStatusCondition(&conditions, condition)
+		}
 	}
 
-	return pvca.SetCondition(ctx, r.client, condition)
+	pvca.Status.Conditions = conditions
+
+	slices.SortFunc(volumeRecommendations, func(vr1, vr2 v1alpha1.VolumeRecommendation) int {
+		return strings.Compare(vr1.Name, vr2.Name)
+	})
+	pvca.Status.VolumeRecommendations = volumeRecommendations
+
+	return r.client.Status().Patch(ctx, pvca, patch)
 }
