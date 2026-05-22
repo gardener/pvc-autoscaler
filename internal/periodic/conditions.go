@@ -29,16 +29,16 @@ func (c *recommendationsConditionAggregator) addCondition(condition metav1.Condi
 // returns a true condition indicating that recommendations have been provided
 func (c *recommendationsConditionAggregator) getAggregatedCondition() metav1.Condition {
 	var (
-		status         = metav1.ConditionTrue
-		failureReasons = sets.New[string]()
-		failures       = make([]string, 0, len(c.conditions))
+		status          = metav1.ConditionTrue
+		failureReasons  = sets.New[string]()
+		failureMessages = make([]string, 0, len(c.conditions))
 	)
 
 	for _, condition := range c.conditions {
 		if condition.Status == metav1.ConditionFalse {
 			status = metav1.ConditionFalse
 			failureReasons.Insert(condition.Reason)
-			failures = append(failures, condition.Message)
+			failureMessages = append(failureMessages, condition.Message)
 		}
 	}
 
@@ -51,9 +51,9 @@ func (c *recommendationsConditionAggregator) getAggregatedCondition() metav1.Con
 		}
 	}
 
-	slices.Sort(failures)
+	slices.Sort(failureMessages)
 	message := "Recommendations could not be provided for some PersistentVolumeClaims:"
-	for _, failure := range failures {
+	for _, failure := range failureMessages {
 		message = message + "\n- " + failure
 	}
 
