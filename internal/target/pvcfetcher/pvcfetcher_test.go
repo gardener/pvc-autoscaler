@@ -112,7 +112,7 @@ var _ = Describe("PVCFetcher", func() {
 			selectorFetcher.selector, _ = labels.Parse("app=test")
 
 			pvcs, err := fetcher.Fetch(ctx, pvca)
-			Expect(err).To(MatchError(ContainSubstring("no pods found for selector 'app=test' used by PersistentVolumeClaimAutoscaler default/test-pvca")))
+			Expect(err).To(MatchError(ContainSubstring("no pods found for selector app=test")))
 			Expect(pvcs).To(BeEmpty())
 		})
 
@@ -146,7 +146,7 @@ var _ = Describe("PVCFetcher", func() {
 			Expect(fakeClient.Create(ctx, pod)).To(Succeed())
 
 			pvcs, err := fetcher.Fetch(ctx, pvca)
-			Expect(err).To(MatchError(ContainSubstring("no PersistentVolumeClaims found for selector 'app=test' used by PersistentVolumeClaimAutoscaler default/test-pvca")))
+			Expect(err).To(MatchError(ContainSubstring("no PersistentVolumeClaims found for selector app=test")))
 			Expect(pvcs).To(BeEmpty())
 		})
 

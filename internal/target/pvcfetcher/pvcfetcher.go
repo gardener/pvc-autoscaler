@@ -82,7 +82,7 @@ func (f *pvcFetcher) Fetch(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 		}
 
 		if err := f.client.Get(ctx, client.ObjectKeyFromObject(pvc), pvc); err != nil {
-			return nil, fmt.Errorf("failed to get PersistentVolumeClaim %s under PersistentVolumeClaimAutoscaler %s: %w", client.ObjectKeyFromObject(pvc), client.ObjectKeyFromObject(pvca), err)
+			return nil, fmt.Errorf("failed to get PersistentVolumeClaim %s: %w", client.ObjectKeyFromObject(pvc), err)
 		}
 
 		return []*corev1.PersistentVolumeClaim{pvc}, nil
@@ -95,20 +95,20 @@ func (f *pvcFetcher) Fetch(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 
 	podList := &corev1.PodList{}
 	if err := f.client.List(ctx, podList, &client.ListOptions{LabelSelector: selector, Namespace: pvca.Namespace}); err != nil {
-		return nil, fmt.Errorf("failed to list Pods for PersistentVolumeClaimAutoscaler %s: %w", client.ObjectKeyFromObject(pvca), err)
+		return nil, fmt.Errorf("failed to list Pods: %w", err)
 	}
 
 	if len(podList.Items) == 0 {
-		return nil, fmt.Errorf("no pods found for selector '%s' used by PersistentVolumeClaimAutoscaler %s", selector, client.ObjectKeyFromObject(pvca))
+		return nil, fmt.Errorf("no pods found for selector %s", selector)
 	}
 
 	pvcs, err := f.getPVCsFromPods(ctx, podList.Items)
 	if err != nil {
-		return nil, fmt.Errorf("could not get all PersistentVolumeClaims for PersistentVolumeClaimAutoscaler %s: %w", client.ObjectKeyFromObject(pvca), err)
+		return nil, fmt.Errorf("could not get all PersistentVolumeClaims: %w", err)
 	}
 
 	if len(pvcs) == 0 {
-		return nil, fmt.Errorf("no PersistentVolumeClaims found for selector '%s' used by PersistentVolumeClaimAutoscaler %s", selector, client.ObjectKeyFromObject(pvca))
+		return nil, fmt.Errorf("no PersistentVolumeClaims found for selector %s", selector)
 	}
 
 	return pvcs, nil

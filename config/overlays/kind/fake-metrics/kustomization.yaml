@@ -24,6 +24,9 @@ configMapGenerator:
   - pod_cooldown_low_2Gi.txt
   - pod_cooldown_high_2Gi.txt
   - pod_cooldown_low_3Gi.txt
+  - sts_bytes_low_1Gi.txt
+  - sts_bytes_high_1Gi.txt
+  - sts_bytes_low_2Gi.txt
 
 resources:
 - metrics-test-pod-with-pvc.yaml

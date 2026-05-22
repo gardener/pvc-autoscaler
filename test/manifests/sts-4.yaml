@@ -1,0 +1,37 @@
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: test-sts-4
+  namespace: pvc-autoscaler-system
+spec:
+  serviceName: test-sts-4
+  replicas: 2
+  selector:
+    matchLabels:
+      app: test-sts-4
+  template:
+    metadata:
+      labels:
+        app: test-sts-4
+    spec:
+      containers:
+        - name: app
+          image: alpine:3.23.3
+          command:
+            - sleep
+            - infinity
+          volumeMounts:
+            - mountPath: /app
+              name: data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        storageClassName: standard
+        volumeMode: Filesystem
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
