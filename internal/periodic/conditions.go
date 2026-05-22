@@ -91,11 +91,13 @@ func (c *resizingConditionAggregator) getAggregatedCondition() metav1.Condition 
 	var (
 		message           = "PersistentVolumeClaims cannot be resized:"
 		status            = metav1.ConditionFalse
+		reasons           = sets.New[string]()
 		conditionMessages = make([]string, 0, len(c.conditions))
 	)
 
 	for _, condition := range c.conditions {
 		conditionMessages = append(conditionMessages, condition.Message)
+		reasons.Insert(condition.Reason)
 		if condition.Status == metav1.ConditionTrue {
 			message = "PersistentVolumeClaims are being resized:"
 			status = metav1.ConditionTrue
@@ -107,10 +109,15 @@ func (c *resizingConditionAggregator) getAggregatedCondition() metav1.Condition 
 		message = message + "\n- " + conditionMessage
 	}
 
+	reason := ReasonReconcile
+	if reasons.Len() == 1 {
+		reason, _ = reasons.PopAny()
+	}
+
 	return metav1.Condition{
 		Type:    string(v1alpha1.ConditionTypeResizing),
 		Message: message,
-		Reason:  ReasonReconcile,
+		Reason:  reason,
 		Status:  status,
 	}
 }
