@@ -1170,10 +1170,9 @@ var _ = Describe("Periodic Runner", func() {
 					var buf strings.Builder
 					w := io.MultiWriter(GinkgoWriter, &buf)
 					logger := zap.New(zap.WriteTo(w))
-					newCtx := log.IntoContext(parentCtx, logger)
 
 					aggregator := &resizingConditionAggregator{}
-					inProgress := runner.isResizeInProgress(newCtx, pvc, reason, volumeRecommendation, aggregator)
+					inProgress := runner.isResizeInProgress(logger, pvc, reason, volumeRecommendation, aggregator)
 					Expect(inProgress).To(Equal(expectInProgress))
 
 					if expectInProgress {
@@ -1265,10 +1264,9 @@ var _ = Describe("Periodic Runner", func() {
 					var buf strings.Builder
 					w := io.MultiWriter(GinkgoWriter, &buf)
 					logger := zap.New(zap.WriteTo(w))
-					newCtx := log.IntoContext(parentCtx, logger)
 
 					aggregator := &resizingConditionAggregator{}
-					updatedRecommendation, err := runner.resizePVC(newCtx, pvc, volumePolicyForPVC(pvca, pvc), reason, volumeRecommendation, aggregator)
+					updatedRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, volumePolicyForPVC(pvca, pvc), reason, volumeRecommendation, aggregator)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
 
@@ -1315,12 +1313,11 @@ var _ = Describe("Periodic Runner", func() {
 
 				var buf strings.Builder
 				w := io.MultiWriter(GinkgoWriter, &buf)
-				logger := zap.New(zap.WriteTo(w))
-				newCtx := log.IntoContext(parentCtx, logger)
+				logger := zap.New(zap.WriteTo(w)).WithValues("pvc", "test-pvc")
 
 				By("Performing first resize")
 				aggregator := &resizingConditionAggregator{}
-				volumeRecommendation, err := runner.resizePVC(newCtx, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold", volumeRecommendation, aggregator)
+				volumeRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold", volumeRecommendation, aggregator)
 				Expect(err).NotTo(HaveOccurred())
 
 				wantLog := `"resizing persistent volume claim","pvc":"test-pvc","from":"1Gi","to":"2Gi"}`
@@ -1338,7 +1335,7 @@ var _ = Describe("Periodic Runner", func() {
 
 				By("Performing second resize")
 				aggregator = &resizingConditionAggregator{}
-				volumeRecommendation, err = runner.resizePVC(newCtx, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold", volumeRecommendation, aggregator)
+				volumeRecommendation, err = runner.resizePVC(parentCtx, logger, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold", volumeRecommendation, aggregator)
 				Expect(err).NotTo(HaveOccurred())
 
 				wantLog = `"resizing persistent volume claim","pvc":"test-pvc","from":"2Gi","to":"3Gi"}`
@@ -1355,7 +1352,7 @@ var _ = Describe("Periodic Runner", func() {
 
 				By("Expecting third attempt to fail with max capacity reached")
 				aggregator = &resizingConditionAggregator{}
-				_, err = runner.resizePVC(newCtx, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold", volumeRecommendation, aggregator)
+				_, err = runner.resizePVC(parentCtx, logger, &resizedPvc, volumePolicyForPVC(pvca, &resizedPvc), "passing storage threshold", volumeRecommendation, aggregator)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(buf.String()).To(ContainSubstring("max capacity reached"))
 
@@ -1384,11 +1381,10 @@ var _ = Describe("Periodic Runner", func() {
 
 					var buf strings.Builder
 					logger := zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &buf)))
-					newCtx := log.IntoContext(parentCtx, logger)
 
 					beforeResize := time.Now()
 					aggregator := &resizingConditionAggregator{}
-					updatedRecommendation, err := runner.resizePVC(newCtx, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold", volumeRecommendation, aggregator)
+					updatedRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, volumePolicyForPVC(pvca, pvc), "passing storage threshold", volumeRecommendation, aggregator)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buf.String()).To(ContainSubstring(expectedLog))
 

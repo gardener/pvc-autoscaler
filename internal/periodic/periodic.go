@@ -356,10 +356,10 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		shouldResize, scalingReason := r.shouldResizePVC(pvc, policy, volumeRecommendation)
-		inProgress := r.isResizeInProgress(ctx, pvc, scalingReason, volumeRecommendation, resizingConditions)
+		inProgress := r.isResizeInProgress(logger, pvc, scalingReason, volumeRecommendation, resizingConditions)
 
 		if shouldResize && !inProgress {
-			volumeRecommendation, err = r.resizePVC(ctx, pvc, policy, scalingReason, volumeRecommendation, resizingConditions)
+			volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, policy, scalingReason, volumeRecommendation, resizingConditions)
 			if err != nil {
 				logger.Error(err, "failed to resize pvc")
 			}
@@ -539,8 +539,7 @@ func (r *Runner) shouldResizePVC(pvc *corev1.PersistentVolumeClaim, policy v1alp
 
 // isResizeInProgress checks whether the PVC is currently being resized.
 // Returns true if a resize operation is in progress.
-func (r *Runner) isResizeInProgress(ctx context.Context, pvc *corev1.PersistentVolumeClaim, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) bool {
-	logger := log.FromContext(ctx).WithValues("pvc", pvc.Name)
+func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) bool {
 	currStatusSize := pvc.Status.Capacity.Storage()
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimResizing) {
@@ -599,8 +598,7 @@ func (r *Runner) isResizeInProgress(ctx context.Context, pvc *corev1.PersistentV
 
 // resizePVC performs the actual resize of the PVC targeted by the given
 // [v1alpha1.PersistentVolumeClaimAutoscaler].
-func (r *Runner) resizePVC(ctx context.Context, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
-	logger := log.FromContext(ctx).WithValues("pvc", pvc.Name)
+func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
 	currSpecSize := pvc.Spec.Resources.Requests.Storage()
 
 	// Calculate the new size
