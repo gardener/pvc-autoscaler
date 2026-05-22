@@ -246,6 +246,8 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 				Message: fmt.Sprintf("Failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler: %s", err.Error()),
 			}
 
+			// If the resizing condition is already set on the PVCA resource due to an ongoing resize, set it to Unknown here as
+			// it is not possible to check the actual resizing status of the PVCs, if they cannot be fetched.
 			resizingCondition := metav1.Condition{Type: string(v1alpha1.ConditionTypeResizing)}
 			if existing := meta.FindStatusCondition(pvca.Status.Conditions, resizingCondition.Type); existing != nil {
 				resizingCondition = metav1.Condition{

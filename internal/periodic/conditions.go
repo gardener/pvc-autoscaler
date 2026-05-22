@@ -13,12 +13,12 @@ import (
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 )
 
-// recommendationsConditionAggregator is a condition aggregator for the Recommended condition of the PVCA.
+// recommendationsConditionAggregator is a condition aggregator for the RecommendationAvailable condition of the PVCA.
 type recommendationsConditionAggregator struct {
 	conditions []metav1.Condition
 }
 
-// addCondition adds a condition to the aggregator. Only conditions with false status can be aggregated.
+// addCondition adds a condition to the aggregator. Only conditions with false status are aggregated.
 func (c *recommendationsConditionAggregator) addCondition(condition metav1.Condition) {
 	if condition.Status == metav1.ConditionFalse {
 		c.conditions = append(c.conditions, condition)
@@ -70,14 +70,19 @@ func (c *recommendationsConditionAggregator) getAggregatedCondition() metav1.Con
 	}
 }
 
+// resizingConditionAggregator is a condition aggregator for the Resizing condition of the PVCA.
 type resizingConditionAggregator struct {
 	conditions []metav1.Condition
 }
 
+// addCondition adds a condition to the aggregator
 func (c *resizingConditionAggregator) addCondition(condition metav1.Condition) {
 	c.conditions = append(c.conditions, condition)
 }
 
+// getAggregatedCondition aggregates all conditions into one. If there are no conditions, it returns an empty condition with the
+// Resizing type. If there is one condition with status true, the aggregated condition's status is also true to indicate that there
+// is a resize in progress.
 func (c *resizingConditionAggregator) getAggregatedCondition() metav1.Condition {
 	if len(c.conditions) == 0 {
 		return metav1.Condition{Type: string(v1alpha1.ConditionTypeResizing)}
