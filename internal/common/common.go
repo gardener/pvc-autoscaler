@@ -51,5 +51,5 @@ const (
 	// MaxCapacityDeviationRatio is the maximum allowed deviation ratio between the PVC size
 	// as reported by the metrics source and the PVC size as indicated by the PVC status.
 	// If the deviation is bigger than this ratio, the metrics are considered stale.
-	MaxCapacityDeviationRatio = 0.02
+	MaxCapacityDeviationRatio = 0.04
 )
