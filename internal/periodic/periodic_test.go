@@ -245,7 +245,7 @@ var _ = Describe("Periodic Runner", func() {
 				),
 			)
 
-			It("should apply 2% tolerance for stale metrics detection (large PVC)", func() {
+			It("should apply 4% tolerance for stale metrics detection (large PVC)", func() {
 				By("Patching PVC to 100Gi and PVCA maxCapacity to 200Gi")
 				specPatch := client.MergeFrom(pvc.DeepCopy())
 				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("100Gi")
@@ -262,7 +262,7 @@ var _ = Describe("Periodic Runner", func() {
 				By("Calling shouldReconcilePVC with metrics deviating by 3Gi")
 				volInfo := &metricssource.VolumeInfo{
 					AvailableBytes:  9 * 1024 * 1024,
-					CapacityBytes:   97 * 1024 * 1024 * 1024, // delta 3Gi > 2% tolerance
+					CapacityBytes:   95 * 1024 * 1024 * 1024, // delta 5Gi > 4% tolerance
 					AvailableInodes: 1000,
 					CapacityInodes:  1000,
 				}
@@ -273,7 +273,7 @@ var _ = Describe("Periodic Runner", func() {
 				By("Calling shouldReconcilePVC with metrics deviating by 1Gi")
 				volInfo = &metricssource.VolumeInfo{
 					AvailableBytes:  9 * 1024 * 1024,
-					CapacityBytes:   99 * 1024 * 1024 * 1024, // delta 1Gi < 2% tolerance
+					CapacityBytes:   98 * 1024 * 1024 * 1024, // delta 2Gi < 4% tolerance
 					AvailableInodes: 1000,
 					CapacityInodes:  1000,
 				}
