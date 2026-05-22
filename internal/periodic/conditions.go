@@ -59,6 +59,8 @@ func (c *recommendationsConditionAggregator) getAggregatedCondition() metav1.Con
 
 	reason := ReasonRecommendationsNotProvided
 	if failureReasons.Len() == 1 {
+		// The boolean return value is ignored as we are sure that there is at least one item
+		// in the set
 		reason, _ = failureReasons.PopAny()
 	}
 
@@ -84,6 +86,8 @@ func (c *resizingConditionAggregator) addCondition(condition metav1.Condition) {
 // Resizing type. If there is one condition with status true, the aggregated condition's status is also true to indicate that there
 // is a resize in progress.
 func (c *resizingConditionAggregator) getAggregatedCondition() metav1.Condition {
+	// When there are 0 conditions, return a condition with empty fields, except for the Resizing type.
+	// This can be used in calling functions to determine whether the condition can be removed from the status of the PVCA.
 	if len(c.conditions) == 0 {
 		return metav1.Condition{Type: string(v1alpha1.ConditionTypeResizing)}
 	}
@@ -111,6 +115,8 @@ func (c *resizingConditionAggregator) getAggregatedCondition() metav1.Condition 
 
 	reason := ReasonReconcile
 	if reasons.Len() == 1 {
+		// The boolean return value is ignored as we are sure that there is at least one item
+		// in the set
 		reason, _ = reasons.PopAny()
 	}
 
