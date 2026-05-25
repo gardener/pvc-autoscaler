@@ -412,6 +412,14 @@ metadata:
   name: pvc-autoscaler-manager-role
 rules:
 - apiGroups:
+  - '*'
+  resources:
+  - '*/scale'
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - ""
   resources:
   - events
@@ -427,6 +435,14 @@ rules:
   - list
   - patch
   - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
   - watch
 - apiGroups:
   - ""
@@ -659,6 +675,7 @@ spec:
         - --interval=30s
         - --prometheus-address=http://prometheus-k8s.monitoring.svc.cluster.local:9090
         image: europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler:latest
+        imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
             path: /healthz
@@ -697,7 +714,7 @@ spec:
         - --upstream=http://127.0.0.1:8080/
         - --logtostderr=true
         - --v=0
-        image: quay.io/brancz/kube-rbac-proxy:v0.18.2
+        image: quay.io/brancz/kube-rbac-proxy:v0.21.2
         name: kube-rbac-proxy
         ports:
         - containerPort: 8443
