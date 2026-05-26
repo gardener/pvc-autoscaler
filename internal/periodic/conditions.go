@@ -84,7 +84,7 @@ func (c *resizingConditionAggregator) addCondition(condition metav1.Condition) {
 
 // getAggregatedCondition aggregates all conditions into one. If there are no conditions, it returns an empty condition with the
 // Resizing type. If there is one condition with status true, the aggregated condition's status is also true to indicate that there
-// is a resize in progress.
+// is a resize in progress. If there are only conditions with Unknown status, the aggregated condition will also have Unknown status.
 func (c *resizingConditionAggregator) getAggregatedCondition() metav1.Condition {
 	// When there are 0 conditions, return a condition with empty fields, except for the Resizing type.
 	// This can be used in calling functions to determine whether the condition can be removed from the status of the PVCA.
@@ -94,7 +94,7 @@ func (c *resizingConditionAggregator) getAggregatedCondition() metav1.Condition 
 
 	var (
 		message           = "PersistentVolumeClaims cannot be resized:"
-		status            = metav1.ConditionFalse
+		status            = metav1.ConditionUnknown
 		reasons           = sets.New[string]()
 		conditionMessages = make([]string, 0, len(c.conditions))
 	)
@@ -105,6 +105,9 @@ func (c *resizingConditionAggregator) getAggregatedCondition() metav1.Condition 
 		if condition.Status == metav1.ConditionTrue {
 			message = "PersistentVolumeClaims are being resized:"
 			status = metav1.ConditionTrue
+		} else if status == metav1.ConditionUnknown && condition.Status == metav1.ConditionFalse {
+			// Only set aggregated condition to False if it was previously Unknown and not yet set to True
+			status = metav1.ConditionFalse
 		}
 	}
 

@@ -1259,7 +1259,7 @@ var _ = Describe("Periodic Runner", func() {
 					"",
 					`could not parse pvc.autoscaling.gardener.cloud/prev-size annotation with value not-a-quantity`,
 					true,
-					metav1.ConditionFalse,
+					metav1.ConditionUnknown,
 				),
 			)
 		})
