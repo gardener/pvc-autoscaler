@@ -20,7 +20,7 @@ spec:
     spec:
       initContainers:
       - name: metrics-verifier
-        image: busybox:1.37
+        image: busybox:1.38
         command:
         - /bin/sh
         - -c
@@ -75,7 +75,7 @@ spec:
         securityContext:
           privileged: true
       - name: stage-selector
-        image: busybox:1.37
+        image: busybox:1.38
         command:
         - /bin/sh
         - -c

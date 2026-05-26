@@ -23,7 +23,7 @@ metadata:
 spec:
   containers:
   - name: metrics-test-container
-    image: busybox:1.37
+    image: busybox:1.38
     command:
     - sleep
     - infinity
