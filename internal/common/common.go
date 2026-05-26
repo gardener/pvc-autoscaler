@@ -52,4 +52,11 @@ const (
 	// as reported by the metrics source and the PVC size as indicated by the PVC status.
 	// If the deviation is bigger than this ratio, the metrics are considered stale.
 	MaxCapacityDeviationRatio = 0.04
+
+	// AnnotationPreviousSize records the PVC's spec size immediately before the most
+	// recent autoscaler-initiated resize. Used to detect that a resize is in flight
+	// before the PVC controller has set a Resizing condition. The annotation is not
+	// cleared after a successful resize, to indicate that the autoscaler has done
+	// work on this PVC.
+	AnnotationPreviousSize = "pvc.autoscaling.gardener.cloud/prev-size"
 )
