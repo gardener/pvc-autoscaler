@@ -362,7 +362,7 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		shouldResize, scalingReason := r.shouldResizePVC(pvc, policy, volumeRecommendation)
-		inProgress := r.isResizeInProgress(logger, pvc, scalingReason, volumeRecommendation, resizingConditions)
+		inProgress := r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions)
 
 		if shouldResize && !inProgress {
 			volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, policy, scalingReason, volumeRecommendation, resizingConditions)
@@ -403,6 +403,13 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 	volumeRecommendation.Current.UsedInodesPercent = &usedInodes
 
 	currStatusSize := pvc.Status.Capacity.Storage()
+	volumeRecommendation.Current.Size = currStatusSize
+
+	// If target size has not yet been recommended by the autoscaler, take the size from spec
+	// so the field is non-nil.
+	if volumeRecommendation.Target.Size == nil {
+		volumeRecommendation.Target.Size = pvc.Spec.Resources.Requests.Storage()
+	}
 
 	// Detect whether the metrics source is reporting stale data. Stale
 	// metrics data would be when the volume info metrics reported by the
@@ -545,7 +552,7 @@ func (r *Runner) shouldResizePVC(pvc *corev1.PersistentVolumeClaim, policy v1alp
 
 // isResizeInProgress checks whether the [corev1.PersistentVolumeClaim] is currently being resized.
 // Returns true if a resize operation is in progress.
-func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) bool {
+func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason string, resizingConditions *resizingConditionAggregator) bool {
 	currStatusSize := pvc.Status.Capacity.Storage()
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimResizing) {
@@ -584,10 +591,28 @@ func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVo
 		return true
 	}
 
-	// If previously recorded size is equal to the current status it means
-	// we are still waiting for the resize to complete
-	if volumeRecommendation.Current.Size != nil &&
-		volumeRecommendation.Current.Size.Equal(*currStatusSize) {
+	scaledFromAnnotationValue, ok := pvc.Annotations[common.AnnotationPreviousSize]
+	if !ok {
+		// scaled-from annotation is missing from PVC which means it has not been scaled by the pvc-autoscaler.
+		return false
+	}
+
+	scaledFrom, err := resource.ParseQuantity(scaledFromAnnotationValue)
+	if err != nil {
+		resizingConditions.addCondition(metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeResizing),
+			Status:  metav1.ConditionUnknown,
+			Reason:  ReasonReconcile,
+			Message: fmt.Sprintf("%s: could not parse %s annotation with value %s: %s", pvc.Name, common.AnnotationPreviousSize, scaledFromAnnotationValue, err.Error()),
+		})
+
+		return true
+	}
+
+	// If recorded size in the annotation is equal to the current status it means
+	// we are still waiting for the resize to complete. This is necessary as the controller responsible
+	// to do the resizing might have started it, but not yet updated the PVC's conditions.
+	if scaledFrom.Equal(*currStatusSize) {
 		logger.Info("persistent volume claim is still being resized")
 		resizingConditions.addCondition(metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
@@ -681,6 +706,12 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 
 	// Update the PVC resource.
 	pvcPatch := client.MergeFrom(pvc.DeepCopy())
+
+	if pvc.Annotations == nil {
+		pvc.Annotations = map[string]string{}
+	}
+	pvc.Annotations[common.AnnotationPreviousSize] = currSpecSize.String()
+
 	pvc.Spec.Resources.Requests[corev1.ResourceStorage] = *targetSize
 	if err := r.client.Patch(ctx, pvc, pvcPatch); err != nil {
 		resizingConditions.addCondition(metav1.Condition{
@@ -692,8 +723,6 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 
 		return volumeRecommendation, err
 	}
-
-	volumeRecommendation.Current.Size = pvc.Status.Capacity.Storage()
 	volumeRecommendation.Target.Size = targetSize
 	volumeRecommendation.LastResizeTime = ptr.To(metav1.Now())
 

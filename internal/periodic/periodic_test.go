@@ -261,8 +261,12 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(volumeRecommendation).To(Equal(v1alpha1.VolumeRecommendation{
 					Name: pvc.Name,
 					Current: v1alpha1.CurrentVolumeStatus{
+						Size:              pvc.Status.Capacity.Storage(),
 						UsedSpacePercent:  ptr.To(usedSpace),
 						UsedInodesPercent: ptr.To(usedInodes),
+					},
+					Target: v1alpha1.TargetRecommendation{
+						Size: pvc.Spec.Resources.Requests.Storage(),
 					},
 				}))
 			})
@@ -282,8 +286,12 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(volumeRecommendation).To(Equal(v1alpha1.VolumeRecommendation{
 					Name: pvc.Name,
 					Current: v1alpha1.CurrentVolumeStatus{
+						Size:              pvc.Status.Capacity.Storage(),
 						UsedSpacePercent:  ptr.To(usedSpace),
 						UsedInodesPercent: ptr.To(usedInodes),
+					},
+					Target: v1alpha1.TargetRecommendation{
+						Size: pvc.Spec.Resources.Requests.Storage(),
 					},
 				}))
 			})
@@ -1138,16 +1146,15 @@ var _ = Describe("Periodic Runner", func() {
 		})
 
 		Describe("#isResizeInProgress", func() {
-			DescribeTable("should detect whether resize is in progress based on PVC conditions",
+			DescribeTable("should detect whether resize is in progress",
 				func(
 					pvcConditionType *corev1.PersistentVolumeClaimConditionType,
-					recommendedSize string,
-					usedSpacePercent *int,
-					usedInodesPercent *int,
+					prevSizeAnnotation *string,
 					reason string,
 					expectedLogSubstring string,
 					expectedMessageRegex string,
 					expectInProgress bool,
+					expectedConditionStatus metav1.ConditionStatus,
 				) {
 					if pvcConditionType != nil {
 						By("Patching shared pvc with condition")
@@ -1157,14 +1164,14 @@ var _ = Describe("Periodic Runner", func() {
 						}
 						Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 					}
-
-					volumeRecommendation := v1alpha1.VolumeRecommendation{
-						Name: "test-pvc",
-						Current: v1alpha1.CurrentVolumeStatus{
-							Size:              ptr.To(resource.MustParse(recommendedSize)),
-							UsedSpacePercent:  usedSpacePercent,
-							UsedInodesPercent: usedInodesPercent,
-						},
+					if prevSizeAnnotation != nil {
+						By("Patching shared pvc with annotation")
+						annotationPatch := client.MergeFrom(pvc.DeepCopy())
+						if pvc.Annotations == nil {
+							pvc.Annotations = map[string]string{}
+						}
+						pvc.Annotations[common.AnnotationPreviousSize] = *prevSizeAnnotation
+						Expect(k8sClient.Patch(parentCtx, pvc, annotationPatch)).To(Succeed())
 					}
 
 					var buf strings.Builder
@@ -1172,73 +1179,87 @@ var _ = Describe("Periodic Runner", func() {
 					logger := zap.New(zap.WriteTo(w))
 
 					aggregator := &resizingConditionAggregator{}
-					inProgress := runner.isResizeInProgress(logger, pvc, reason, volumeRecommendation, aggregator)
+					inProgress := runner.isResizeInProgress(logger, pvc, reason, aggregator)
 					Expect(inProgress).To(Equal(expectInProgress))
 
-					if expectInProgress {
-						if expectedLogSubstring != "" {
-							Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
-						}
-
-						Expect(aggregator.getAggregatedCondition()).To(And(
-							HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
-							HaveField("Status", metav1.ConditionTrue),
-							HaveField("Reason", ReasonReconcile),
-							HaveField("Message", MatchRegexp(expectedMessageRegex)),
-						))
-					} else {
+					if !expectInProgress {
 						Expect(aggregator.getAggregatedCondition().Message).To(BeEmpty())
+
+						return
 					}
+
+					if expectedLogSubstring != "" {
+						Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
+					}
+					Expect(aggregator.getAggregatedCondition()).To(And(
+						HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
+						HaveField("Status", expectedConditionStatus),
+						HaveField("Reason", ReasonReconcile),
+						HaveField("Message", MatchRegexp(expectedMessageRegex)),
+					))
 				},
 				Entry("should detect resize has been started",
 					ptr.To(corev1.PersistentVolumeClaimResizing),
-					"1Gi",
-					ptr.To(95),
 					nil,
 					"passing storage threshold",
 					"resize has been started",
 					`storage threshold.*resize has been started`,
 					true,
+					metav1.ConditionTrue,
 				),
 				Entry("should detect filesystem resize is pending",
 					ptr.To(corev1.PersistentVolumeClaimFileSystemResizePending),
-					"1Gi",
 					nil,
-					ptr.To(95),
 					"passing inodes threshold",
 					"filesystem resize is pending",
 					`passing inodes threshold.*file system resize is pending`,
 					true,
+					metav1.ConditionTrue,
 				),
 				Entry("should detect volume is being modified",
 					ptr.To(corev1.PersistentVolumeClaimVolumeModifyingVolume),
-					"1Gi",
-					ptr.To(95),
 					nil,
 					"passing storage threshold",
 					"volume is being modified",
 					`storage threshold.*volume is being modified`,
 					true,
+					metav1.ConditionTrue,
 				),
-				Entry("should detect pvc is still being resized",
+				Entry("should detect pvc is still being resized when annotation matches status",
 					nil,
-					"1Gi",
-					nil,
-					ptr.To(95),
+					ptr.To("1Gi"),
 					"passing inodes threshold",
 					"persistent volume claim is still being resized",
 					`passing inodes threshold.*persistent volume claim is still being resized`,
 					true,
+					metav1.ConditionTrue,
 				),
-				Entry("should return false when no resize is in progress",
+				Entry("should return false when annotation is missing",
 					nil,
-					"2Gi",
-					ptr.To(95),
 					nil,
 					"passing storage threshold",
 					"",
 					"",
 					false,
+					metav1.ConditionTrue,
+				),
+				Entry("should return false when annotation no longer matches status (resize completed)",
+					nil,
+					ptr.To("512Mi"),
+					"passing storage threshold",
+					"",
+					"",
+					false,
+					metav1.ConditionTrue,
+				),
+				Entry("should return true on unparseable annotation and surface the parse error in the aggregated condition",
+					nil,
+					ptr.To("not-a-quantity"),
+					"passing storage threshold",
+					"",
+					`could not parse pvc.autoscaling.gardener.cloud/prev-size annotation with value not-a-quantity`,
+					true,
+					metav1.ConditionUnknown,
 				),
 			)
 		})
@@ -1274,6 +1295,7 @@ var _ = Describe("Periodic Runner", func() {
 					var resizedPvc corev1.PersistentVolumeClaim
 					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
 					Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(recommendedSize)))
+					Expect(resizedPvc.Annotations).To(HaveKeyWithValue(common.AnnotationPreviousSize, "1Gi"))
 
 					Expect(updatedRecommendation.Target.Size).NotTo(BeNil())
 					Expect(*updatedRecommendation.Target.Size).To(Equal(resource.MustParse(recommendedSize)))
@@ -1327,6 +1349,7 @@ var _ = Describe("Periodic Runner", func() {
 				firstIncreaseCap := resource.MustParse("2Gi")
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
 				Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(firstIncreaseCap))
+				Expect(resizedPvc.Annotations).To(HaveKeyWithValue(common.AnnotationPreviousSize, "1Gi"))
 
 				By("Updating PVC status to simulate actual resize")
 				patch := client.MergeFrom(resizedPvc.DeepCopy())
@@ -1344,6 +1367,7 @@ var _ = Describe("Periodic Runner", func() {
 				secondIncreaseCap := resource.MustParse("3Gi")
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
 				Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(secondIncreaseCap))
+				Expect(resizedPvc.Annotations).To(HaveKeyWithValue(common.AnnotationPreviousSize, "2Gi"))
 
 				By("Updating PVC status again to simulate actual resize")
 				patch = client.MergeFrom(resizedPvc.DeepCopy())

@@ -119,15 +119,20 @@ var _ = Describe("resizingConditionAggregator", func() {
 			Reason:  ReasonReconcile,
 			Message: "pvc-b: resizing from 1Gi to 2Gi",
 		})
+		aggregator.addCondition(metav1.Condition{
+			Status:  metav1.ConditionUnknown,
+			Reason:  ReasonReconcile,
+			Message: "pvc-d: cannot resize due to unknown error",
+		})
 
 		got := aggregator.getAggregatedCondition()
 		Expect(got.Type).To(Equal(string(v1alpha1.ConditionTypeResizing)))
 		Expect(got.Reason).To(Equal(ReasonReconcile))
 		Expect(got.Status).To(Equal(metav1.ConditionTrue))
-		Expect(got.Message).To(Equal("PersistentVolumeClaims are being resized:\n- pvc-a: max capacity reached\n- pvc-b: resizing from 1Gi to 2Gi"))
+		Expect(got.Message).To(Equal("PersistentVolumeClaims are being resized:\n- pvc-a: max capacity reached\n- pvc-b: resizing from 1Gi to 2Gi\n- pvc-d: cannot resize due to unknown error"))
 	})
 
-	It("should aggregate to False when all conditions are False", func() {
+	It("should aggregate to False when there are no True conditions", func() {
 		aggregator.addCondition(metav1.Condition{
 			Status:  metav1.ConditionFalse,
 			Reason:  ReasonPVCResizeCooldown,
@@ -138,12 +143,36 @@ var _ = Describe("resizingConditionAggregator", func() {
 			Reason:  ReasonReconcile,
 			Message: "pvc-b: max capacity reached",
 		})
+		aggregator.addCondition(metav1.Condition{
+			Status:  metav1.ConditionUnknown,
+			Reason:  ReasonReconcile,
+			Message: "pvc-d: cannot resize due to unknown error",
+		})
 
 		got := aggregator.getAggregatedCondition()
 		Expect(got.Type).To(Equal(string(v1alpha1.ConditionTypeResizing)))
 		Expect(got.Reason).To(Equal(ReasonReconcile))
 		Expect(got.Status).To(Equal(metav1.ConditionFalse))
-		Expect(got.Message).To(Equal("PersistentVolumeClaims cannot be resized:\n- pvc-a: cooldown duration has not elapsed yet\n- pvc-b: max capacity reached"))
+		Expect(got.Message).To(Equal("PersistentVolumeClaims cannot be resized:\n- pvc-a: cooldown duration has not elapsed yet\n- pvc-b: max capacity reached\n- pvc-d: cannot resize due to unknown error"))
+	})
+
+	It("should aggregate to Unknown when there are only Unknpwn conditions", func() {
+		aggregator.addCondition(metav1.Condition{
+			Status:  metav1.ConditionUnknown,
+			Reason:  ReasonReconcile,
+			Message: "pvc-a: cannot resize due to unknown error",
+		})
+		aggregator.addCondition(metav1.Condition{
+			Status:  metav1.ConditionUnknown,
+			Reason:  ReasonReconcile,
+			Message: "pvc-b: cannot resize due to unknown error",
+		})
+
+		got := aggregator.getAggregatedCondition()
+		Expect(got.Type).To(Equal(string(v1alpha1.ConditionTypeResizing)))
+		Expect(got.Reason).To(Equal(ReasonReconcile))
+		Expect(got.Status).To(Equal(metav1.ConditionUnknown))
+		Expect(got.Message).To(Equal("PersistentVolumeClaims cannot be resized:\n- pvc-a: cannot resize due to unknown error\n- pvc-b: cannot resize due to unknown error"))
 	})
 
 	It("should sort messages deterministically regardless of insertion order", func() {
