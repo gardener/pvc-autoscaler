@@ -86,7 +86,7 @@ The following properties must be specified when creating a new
 
 | Property                                                     | Description                                                                     | Default |
 |:-------------------------------------------------------------|:--------------------------------------------------------------------------------|:-------:|
-| `.spec.targetRef.name`                                       | Name of the controller or PVC to monitor and autoscal`e                          | N/A     |
+| `.spec.targetRef.name`                                       | Name of the controller or PVC to monitor and autoscale                          | N/A     |
 | `.spec.volumePolicies[].maxCapacity`                         | Max capacity up to which a PVC can be resized                                   | N/A     |
 | `.spec.volumePolicies[].scaleUp.utilizationThresholdPercent` | Threshold percentage for used space/inodes that triggers a resize               | `80`    |
 | `.spec.volumePolicies[].scaleUp.stepPercent`                 | Percentage by which to increase the PVC during resize                           | `10`    |

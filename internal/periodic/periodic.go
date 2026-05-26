@@ -227,7 +227,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 // fetchPVCsForPVCAs iterates over all [v1alpha1.PersistentVolumeClaimAutoscaler] items and retrieves all [corev1.PersistentVolumeClaim]
 // that should be scaled by them. It returns a map of [v1alpha1.PersistentVolumeClaimAutoscaler] to [corev1.PersistentVolumeClaim] objects,
 // and a "reverse" map of [corev1.PersistentVolumeClaim] object keys to the list of [v1alpha1.PersistentVolumeClaimAutoscaler]
-// object keys that manage them, which is used to detect PVCs claimed by more than one PVCA.
+// object keys that manage them, which is used to detect [corev1.PersistentVolumeClaim] claimed by more than one [v1alpha1.PersistentVolumeClaimAutoscaler].
 func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, persistentVolumeClaimAutoscalers []v1alpha1.PersistentVolumeClaimAutoscaler) (
 	map[*v1alpha1.PersistentVolumeClaimAutoscaler][]*corev1.PersistentVolumeClaim,
 	map[string][]string,
@@ -422,7 +422,7 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 // volumePolicyForPVC returns the volume policy from the given
 // [v1alpha1.PersistentVolumeClaimAutoscaler] that applies to the specified [corev1.PersistentVolumeClaim].
 // Currently only one volume policy is supported, so the first policy is always returned.
-// When multi-PVC support is added, this function will match the policy to the specific PVC.
+// When multi-PVC policy support is added, this function will match the policy to the specific [corev1.PersistentVolumeClaim].
 func volumePolicyForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, _ *corev1.PersistentVolumeClaim) v1alpha1.VolumePolicy {
 	return pvca.Spec.VolumePolicies[0]
 }
@@ -499,8 +499,8 @@ func (r *Runner) validatePVC(ctx context.Context, pvc *corev1.PersistentVolumeCl
 
 // shouldResizePVC is a predicate which checks whether the
 // [corev1.PersistentVolumeClaim] object targeted by the
-// [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered to
-// be resized. When it returns true, it also returns the scaling reason.
+// [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
+// resize. When it returns true, it also returns the scaling reason.
 func (r *Runner) shouldResizePVC(pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) (bool, string) {
 	var (
 		threshold         = *policy.ScaleUp.UtilizationThresholdPercent
@@ -679,7 +679,7 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 		targetSize.String(),
 	)
 
-	// Update PVC resource.
+	// Update the PVC resource.
 	pvcPatch := client.MergeFrom(pvc.DeepCopy())
 	pvc.Spec.Resources.Requests[corev1.ResourceStorage] = *targetSize
 	if err := r.client.Patch(ctx, pvc, pvcPatch); err != nil {
