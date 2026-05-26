@@ -36,7 +36,6 @@ jobs:
           # tests are run using prow for non-release-runs, so early-exit
           echo "dummy" > gosec-report.sarif
         fi
-      go-version: '1.25.5'
 
   verify:
     runs-on: ubuntu-latest

@@ -362,8 +362,8 @@ $(SKAFFOLD): $(call gen-tool-version,$(SKAFFOLD),$(SKAFFOLD_VERSION))
 		$(call download-tool,skaffold,https://storage.googleapis.com/skaffold/releases/$(SKAFFOLD_VERSION)/skaffold-$(GOOS)-$(GOARCH))
 
 .PHONY: gosec
-gosec: $(GOSEC) | $(LOCALHACK)
-$(GOSEC): $(call tool_version_file,$(GOSEC),$(GOSEC_VERSION))
+gosec: $(GOSEC) | $(LOCALBIN) ## Download gosec locally if necessary.
+$(GOSEC): $(call gen-tool-version,$(GOSEC),$(GOSEC_VERSION))
 	@GOSEC_VERSION=$(GOSEC_VERSION) TOOLS_BIN_DIR=$(LOCALBIN) bash $(LOCALHACK)/install-gosec.sh
 
 .PHONY: kubectl
