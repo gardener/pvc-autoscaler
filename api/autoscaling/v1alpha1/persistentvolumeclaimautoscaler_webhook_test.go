@@ -100,40 +100,6 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if more than one volume policy is specified", func() {
-			obj := &PersistentVolumeClaimAutoscaler{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "pvca-4",
-					Namespace: "default",
-				},
-				Spec: PersistentVolumeClaimAutoscalerSpec{
-					TargetRef: autoscalingv1.CrossVersionObjectReference{
-						APIVersion: "v1",
-						Kind:       "PersistentVolumeClaim",
-						Name:       "pvc-4",
-					},
-					VolumePolicies: []VolumePolicy{
-						{
-							MaxCapacity: resource.MustParse("5Gi"),
-							ScaleUp: ptr.To(ScalingRules{
-								UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
-								StepPercent:                 ptr.To(common.DefaultStepPercent),
-							}),
-						},
-						{
-							MaxCapacity: resource.MustParse("10Gi"),
-							ScaleUp: ptr.To(ScalingRules{
-								UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
-								StepPercent:                 ptr.To(common.DefaultStepPercent),
-							}),
-						},
-					},
-				},
-			}
-
-			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
-		})
-
 		It("Should deny if maxCapacity is not specified", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{

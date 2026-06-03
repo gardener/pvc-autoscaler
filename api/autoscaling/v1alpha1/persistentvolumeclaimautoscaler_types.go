@@ -51,7 +51,6 @@ type PersistentVolumeClaimAutoscalerSpec struct {
 
 	// VolumePolicies defines a list of policies for autoscaling PVCs.
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=1
 	VolumePolicies []VolumePolicy `json:"volumePolicies"`
 }
 
@@ -72,8 +71,22 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
+// DefaultVolumeResourcePolicy can be passed as VolumeName to
+// specify the default volume policy.
+const DefaultVolumeResourcePolicy = "*"
+
 // VolumePolicy defines the autoscaling policy for a specific PVC
 type VolumePolicy struct {
+	// VolumeName specifies the name or glob pattern of the PVC this policy applies to.
+	// The first policy matching a PVC's name will be used, with the following priority:
+	// 1. Exact name match
+	// 2. Glob pattern match (e.g., "data-*" matches "data-pvc")
+	// 3. Default policy ("*") as a match-all fallback
+	// +kubebuilder:default="*"
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	VolumeName string `json:"volumeName,omitempty"`
+
 	// MaxCapacity specifies the maximum capacity up to which a PVC is
 	// allowed to be extended. The max capacity is specified as a
 	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
