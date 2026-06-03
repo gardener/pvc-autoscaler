@@ -7,6 +7,7 @@ package v1alpha1
 import (
 	"context"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	pathvalidation "k8s.io/apimachinery/pkg/api/validation/path"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -68,5 +69,35 @@ func validateResourceSpec(pvca *PersistentVolumeClaimAutoscaler) error {
 		allErrs = append(allErrs, e)
 	}
 
+	allErrs = append(allErrs, validateVolumePolicies(pvca.Spec.VolumePolicies)...)
+
 	return allErrs.ToAggregate()
+}
+
+// validateVolumePolicies validates the volume policies
+func validateVolumePolicies(policies []VolumePolicy) field.ErrorList {
+	allErrs := make(field.ErrorList, 0)
+	minStep := resource.MustParse("1Gi")
+
+	for i, policy := range policies {
+		policyPath := field.NewPath("spec", "volumePolicies").Index(i)
+
+		if policy.MaxCapacity.Cmp(resource.Quantity{}) <= 0 {
+			allErrs = append(allErrs, field.Invalid(policyPath.Child("maxCapacity"), policy.MaxCapacity.String(), "must be > 0"))
+		}
+
+		if policy.ScaleUp != nil && policy.ScaleUp.MinStepAbsolute != nil {
+			if policy.ScaleUp.MinStepAbsolute.Cmp(minStep) < 0 {
+				allErrs = append(allErrs, field.Invalid(policyPath.Child("scaleUp", "minStepAbsolute"), policy.ScaleUp.MinStepAbsolute.String(), "must be >= 1Gi"))
+			}
+		}
+
+		if policy.ScaleUp != nil && policy.ScaleUp.CooldownDuration != nil {
+			if policy.ScaleUp.CooldownDuration.Duration <= 0 {
+				allErrs = append(allErrs, field.Invalid(policyPath.Child("scaleUp", "cooldownDuration"), policy.ScaleUp.CooldownDuration.Duration.String(), "must be > 0s"))
+			}
+		}
+	}
+
+	return allErrs
 }

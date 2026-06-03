@@ -84,9 +84,6 @@ spec:
                         [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
                       pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                       x-kubernetes-int-or-string: true
-                      x-kubernetes-validations:
-                      - message: maxCapacity must be > 0
-                        rule: quantity(self).isGreaterThan(quantity('0'))
                     scaleUp:
                       default: {}
                       description: ScaleUp defines the rules for scaling up the PVC.
@@ -96,9 +93,6 @@ spec:
                             CooldownDuration specifies the minimum time that must elapse after a scaling
                             operation before another scaling operation can be triggered for the targeted PVC objects.
                           type: string
-                          x-kubernetes-validations:
-                          - message: cooldownDuration must be > 0s
-                            rule: duration(self) > duration('0s')
                         minStepAbsolute:
                           anyOf:
                           - type: integer
@@ -109,10 +103,6 @@ spec:
                             This ensures that the change in capacity is at least this amount, regardless of the percentage.
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
-                          x-kubernetes-validations:
-                          - message: minStepAbsolute must be > 1 if specified
-                            rule: self == null || quantity(self).compareTo(quantity('1Gi'))
-                              >= 0
                         stepPercent:
                           default: 10
                           description: StepPercent specifies the percentage by which

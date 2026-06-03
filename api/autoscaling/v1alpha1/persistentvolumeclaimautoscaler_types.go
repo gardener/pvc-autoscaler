@@ -90,7 +90,6 @@ type VolumePolicy struct {
 	// MaxCapacity specifies the maximum capacity up to which a PVC is
 	// allowed to be extended. The max capacity is specified as a
 	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
-	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="maxCapacity must be > 0"
 	MaxCapacity resource.Quantity `json:"maxCapacity"`
 
 	// ScaleUp defines the rules for scaling up the PVC.
@@ -118,14 +117,12 @@ type ScalingRules struct {
 
 	// MinStepAbsolute specifies the minimum absolute change in capacity during scaling.
 	// This ensures that the change in capacity is at least this amount, regardless of the percentage.
-	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).compareTo(quantity('1Gi')) >= 0",message="minStepAbsolute must be > 1 if specified"
 	// +kubebuilder:default="1Gi"
 	// +optional
 	MinStepAbsolute *resource.Quantity `json:"minStepAbsolute,omitempty"`
 
 	// CooldownDuration specifies the minimum time that must elapse after a scaling
 	// operation before another scaling operation can be triggered for the targeted PVC objects.
-	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }
