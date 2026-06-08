@@ -453,6 +453,7 @@ func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) *v1
 		}
 		if volumePolicy.VolumeName == v1alpha1.DefaultVolumeResourcePolicy {
 			defaultPolicy = &volumePolicies[i]
+
 			continue
 		}
 		if firstGlobMatch == nil && strings.Contains(volumePolicy.VolumeName, "*") {
@@ -464,6 +465,7 @@ func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) *v1
 	if firstGlobMatch != nil {
 		return firstGlobMatch
 	}
+
 	return defaultPolicy
 }
 
