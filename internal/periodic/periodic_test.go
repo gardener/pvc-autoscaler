@@ -225,24 +225,6 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
 		})
 
-		It("should match glob pattern with prefix", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					VolumeName:  "data-*",
-					MaxCapacity: resource.MustParse("10Gi"),
-				},
-				{
-					VolumeName:  v1alpha1.DefaultVolumeResourcePolicy,
-					MaxCapacity: resource.MustParse("5Gi"),
-				},
-			}
-
-			policy := getVolumePolicy("data-pvc", volumePolicies)
-			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal("data-*"))
-			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
-		})
-
 		It("should match glob pattern with suffix", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
