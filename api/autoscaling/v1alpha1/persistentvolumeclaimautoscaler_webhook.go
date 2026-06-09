@@ -6,9 +6,11 @@ package v1alpha1
 
 import (
 	"context"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	pathvalidation "k8s.io/apimachinery/pkg/api/validation/path"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -82,6 +84,10 @@ func validateVolumePolicies(policies []VolumePolicy) field.ErrorList {
 	for i, policy := range policies {
 		policyPath := field.NewPath("spec", "volumePolicies").Index(i)
 
+		for _, msg := range validateVolumePolicyName(policy.VolumeName) {
+			allErrs = append(allErrs, field.Invalid(policyPath.Child("volumeName"), policy.VolumeName, msg))
+		}
+
 		if policy.MaxCapacity.Cmp(resource.Quantity{}) <= 0 {
 			allErrs = append(allErrs, field.Invalid(policyPath.Child("maxCapacity"), policy.MaxCapacity.String(), "must be > 0"))
 		}
@@ -100,4 +106,10 @@ func validateVolumePolicies(policies []VolumePolicy) field.ErrorList {
 	}
 
 	return allErrs
+}
+
+func validateVolumePolicyName(volumeName string) []string {
+	replaced := strings.ReplaceAll(volumeName, "*", "a")
+
+	return utilvalidation.IsDNS1123Subdomain(replaced)
 }
