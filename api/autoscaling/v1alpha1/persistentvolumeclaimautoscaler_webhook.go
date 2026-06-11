@@ -84,8 +84,14 @@ func validateVolumePolicies(policies []VolumePolicy) field.ErrorList {
 	for i, policy := range policies {
 		policyPath := field.NewPath("spec", "volumePolicies").Index(i)
 
-		for _, msg := range validateVolumePolicyName(policy.VolumeName) {
-			allErrs = append(allErrs, field.Invalid(policyPath.Child("volumeName"), policy.VolumeName, msg))
+		if policy.Match == nil {
+			allErrs = append(allErrs, field.Required(policyPath.Child("match"), "match criteria must be specified"))
+
+			continue
+		}
+
+		for _, msg := range validateVolumePolicyMatchName(policy.Match.Name) {
+			allErrs = append(allErrs, field.Invalid(policyPath.Child("match", "name"), policy.Match.Name, msg))
 		}
 
 		if policy.MaxCapacity.Cmp(resource.Quantity{}) <= 0 {
@@ -108,8 +114,8 @@ func validateVolumePolicies(policies []VolumePolicy) field.ErrorList {
 	return allErrs
 }
 
-func validateVolumePolicyName(volumeName string) []string {
-	replaced := strings.ReplaceAll(volumeName, "*", "a")
+func validateVolumePolicyMatchName(matchName string) []string {
+	replaced := strings.ReplaceAll(matchName, "*", "a")
 
 	return utilvalidation.IsDNS1123Subdomain(replaced)
 }

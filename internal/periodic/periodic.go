@@ -334,7 +334,19 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		policy := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+		policy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+		if err != nil {
+			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
+			recommendationConditions.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonRecommendationError,
+				Message: fmt.Sprintf("%s: %s", pvcObjKey.Name, err.Error()),
+			})
+
+			continue
+		}
+
 		if policy == nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", "no matching volume policy")
 			recommendationConditions.addCondition(metav1.Condition{
@@ -444,29 +456,36 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 // 1. Exact name match
 // 2. Glob pattern match (e.g., "data-*" matches "data-pvc")
 // 3. Default policy ("*") as a fallback
-func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) *v1alpha1.VolumePolicy {
+func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) (*v1alpha1.VolumePolicy, error) {
 	var defaultPolicy *v1alpha1.VolumePolicy
 	var firstGlobMatch *v1alpha1.VolumePolicy
 	for i, volumePolicy := range volumePolicies {
-		if volumePolicy.VolumeName == pvcName {
-			return &volumePolicies[i]
+		if volumePolicy.Match == nil {
+			return nil, fmt.Errorf("invalid volume policy: match criteria must be specified")
 		}
-		if volumePolicy.VolumeName == v1alpha1.DefaultVolumeResourcePolicy {
+		if volumePolicy.Match.Name == pvcName {
+			return &volumePolicies[i], nil
+		}
+		if volumePolicy.Match.Name == v1alpha1.DefaultVolumeResourcePolicy {
 			defaultPolicy = &volumePolicies[i]
 
 			continue
 		}
-		if firstGlobMatch == nil && strings.Contains(volumePolicy.VolumeName, "*") {
-			if matched, _ := path.Match(volumePolicy.VolumeName, pvcName); matched {
+		if firstGlobMatch == nil && strings.Contains(volumePolicy.Match.Name, "*") {
+			matched, err := path.Match(volumePolicy.Match.Name, pvcName)
+			if err != nil {
+				return nil, fmt.Errorf("invalid volume policy name %q: %w", volumePolicy.Match.Name, err)
+			}
+			if matched {
 				firstGlobMatch = &volumePolicies[i]
 			}
 		}
 	}
 	if firstGlobMatch != nil {
-		return firstGlobMatch
+		return firstGlobMatch, nil
 	}
 
-	return defaultPolicy
+	return defaultPolicy, nil
 }
 
 // getOrCreateVolumeRecommendationForPVC returns the [v1alpha1.VolumeRecommendation] for

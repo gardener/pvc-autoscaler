@@ -141,86 +141,111 @@ var _ = Describe("Periodic Runner", func() {
 		It("should return named policy when PVC name matches exactly", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  "data-pvc",
+					Match: &v1alpha1.Match{
+						Name: "data-pvc",
+					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 				{
-					VolumeName:  v1alpha1.DefaultVolumeResourcePolicy,
+					Match: &v1alpha1.Match{
+						Name: v1alpha1.DefaultVolumeResourcePolicy,
+					},
 					MaxCapacity: resource.MustParse("5Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal("data-pvc"))
+			Expect(policy.Match.Name).To(Equal("data-pvc"))
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
 		})
 
 		It("should not fall back to default policy when named policy exists", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  v1alpha1.DefaultVolumeResourcePolicy,
+					Match: &v1alpha1.Match{
+						Name: v1alpha1.DefaultVolumeResourcePolicy,
+					},
 					MaxCapacity: resource.MustParse("5Gi"),
 				},
 				{
-					VolumeName:  "data-pvc",
+					Match: &v1alpha1.Match{
+						Name: "data-pvc",
+					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal("data-pvc"))
+			Expect(policy.Match.Name).To(Equal("data-pvc"))
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
 		})
 
 		It("should fall back to default policy when no named policy matches", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  "other-pvc",
+					Match: &v1alpha1.Match{
+						Name: "other-pvc",
+					},
 					MaxCapacity: resource.MustParse("20Gi"),
 				},
 				{
-					VolumeName:  v1alpha1.DefaultVolumeResourcePolicy,
+					Match: &v1alpha1.Match{
+						Name: v1alpha1.DefaultVolumeResourcePolicy,
+					},
 					MaxCapacity: resource.MustParse("5Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal(v1alpha1.DefaultVolumeResourcePolicy))
+			Expect(policy.Match.Name).To(Equal(v1alpha1.DefaultVolumeResourcePolicy))
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("5Gi")))
 		})
 
 		It("should return nil when no matching policy exists", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  "other-pvc",
+					Match: &v1alpha1.Match{
+						Name: "other-pvc",
+					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 				{
-					VolumeName:  "another-pvc",
+					Match: &v1alpha1.Match{
+						Name: "another-pvc",
+					},
 					MaxCapacity: resource.MustParse("20Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).To(BeNil())
 		})
 
 		It("should return first matching named policy when duplicates exist", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  "data-pvc",
+					Match: &v1alpha1.Match{
+						Name: "data-pvc",
+					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 				{
-					VolumeName:  "data-pvc",
+					Match: &v1alpha1.Match{
+						Name: "data-pvc",
+					},
 					MaxCapacity: resource.MustParse("20Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
 		})
@@ -228,85 +253,108 @@ var _ = Describe("Periodic Runner", func() {
 		It("should match glob pattern with suffix", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  "*-logs",
+					Match: &v1alpha1.Match{
+						Name: "*-logs",
+					},
 					MaxCapacity: resource.MustParse("15Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("app-logs", volumePolicies)
+			policy, err := getVolumePolicy("app-logs", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal("*-logs"))
+			Expect(policy.Match.Name).To(Equal("*-logs"))
 		})
 
 		It("should prefer exact match over glob pattern", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  "data-*",
+					Match: &v1alpha1.Match{
+						Name: "data-*",
+					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 				{
-					VolumeName:  "data-pvc",
+					Match: &v1alpha1.Match{
+						Name: "data-pvc",
+					},
 					MaxCapacity: resource.MustParse("20Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal("data-pvc"))
+			Expect(policy.Match.Name).To(Equal("data-pvc"))
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("20Gi")))
 		})
 
 		It("should prefer glob pattern over default policy", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  v1alpha1.DefaultVolumeResourcePolicy,
+					Match: &v1alpha1.Match{
+						Name: v1alpha1.DefaultVolumeResourcePolicy,
+					},
 					MaxCapacity: resource.MustParse("5Gi"),
 				},
 				{
-					VolumeName:  "data-*",
+					Match: &v1alpha1.Match{
+						Name: "data-*",
+					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal("data-*"))
+			Expect(policy.Match.Name).To(Equal("data-*"))
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
 		})
 
 		It("should return first matching glob pattern when multiple patterns match", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  "data-*",
+					Match: &v1alpha1.Match{
+						Name: "data-*",
+					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 				{
-					VolumeName:  "*-pvc",
+					Match: &v1alpha1.Match{
+						Name: "*-pvc",
+					},
 					MaxCapacity: resource.MustParse("15Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal("data-*"))
+			Expect(policy.Match.Name).To(Equal("data-*"))
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
 		})
 
 		It("should fall back to default when glob pattern does not match", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					VolumeName:  "logs-*",
+					Match: &v1alpha1.Match{
+						Name: "logs-*",
+					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 				{
-					VolumeName:  v1alpha1.DefaultVolumeResourcePolicy,
+					Match: &v1alpha1.Match{
+						Name: v1alpha1.DefaultVolumeResourcePolicy,
+					},
 					MaxCapacity: resource.MustParse("5Gi"),
 				},
 			}
 
-			policy := getVolumePolicy("data-pvc", volumePolicies)
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.VolumeName).To(Equal(v1alpha1.DefaultVolumeResourcePolicy))
+			Expect(policy.Match.Name).To(Equal(v1alpha1.DefaultVolumeResourcePolicy))
 		})
 	})
 
@@ -507,7 +555,10 @@ var _ = Describe("Periodic Runner", func() {
 					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
-				err = runner.validatePVC(parentCtx, pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies))
+				volumePolicy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(volumePolicy).NotTo(BeNil())
+				err = runner.validatePVC(parentCtx, pvc, *volumePolicy)
 				Expect(err).To(MatchError(ErrStorageClassNotFound))
 			})
 
@@ -564,7 +615,10 @@ var _ = Describe("Periodic Runner", func() {
 					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
-				err = runner.validatePVC(parentCtx, pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies))
+				volumePolicy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(volumePolicy).NotTo(BeNil())
+				err = runner.validatePVC(parentCtx, pvc, *volumePolicy)
 				Expect(err).To(MatchError(ErrStorageClassDoesNotSupportExpansion))
 			})
 
@@ -602,7 +656,10 @@ var _ = Describe("Periodic Runner", func() {
 					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
 				})
 
-				err = runner.validatePVC(parentCtx, pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies))
+				volumePolicy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(volumePolicy).NotTo(BeNil())
+				err = runner.validatePVC(parentCtx, pvc, *volumePolicy)
 				Expect(err).To(MatchError(ErrVolumeModeIsNotFilesystem))
 			})
 
@@ -612,7 +669,10 @@ var _ = Describe("Periodic Runner", func() {
 				pvc.Status.Phase = corev1.ClaimLost
 				Expect(k8sClient.Status().Patch(parentCtx, pvc, patch)).To(Succeed())
 
-				err := runner.validatePVC(parentCtx, pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies))
+				volumePolicy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(volumePolicy).NotTo(BeNil())
+				err = runner.validatePVC(parentCtx, pvc, *volumePolicy)
 				Expect(err).To(MatchError(ErrPVCNotBound))
 			})
 		})
@@ -627,7 +687,11 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				}
 
-				ok, reason := runner.shouldResizePVC(pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies), volumeRecommendation)
+				volumePolicy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(volumePolicy).NotTo(BeNil())
+
+				ok, reason := runner.shouldResizePVC(pvc, *volumePolicy, volumeRecommendation)
 				Expect(ok).To(BeFalse())
 				Expect(reason).To(BeEmpty())
 			})
@@ -656,7 +720,11 @@ var _ = Describe("Periodic Runner", func() {
 						},
 					}
 
-					ok, reason := testRunner.shouldResizePVC(pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies), volumeRecommendation)
+					volumePolicy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(volumePolicy).NotTo(BeNil())
+
+					ok, reason := testRunner.shouldResizePVC(pvc, *volumePolicy, volumeRecommendation)
 					Expect(ok).To(BeTrue())
 					Expect(reason).To(Equal("passing storage threshold"))
 
@@ -674,7 +742,11 @@ var _ = Describe("Periodic Runner", func() {
 						},
 					}
 
-					ok, reason := testRunner.shouldResizePVC(pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies), volumeRecommendation)
+					volumePolicy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(volumePolicy).NotTo(BeNil())
+
+					ok, reason := testRunner.shouldResizePVC(pvc, *volumePolicy, volumeRecommendation)
 					Expect(ok).To(BeTrue())
 					Expect(reason).To(Equal("passing inodes threshold"))
 
@@ -885,7 +957,9 @@ var _ = Describe("Periodic Runner", func() {
 				noMatchPVCA, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 					parentCtx, k8sClient, "pvca-no-match", noMatchTargetRef, []v1alpha1.VolumePolicy{
 						{
-							VolumeName:  "non-matching-pvc-name",
+							Match: &v1alpha1.Match{
+								Name: "non-matching-pvc-name",
+							},
 							MaxCapacity: resource.MustParse("10Gi"),
 						},
 					},
@@ -1512,7 +1586,9 @@ var _ = Describe("Periodic Runner", func() {
 					logger := zap.New(zap.WriteTo(w))
 
 					aggregator := &resizingConditionAggregator{}
-					updatedRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies), reason, volumeRecommendation, aggregator)
+					volumePolicy, errPolicy := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+					Expect(errPolicy).NotTo(HaveOccurred())
+					updatedRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, *volumePolicy, reason, volumeRecommendation, aggregator)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
 
@@ -1564,7 +1640,9 @@ var _ = Describe("Periodic Runner", func() {
 
 				By("Performing first resize")
 				aggregator := &resizingConditionAggregator{}
-				volumeRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies), "passing storage threshold", volumeRecommendation, aggregator)
+				volumePolicy, errPolicy := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+				Expect(errPolicy).NotTo(HaveOccurred())
+				volumeRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
 				Expect(err).NotTo(HaveOccurred())
 
 				wantLog := `"resizing persistent volume claim","pvc":"test-pvc","from":"1Gi","to":"2Gi"}`
@@ -1583,7 +1661,9 @@ var _ = Describe("Periodic Runner", func() {
 
 				By("Performing second resize")
 				aggregator = &resizingConditionAggregator{}
-				volumeRecommendation, err = runner.resizePVC(parentCtx, logger, &resizedPvc, *getVolumePolicy(resizedPvc.Name, pvca.Spec.VolumePolicies), "passing storage threshold", volumeRecommendation, aggregator)
+				volumePolicy, errPolicy = getVolumePolicy(resizedPvc.Name, pvca.Spec.VolumePolicies)
+				Expect(errPolicy).NotTo(HaveOccurred())
+				volumeRecommendation, err = runner.resizePVC(parentCtx, logger, &resizedPvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
 				Expect(err).NotTo(HaveOccurred())
 
 				wantLog = `"resizing persistent volume claim","pvc":"test-pvc","from":"2Gi","to":"3Gi"}`
@@ -1601,7 +1681,9 @@ var _ = Describe("Periodic Runner", func() {
 
 				By("Expecting third attempt to fail with max capacity reached")
 				aggregator = &resizingConditionAggregator{}
-				_, err = runner.resizePVC(parentCtx, logger, &resizedPvc, *getVolumePolicy(resizedPvc.Name, pvca.Spec.VolumePolicies), "passing storage threshold", volumeRecommendation, aggregator)
+				volumePolicy, errPolicy = getVolumePolicy(resizedPvc.Name, pvca.Spec.VolumePolicies)
+				Expect(errPolicy).NotTo(HaveOccurred())
+				_, err = runner.resizePVC(parentCtx, logger, &resizedPvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(buf.String()).To(ContainSubstring("max capacity reached"))
 
@@ -1633,7 +1715,9 @@ var _ = Describe("Periodic Runner", func() {
 
 					beforeResize := time.Now()
 					aggregator := &resizingConditionAggregator{}
-					updatedRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, *getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies), "passing storage threshold", volumeRecommendation, aggregator)
+					volumePolicy, errPolicy := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+					Expect(errPolicy).NotTo(HaveOccurred())
+					updatedRecommendation, err := runner.resizePVC(parentCtx, logger, pvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buf.String()).To(ContainSubstring(expectedLog))
 

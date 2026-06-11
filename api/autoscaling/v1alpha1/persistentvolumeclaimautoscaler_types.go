@@ -77,15 +77,10 @@ const DefaultVolumeResourcePolicy = "*"
 
 // VolumePolicy defines the autoscaling policy for a specific PVC
 type VolumePolicy struct {
-	// VolumeName specifies the name or glob pattern of the PVC this policy applies to.
-	// The first policy matching a PVC's name will be used, with the following priority:
-	// 1. Exact name match
-	// 2. Glob pattern match (e.g., "data-*" matches "data-pvc")
-	// 3. Default policy ("*") as a match-all fallback
-	// +kubebuilder:default="*"
-	// +kubebuilder:validation:MinLength=1
+	// Match specifies the matching criteria for selecting PVCs to which this policy applies.
+	// +kubebuilder:default:={}
 	// +optional
-	VolumeName string `json:"volumeName,omitempty"`
+	Match *Match `json:"match,omitempty"`
 
 	// MaxCapacity specifies the maximum capacity up to which a PVC is
 	// allowed to be extended. The max capacity is specified as a
@@ -96,6 +91,19 @@ type VolumePolicy struct {
 	// +kubebuilder:default:={}
 	// +optional
 	ScaleUp *ScalingRules `json:"scaleUp,omitempty"`
+}
+
+// Match defines the matching criteria for selecting PVCs to which a VolumePolicy applies. It supports exact name matching, glob pattern matching, and a default match-all option.
+type Match struct {
+	// Name specifies the name of the PVC.
+	// With the following priority it supports:
+	// 1. Exact name match
+	// 2. Glob pattern match (e.g., "data-*" matches "data-pvc")
+	// 3. Default policy ("*") as a match-all fallback
+	// +kubebuilder:default="*"
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 // ScalingRules defines the rules for scaling a PVC.
