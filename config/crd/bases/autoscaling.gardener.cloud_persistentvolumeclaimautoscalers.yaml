@@ -74,6 +74,22 @@ spec:
                   description: VolumePolicy defines the autoscaling policy for a specific
                     PVC
                   properties:
+                    match:
+                      default: {}
+                      description: Match specifies the matching criteria for selecting
+                        PVCs to which this policy applies.
+                      properties:
+                        name:
+                          default: '*'
+                          description: |-
+                            Name specifies the name of the PVC.
+                            With the following priority it supports:
+                            1. Exact name match
+                            2. Glob pattern match (e.g., "data-*" matches "data-pvc")
+                            3. Default policy ("*") as a match-all fallback
+                          minLength: 1
+                          type: string
+                      type: object
                     maxCapacity:
                       anyOf:
                       - type: integer
@@ -119,16 +135,6 @@ spec:
                           minimum: 1
                           type: integer
                       type: object
-                    volumeName:
-                      default: '*'
-                      description: |-
-                        VolumeName specifies the name or glob pattern of the PVC this policy applies to.
-                        The first policy matching a PVC's name will be used, with the following priority:
-                        1. Exact name match
-                        2. Glob pattern match (e.g., "data-*" matches "data-pvc")
-                        3. Default policy ("*") as a match-all fallback
-                      minLength: 1
-                      type: string
                   required:
                   - maxCapacity
                   type: object
