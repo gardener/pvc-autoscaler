@@ -459,15 +459,15 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) (*v1alpha1.VolumePolicy, error) {
 	var defaultPolicy *v1alpha1.VolumePolicy
 	var firstGlobMatch *v1alpha1.VolumePolicy
-	for i, volumePolicy := range volumePolicies {
+	for _, volumePolicy := range volumePolicies {
 		if volumePolicy.Match == nil {
 			return nil, fmt.Errorf("invalid volume policy: match criteria must be specified")
 		}
 		if volumePolicy.Match.Name == pvcName {
-			return &volumePolicies[i], nil
+			return &volumePolicy, nil
 		}
 		if volumePolicy.Match.Name == v1alpha1.DefaultVolumeResourcePolicy {
-			defaultPolicy = &volumePolicies[i]
+			defaultPolicy = &volumePolicy
 
 			continue
 		}
@@ -477,7 +477,7 @@ func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) (*v
 				return nil, fmt.Errorf("invalid volume policy name %q: %w", volumePolicy.Match.Name, err)
 			}
 			if matched {
-				firstGlobMatch = &volumePolicies[i]
+				firstGlobMatch = &volumePolicy
 			}
 		}
 	}
