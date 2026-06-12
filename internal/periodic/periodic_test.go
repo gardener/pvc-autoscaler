@@ -138,7 +138,51 @@ var _ = Describe("Periodic Runner", func() {
 	})
 
 	Context("getVolumePolicy", func() {
-		It("should return named policy when PVC name matches exactly", func() {
+		It("should return error when a policy has nil match", func() {
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					Match:       nil,
+					MaxCapacity: resource.MustParse("10Gi"),
+				},
+			}
+
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).To(MatchError("invalid volume policy: match criteria must be specified"))
+			Expect(policy).To(BeNil())
+		})
+
+		It("should return error on invalid glob pattern", func() {
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					Match: &v1alpha1.Match{
+						Name: "[",
+					},
+					MaxCapacity: resource.MustParse("10Gi"),
+				},
+			}
+
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invalid volume policy name \"[\""))
+			Expect(policy).To(BeNil())
+		})
+
+		It("should return nil when no policy matches", func() {
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					Match: &v1alpha1.Match{
+						Name: "other-pvc",
+					},
+					MaxCapacity: resource.MustParse("10Gi"),
+				},
+			}
+
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(policy).To(BeNil())
+		})
+
+		It("should match exact name", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
 					Match: &v1alpha1.Match{
@@ -146,6 +190,32 @@ var _ = Describe("Periodic Runner", func() {
 					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
+			}
+
+			policy, err := getVolumePolicy("data-pvc", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(policy).NotTo(BeNil())
+			Expect(policy.Match.Name).To(Equal("data-pvc"))
+		})
+
+		It("should match glob pattern", func() {
+			volumePolicies := []v1alpha1.VolumePolicy{
+				{
+					Match: &v1alpha1.Match{
+						Name: "*-logs",
+					},
+					MaxCapacity: resource.MustParse("15Gi"),
+				},
+			}
+
+			policy, err := getVolumePolicy("app-logs", volumePolicies)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(policy).NotTo(BeNil())
+			Expect(policy.Match.Name).To(Equal("*-logs"))
+		})
+
+		It("should match default policy", func() {
+			volumePolicies := []v1alpha1.VolumePolicy{
 				{
 					Match: &v1alpha1.Match{
 						Name: v1alpha1.DefaultVolumeResourcePolicy,
@@ -157,34 +227,10 @@ var _ = Describe("Periodic Runner", func() {
 			policy, err := getVolumePolicy("data-pvc", volumePolicies)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal("data-pvc"))
-			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
+			Expect(policy.Match.Name).To(Equal(v1alpha1.DefaultVolumeResourcePolicy))
 		})
 
-		It("should not fall back to default policy when named policy exists", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					Match: &v1alpha1.Match{
-						Name: v1alpha1.DefaultVolumeResourcePolicy,
-					},
-					MaxCapacity: resource.MustParse("5Gi"),
-				},
-				{
-					Match: &v1alpha1.Match{
-						Name: "data-pvc",
-					},
-					MaxCapacity: resource.MustParse("10Gi"),
-				},
-			}
-
-			policy, err := getVolumePolicy("data-pvc", volumePolicies)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal("data-pvc"))
-			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
-		})
-
-		It("should fall back to default policy when no named policy matches", func() {
+		It("should fall back to default policy when no other policy matches", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
 					Match: &v1alpha1.Match{
@@ -207,66 +253,7 @@ var _ = Describe("Periodic Runner", func() {
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("5Gi")))
 		})
 
-		It("should return nil when no matching policy exists", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					Match: &v1alpha1.Match{
-						Name: "other-pvc",
-					},
-					MaxCapacity: resource.MustParse("10Gi"),
-				},
-				{
-					Match: &v1alpha1.Match{
-						Name: "another-pvc",
-					},
-					MaxCapacity: resource.MustParse("20Gi"),
-				},
-			}
-
-			policy, err := getVolumePolicy("data-pvc", volumePolicies)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(policy).To(BeNil())
-		})
-
-		It("should return first matching named policy when duplicates exist", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					Match: &v1alpha1.Match{
-						Name: "data-pvc",
-					},
-					MaxCapacity: resource.MustParse("10Gi"),
-				},
-				{
-					Match: &v1alpha1.Match{
-						Name: "data-pvc",
-					},
-					MaxCapacity: resource.MustParse("20Gi"),
-				},
-			}
-
-			policy, err := getVolumePolicy("data-pvc", volumePolicies)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(policy).NotTo(BeNil())
-			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
-		})
-
-		It("should match glob pattern with suffix", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					Match: &v1alpha1.Match{
-						Name: "*-logs",
-					},
-					MaxCapacity: resource.MustParse("15Gi"),
-				},
-			}
-
-			policy, err := getVolumePolicy("app-logs", volumePolicies)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal("*-logs"))
-		})
-
-		It("should prefer exact match over glob pattern", func() {
+		It("should return first seen matching policy", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
 					Match: &v1alpha1.Match{
@@ -279,69 +266,6 @@ var _ = Describe("Periodic Runner", func() {
 						Name: "data-pvc",
 					},
 					MaxCapacity: resource.MustParse("20Gi"),
-				},
-			}
-
-			policy, err := getVolumePolicy("data-pvc", volumePolicies)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal("data-pvc"))
-			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("20Gi")))
-		})
-
-		It("should prefer glob pattern over default policy", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					Match: &v1alpha1.Match{
-						Name: v1alpha1.DefaultVolumeResourcePolicy,
-					},
-					MaxCapacity: resource.MustParse("5Gi"),
-				},
-				{
-					Match: &v1alpha1.Match{
-						Name: "data-*",
-					},
-					MaxCapacity: resource.MustParse("10Gi"),
-				},
-			}
-
-			policy, err := getVolumePolicy("data-pvc", volumePolicies)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal("data-*"))
-			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
-		})
-
-		It("should return first matching glob pattern when multiple patterns match", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					Match: &v1alpha1.Match{
-						Name: "data-*",
-					},
-					MaxCapacity: resource.MustParse("10Gi"),
-				},
-				{
-					Match: &v1alpha1.Match{
-						Name: "*-pvc",
-					},
-					MaxCapacity: resource.MustParse("15Gi"),
-				},
-			}
-
-			policy, err := getVolumePolicy("data-pvc", volumePolicies)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal("data-*"))
-			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
-		})
-
-		It("should fall back to default when glob pattern does not match", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					Match: &v1alpha1.Match{
-						Name: "logs-*",
-					},
-					MaxCapacity: resource.MustParse("10Gi"),
 				},
 				{
 					Match: &v1alpha1.Match{
@@ -354,7 +278,8 @@ var _ = Describe("Periodic Runner", func() {
 			policy, err := getVolumePolicy("data-pvc", volumePolicies)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal(v1alpha1.DefaultVolumeResourcePolicy))
+			Expect(policy.Match.Name).To(Equal("data-*"))
+			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("10Gi")))
 		})
 	})
 

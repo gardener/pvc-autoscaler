@@ -83,10 +83,9 @@ spec:
                           default: '*'
                           description: |-
                             Name specifies the name of the PVC.
-                            With the following priority it supports:
-                            1. Exact name match
-                            2. Glob pattern match (e.g., "data-*" matches "data-pvc")
-                            3. Default policy ("*") as a match-all fallback
+                            It supports exact and glob pattern matching (e.g., "data-*" matches "data-pvc").
+                            Policies are evaluated in list order and the first matching policy is used.
+                            "*" can be used as a match-all policy.
                           minLength: 1
                           type: string
                       type: object

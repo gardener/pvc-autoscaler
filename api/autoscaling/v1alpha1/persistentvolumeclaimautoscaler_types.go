@@ -96,10 +96,9 @@ type VolumePolicy struct {
 // Match defines the matching criteria for selecting PVCs to which a VolumePolicy applies. It supports exact name matching, glob pattern matching, and a default match-all option.
 type Match struct {
 	// Name specifies the name of the PVC.
-	// With the following priority it supports:
-	// 1. Exact name match
-	// 2. Glob pattern match (e.g., "data-*" matches "data-pvc")
-	// 3. Default policy ("*") as a match-all fallback
+	// It supports exact and glob pattern matching (e.g., "data-*" matches "data-pvc").
+	// Policies are evaluated in list order and the first matching policy is used.
+	// "*" can be used as a match-all policy.
 	// +kubebuilder:default="*"
 	// +kubebuilder:validation:MinLength=1
 	// +optional
