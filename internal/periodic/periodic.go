@@ -461,7 +461,7 @@ func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) (*v
 	var firstGlobMatch *v1alpha1.VolumePolicy
 	for _, volumePolicy := range volumePolicies {
 		if volumePolicy.Match == nil {
-			return nil, fmt.Errorf("invalid volume policy: match criteria must be specified")
+			return nil, errors.New("invalid volume policy: match criteria must be specified")
 		}
 		if volumePolicy.Match.Name == pvcName {
 			return &volumePolicy, nil
