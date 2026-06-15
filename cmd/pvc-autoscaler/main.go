@@ -29,6 +29,7 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/healthcheck"
 	_ "github.com/gardener/pvc-autoscaler/internal/metrics"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/prometheus"
@@ -158,6 +159,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	heartbeat := healthcheck.NewHeartbeat(interval * 5)
+
 	// Add the periodic runner
 	runner, err := periodic.New(
 		periodic.WithClient(mgr.GetClient()),
@@ -165,6 +168,7 @@ func main() {
 		periodic.WithMetricsSource(metricsSource),
 		periodic.WithEventRecorder(mgr.GetEventRecorderFor(common.ControllerName)),
 		periodic.WithPVCFetcher(pvcFetcher),
+		periodic.WithHeartbeat(heartbeat),
 	)
 	if err != nil {
 		setupLog.Error(err, "unable to create periodic runner", "controller", common.ControllerName)
@@ -184,7 +188,7 @@ func main() {
 	}
 	//+kubebuilder:scaffold:builder
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	if err := mgr.AddHealthzCheck("healthz", heartbeat.Check); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
