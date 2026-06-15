@@ -271,7 +271,7 @@ GOLANGCI_LINT_VERSION ?= v2.11.4
 # renovate: datasource=github-releases depName=kubernetes/minikube
 MINIKUBE_VERSION ?= v1.38.1
 # renovate: datasource=github-releases depName=mikefarah/yq
-YQ_VERSION ?= v4.53.2
+YQ_VERSION ?= v4.53.3
 # renovate: datasource=github-releases depName=helm/helm
 HELM_VERSION ?= v3.21.1
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
