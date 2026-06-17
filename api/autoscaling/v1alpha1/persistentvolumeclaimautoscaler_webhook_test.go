@@ -100,17 +100,17 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if more than one volume policy is specified", func() {
+		It("Should default and admit if match criteria is not specified", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "pvca-4",
+					Name:      "pvca-missing-match",
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						APIVersion: "v1",
 						Kind:       "PersistentVolumeClaim",
-						Name:       "pvc-4",
+						Name:       "pvc-missing-match",
 					},
 					VolumePolicies: []VolumePolicy{
 						{
@@ -118,20 +118,16 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 							ScaleUp: ptr.To(ScalingRules{
 								UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
 								StepPercent:                 ptr.To(common.DefaultStepPercent),
-							}),
-						},
-						{
-							MaxCapacity: resource.MustParse("10Gi"),
-							ScaleUp: ptr.To(ScalingRules{
-								UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
-								StepPercent:                 ptr.To(common.DefaultStepPercent),
+								MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+								CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 							}),
 						},
 					},
 				},
 			}
 
-			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
+			Expect(k8sClient.Create(ctx, obj)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
 		})
 
 		It("Should deny if maxCapacity is not specified", func() {
@@ -262,6 +258,38 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 								StepPercent:                 ptr.To(common.DefaultStepPercent),
 								MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
 								CooldownDuration:            ptr.To(metav1.Duration{Duration: 0}),
+							}),
+						},
+					},
+				},
+			}
+
+			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
+		})
+
+		It("Should deny if match name contains unsupported characters", func() {
+			obj := &PersistentVolumeClaimAutoscaler{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "pvca-match-name-invalid-characters",
+					Namespace: "default",
+				},
+				Spec: PersistentVolumeClaimAutoscalerSpec{
+					TargetRef: autoscalingv1.CrossVersionObjectReference{
+						APIVersion: "v1",
+						Kind:       "PersistentVolumeClaim",
+						Name:       "pvc-match-name-invalid-characters",
+					},
+					VolumePolicies: []VolumePolicy{
+						{
+							Match: Match{
+								Name: "data-[0-9]",
+							},
+							MaxCapacity: resource.MustParse("5Gi"),
+							ScaleUp: ptr.To(ScalingRules{
+								UtilizationThresholdPercent: ptr.To(common.DefaultThresholdPercent),
+								StepPercent:                 ptr.To(common.DefaultStepPercent),
+								MinStepAbsolute:             ptr.To(resource.MustParse("1Gi")),
+								CooldownDuration:            ptr.To(metav1.Duration{Duration: 3600}),
 							}),
 						},
 					},

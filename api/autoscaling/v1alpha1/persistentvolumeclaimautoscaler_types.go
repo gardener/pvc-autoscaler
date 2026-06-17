@@ -51,7 +51,6 @@ type PersistentVolumeClaimAutoscalerSpec struct {
 
 	// VolumePolicies defines a list of policies for autoscaling PVCs.
 	// +kubebuilder:validation:MinItems=1
-	// +kubebuilder:validation:MaxItems=1
 	VolumePolicies []VolumePolicy `json:"volumePolicies"`
 }
 
@@ -74,16 +73,32 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 
 // VolumePolicy defines the autoscaling policy for a specific PVC
 type VolumePolicy struct {
+	// Match specifies the matching criteria for selecting PVCs to which this policy applies.
+	// +kubebuilder:default:={}
+	// +optional
+	Match Match `json:"match,omitempty"`
+
 	// MaxCapacity specifies the maximum capacity up to which a PVC is
 	// allowed to be extended. The max capacity is specified as a
 	// [k8s.io/apimachinery/pkg/api/resource.Quantity] value.
-	// +kubebuilder:validation:XValidation:rule="quantity(self).isGreaterThan(quantity('0'))",message="maxCapacity must be > 0"
 	MaxCapacity resource.Quantity `json:"maxCapacity"`
 
 	// ScaleUp defines the rules for scaling up the PVC.
 	// +kubebuilder:default:={}
 	// +optional
 	ScaleUp *ScalingRules `json:"scaleUp,omitempty"`
+}
+
+// Match defines the matching criteria for selecting PVCs to which a VolumePolicy applies. It supports exact name matching, glob pattern matching, and a default match-all option.
+type Match struct {
+	// Name specifies the name of the PVC.
+	// It supports exact and glob pattern matching (e.g., "data-*" matches "data-pvc").
+	// Policies are evaluated in list order and the first matching policy is used.
+	// "*" can be used as a match-all policy.
+	// +kubebuilder:default="*"
+	// +kubebuilder:validation:MinLength=1
+	// +optional
+	Name string `json:"name,omitempty"`
 }
 
 // ScalingRules defines the rules for scaling a PVC.
@@ -105,14 +120,12 @@ type ScalingRules struct {
 
 	// MinStepAbsolute specifies the minimum absolute change in capacity during scaling.
 	// This ensures that the change in capacity is at least this amount, regardless of the percentage.
-	// +kubebuilder:validation:XValidation:rule="self == null || quantity(self).compareTo(quantity('1Gi')) >= 0",message="minStepAbsolute must be > 1 if specified"
 	// +kubebuilder:default="1Gi"
 	// +optional
 	MinStepAbsolute *resource.Quantity `json:"minStepAbsolute,omitempty"`
 
 	// CooldownDuration specifies the minimum time that must elapse after a scaling
 	// operation before another scaling operation can be triggered for the targeted PVC objects.
-	// +kubebuilder:validation:XValidation:rule="duration(self) > duration('0s')",message="cooldownDuration must be > 0s"
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 }

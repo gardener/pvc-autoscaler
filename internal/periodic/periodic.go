@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"path"
 	"slices"
 	"strings"
 	"time"
@@ -333,9 +334,32 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		policy := volumePolicyForPVC(pvca, pvc)
+		policy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+		if err != nil {
+			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
+			recommendationConditions.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonRecommendationError,
+				Message: fmt.Sprintf("%s: %s", pvcObjKey.Name, err.Error()),
+			})
 
-		if err := r.validatePVC(ctx, pvc, policy); err != nil {
+			continue
+		}
+
+		if policy == nil {
+			logger.Info("skipping persistentvolumeclaim", "reason", "no matching volume policy")
+			recommendationConditions.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonRecommendationError,
+				Message: fmt.Sprintf("%s: no matching volume policy", pvcObjKey.Name),
+			})
+
+			continue
+		}
+
+		if err := r.validatePVC(ctx, pvc, *policy); err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 			recommendationConditions.addCondition(metav1.Condition{
 				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
@@ -361,11 +385,11 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		shouldResize, scalingReason := r.shouldResizePVC(pvc, policy, volumeRecommendation)
+		shouldResize, scalingReason := r.shouldResizePVC(pvc, *policy, volumeRecommendation)
 		inProgress := r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions)
 
 		if shouldResize && !inProgress {
-			volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, policy, scalingReason, volumeRecommendation, resizingConditions)
+			volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, *policy, scalingReason, volumeRecommendation, resizingConditions)
 			if err != nil {
 				logger.Error(err, "failed to resize pvc")
 			}
@@ -426,12 +450,22 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 	return volumeRecommendation, nil
 }
 
-// volumePolicyForPVC returns the volume policy from the given
-// [v1alpha1.PersistentVolumeClaimAutoscaler] that applies to the specified [corev1.PersistentVolumeClaim].
-// Currently only one volume policy is supported, so the first policy is always returned.
-// When multi-PVC policy support is added, this function will match the policy to the specific [corev1.PersistentVolumeClaim].
-func volumePolicyForPVC(pvca *v1alpha1.PersistentVolumeClaimAutoscaler, _ *corev1.PersistentVolumeClaim) v1alpha1.VolumePolicy {
-	return pvca.Spec.VolumePolicies[0]
+// getVolumePolicy returns the VolumePolicy for a given [corev1.PersistentVolumeClaim] name.
+// It returns nil if there is no policy specified for the [corev1.PersistentVolumeClaim].
+// Policies are evaluated in the order they appear in the list, and the first
+// matching policy is returned.
+func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) (*v1alpha1.VolumePolicy, error) {
+	for _, volumePolicy := range volumePolicies {
+		matched, err := path.Match(volumePolicy.Match.Name, pvcName)
+		if err != nil {
+			return nil, fmt.Errorf("invalid volume policy name %q: %w", volumePolicy.Match.Name, err)
+		}
+		if matched {
+			return &volumePolicy, nil
+		}
+	}
+
+	return nil, nil
 }
 
 // getOrCreateVolumeRecommendationForPVC returns the [v1alpha1.VolumeRecommendation] for

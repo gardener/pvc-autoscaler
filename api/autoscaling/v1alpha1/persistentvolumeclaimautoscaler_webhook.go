@@ -6,8 +6,11 @@ package v1alpha1
 
 import (
 	"context"
+	"strings"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	pathvalidation "k8s.io/apimachinery/pkg/api/validation/path"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -68,5 +71,47 @@ func validateResourceSpec(pvca *PersistentVolumeClaimAutoscaler) error {
 		allErrs = append(allErrs, e)
 	}
 
+	allErrs = append(allErrs, validateVolumePolicies(pvca.Spec.VolumePolicies)...)
+
 	return allErrs.ToAggregate()
+}
+
+// validateVolumePolicies validates the volume policies
+func validateVolumePolicies(policies []VolumePolicy) field.ErrorList {
+	var (
+		allErrs = field.ErrorList{}
+		minStep = resource.MustParse("1Gi")
+	)
+
+	for i, policy := range policies {
+		policyPath := field.NewPath("spec", "volumePolicies").Index(i)
+
+		for _, msg := range validateVolumePolicyMatchName(policy.Match.Name) {
+			allErrs = append(allErrs, field.Invalid(policyPath.Child("match", "name"), policy.Match.Name, msg))
+		}
+
+		if policy.MaxCapacity.Cmp(resource.Quantity{}) <= 0 {
+			allErrs = append(allErrs, field.Invalid(policyPath.Child("maxCapacity"), policy.MaxCapacity.String(), "must be > 0"))
+		}
+
+		if policy.ScaleUp != nil && policy.ScaleUp.MinStepAbsolute != nil {
+			if policy.ScaleUp.MinStepAbsolute.Cmp(minStep) < 0 {
+				allErrs = append(allErrs, field.Invalid(policyPath.Child("scaleUp", "minStepAbsolute"), policy.ScaleUp.MinStepAbsolute.String(), "must be >= 1Gi"))
+			}
+		}
+
+		if policy.ScaleUp != nil && policy.ScaleUp.CooldownDuration != nil {
+			if policy.ScaleUp.CooldownDuration.Duration <= 0 {
+				allErrs = append(allErrs, field.Invalid(policyPath.Child("scaleUp", "cooldownDuration"), policy.ScaleUp.CooldownDuration.Duration.String(), "must be > 0s"))
+			}
+		}
+	}
+
+	return allErrs
+}
+
+func validateVolumePolicyMatchName(matchName string) []string {
+	replaced := strings.ReplaceAll(matchName, "*", "a")
+
+	return utilvalidation.IsDNS1123Subdomain(replaced)
 }
