@@ -138,23 +138,10 @@ var _ = Describe("Periodic Runner", func() {
 	})
 
 	Context("getVolumePolicy", func() {
-		It("should return error when a policy has nil match", func() {
-			volumePolicies := []v1alpha1.VolumePolicy{
-				{
-					Match:       nil,
-					MaxCapacity: resource.MustParse("10Gi"),
-				},
-			}
-
-			policy, err := getVolumePolicy("data-pvc", volumePolicies)
-			Expect(err).To(MatchError("invalid volume policy: match criteria must be specified"))
-			Expect(policy).To(BeNil())
-		})
-
 		It("should return error on invalid glob pattern", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					Match: &v1alpha1.Match{
+					Match: v1alpha1.Match{
 						Name: "[",
 					},
 					MaxCapacity: resource.MustParse("10Gi"),
@@ -170,7 +157,7 @@ var _ = Describe("Periodic Runner", func() {
 		It("should return nil when no policy matches", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					Match: &v1alpha1.Match{
+					Match: v1alpha1.Match{
 						Name: "other-pvc",
 					},
 					MaxCapacity: resource.MustParse("10Gi"),
@@ -185,7 +172,7 @@ var _ = Describe("Periodic Runner", func() {
 		It("should match exact name", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					Match: &v1alpha1.Match{
+					Match: v1alpha1.Match{
 						Name: "data-pvc",
 					},
 					MaxCapacity: resource.MustParse("10Gi"),
@@ -201,7 +188,7 @@ var _ = Describe("Periodic Runner", func() {
 		It("should match glob pattern", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					Match: &v1alpha1.Match{
+					Match: v1alpha1.Match{
 						Name: "*-logs",
 					},
 					MaxCapacity: resource.MustParse("15Gi"),
@@ -217,8 +204,8 @@ var _ = Describe("Periodic Runner", func() {
 		It("should match default policy", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					Match: &v1alpha1.Match{
-						Name: v1alpha1.DefaultVolumeResourcePolicy,
+					Match: v1alpha1.Match{
+						Name: "*",
 					},
 					MaxCapacity: resource.MustParse("5Gi"),
 				},
@@ -227,20 +214,20 @@ var _ = Describe("Periodic Runner", func() {
 			policy, err := getVolumePolicy("data-pvc", volumePolicies)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal(v1alpha1.DefaultVolumeResourcePolicy))
+			Expect(policy.Match.Name).To(Equal("*"))
 		})
 
 		It("should fall back to default policy when no other policy matches", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					Match: &v1alpha1.Match{
+					Match: v1alpha1.Match{
 						Name: "other-pvc",
 					},
 					MaxCapacity: resource.MustParse("20Gi"),
 				},
 				{
-					Match: &v1alpha1.Match{
-						Name: v1alpha1.DefaultVolumeResourcePolicy,
+					Match: v1alpha1.Match{
+						Name: "*",
 					},
 					MaxCapacity: resource.MustParse("5Gi"),
 				},
@@ -249,27 +236,27 @@ var _ = Describe("Periodic Runner", func() {
 			policy, err := getVolumePolicy("data-pvc", volumePolicies)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(policy).NotTo(BeNil())
-			Expect(policy.Match.Name).To(Equal(v1alpha1.DefaultVolumeResourcePolicy))
+			Expect(policy.Match.Name).To(Equal("*"))
 			Expect(policy.MaxCapacity).To(Equal(resource.MustParse("5Gi")))
 		})
 
 		It("should return first seen matching policy", func() {
 			volumePolicies := []v1alpha1.VolumePolicy{
 				{
-					Match: &v1alpha1.Match{
+					Match: v1alpha1.Match{
 						Name: "data-*",
 					},
 					MaxCapacity: resource.MustParse("10Gi"),
 				},
 				{
-					Match: &v1alpha1.Match{
+					Match: v1alpha1.Match{
 						Name: "data-pvc",
 					},
 					MaxCapacity: resource.MustParse("20Gi"),
 				},
 				{
-					Match: &v1alpha1.Match{
-						Name: v1alpha1.DefaultVolumeResourcePolicy,
+					Match: v1alpha1.Match{
+						Name: "*",
 					},
 					MaxCapacity: resource.MustParse("5Gi"),
 				},
@@ -882,7 +869,7 @@ var _ = Describe("Periodic Runner", func() {
 				noMatchPVCA, err := testutils.CreatePersistentVolumeClaimAutoscaler(
 					parentCtx, k8sClient, "pvca-no-match", noMatchTargetRef, []v1alpha1.VolumePolicy{
 						{
-							Match: &v1alpha1.Match{
+							Match: v1alpha1.Match{
 								Name: "non-matching-pvc-name",
 							},
 							MaxCapacity: resource.MustParse("10Gi"),

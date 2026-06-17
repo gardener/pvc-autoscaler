@@ -267,21 +267,21 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if volumeName contains unsupported characters", func() {
+		It("Should deny if match name contains unsupported characters", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "pvca-volume-name-invalid-characters",
+					Name:      "pvca-match-name-invalid-characters",
 					Namespace: "default",
 				},
 				Spec: PersistentVolumeClaimAutoscalerSpec{
 					TargetRef: autoscalingv1.CrossVersionObjectReference{
 						APIVersion: "v1",
 						Kind:       "PersistentVolumeClaim",
-						Name:       "pvc-volume-name-invalid-characters",
+						Name:       "pvc-match-name-invalid-characters",
 					},
 					VolumePolicies: []VolumePolicy{
 						{
-							Match: &Match{
+							Match: Match{
 								Name: "data-[0-9]",
 							},
 							MaxCapacity: resource.MustParse("5Gi"),

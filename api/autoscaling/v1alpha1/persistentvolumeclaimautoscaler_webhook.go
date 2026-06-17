@@ -78,17 +78,13 @@ func validateResourceSpec(pvca *PersistentVolumeClaimAutoscaler) error {
 
 // validateVolumePolicies validates the volume policies
 func validateVolumePolicies(policies []VolumePolicy) field.ErrorList {
-	allErrs := make(field.ErrorList, 0)
-	minStep := resource.MustParse("1Gi")
+	var (
+		allErrs = field.ErrorList{}
+		minStep = resource.MustParse("1Gi")
+	)
 
 	for i, policy := range policies {
 		policyPath := field.NewPath("spec", "volumePolicies").Index(i)
-
-		if policy.Match == nil {
-			allErrs = append(allErrs, field.Required(policyPath.Child("match"), "match criteria must be specified"))
-
-			continue
-		}
 
 		for _, msg := range validateVolumePolicyMatchName(policy.Match.Name) {
 			allErrs = append(allErrs, field.Invalid(policyPath.Child("match", "name"), policy.Match.Name, msg))

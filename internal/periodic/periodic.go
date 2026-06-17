@@ -456,10 +456,6 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 // matching policy is returned.
 func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) (*v1alpha1.VolumePolicy, error) {
 	for _, volumePolicy := range volumePolicies {
-		if volumePolicy.Match == nil {
-			return nil, errors.New("invalid volume policy: match criteria must be specified")
-		}
-
 		matched, err := path.Match(volumePolicy.Match.Name, pvcName)
 		if err != nil {
 			return nil, fmt.Errorf("invalid volume policy name %q: %w", volumePolicy.Match.Name, err)

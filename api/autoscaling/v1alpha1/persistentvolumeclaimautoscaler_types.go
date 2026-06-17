@@ -71,16 +71,12 @@ type PersistentVolumeClaimAutoscalerStatus struct {
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
 }
 
-// DefaultVolumeResourcePolicy can be passed as VolumeName to
-// specify the default volume policy.
-const DefaultVolumeResourcePolicy = "*"
-
 // VolumePolicy defines the autoscaling policy for a specific PVC
 type VolumePolicy struct {
 	// Match specifies the matching criteria for selecting PVCs to which this policy applies.
 	// +kubebuilder:default:={}
 	// +optional
-	Match *Match `json:"match,omitempty"`
+	Match Match `json:"match,omitempty"`
 
 	// MaxCapacity specifies the maximum capacity up to which a PVC is
 	// allowed to be extended. The max capacity is specified as a
