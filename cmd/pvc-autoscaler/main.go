@@ -20,6 +20,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 	scaleclient "k8s.io/client-go/scale"
+	"k8s.io/utils/clock"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
@@ -159,7 +160,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	heartbeat := healthcheck.NewHeartbeat(interval * 5)
+	heartbeat := healthcheck.NewHeartbeat(interval*5, clock.RealClock{})
 
 	// Add the periodic runner
 	runner, err := periodic.New(
