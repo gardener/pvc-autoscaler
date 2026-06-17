@@ -25,7 +25,7 @@ metadata:
 spec:
   containers:
   - name: dummy-container
-    image: busybox:1.37
+    image: busybox:1.38
     command:
     - sleep
     - "3600"
