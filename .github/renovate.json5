@@ -94,7 +94,22 @@
         executionMode: 'branch',
       },
       matchPackageNames: [
+        '/kubernetes-sigs/kustomize',
         '/kubernetes-sigs/controller-tools',
+      ],
+    },
+    {
+      // Run make generate when an image referenced from `config/` is bumped, so the
+      // regenerated dist/install.yaml picks up the new image tag. Tool-version bumps
+      // that affect generation (controller-tools, kustomize) are handled separately.
+      postUpgradeTasks: {
+        commands: [
+          'make generate',
+        ],
+        executionMode: 'branch',
+      },
+      matchFileNames: [
+        'config/**',
       ],
     },
     {
