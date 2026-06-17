@@ -194,18 +194,17 @@ func (r *Runner) Start(ctx context.Context) error {
 
 	if r.heartbeat != nil {
 		r.heartbeat.StartMonitoring()
-		r.heartbeat.UpdateLastActivity()
 	}
 
 	for {
 		select {
 		case <-ticker.C:
-			if r.heartbeat != nil {
-				r.heartbeat.UpdateLastActivity()
-			}
-
 			if err := r.reconcileAll(ctx); err != nil {
 				logger.Error(err, "failed to reconcile persistentvolumeclaimautoscalers")
+			}
+
+			if r.heartbeat != nil {
+				r.heartbeat.UpdateLastActivity()
 			}
 		case <-ctx.Done():
 			return nil

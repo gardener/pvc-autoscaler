@@ -23,14 +23,14 @@ var _ = Describe("Heartbeat", func() {
 		fakeClock = clocktesting.NewFakeClock(time.Now())
 	})
 
-	It("returns nil before monitoring starts", func() {
+	It("should return nil before monitoring starts", func() {
 		heartbeat := healthcheck.NewHeartbeat(1*time.Nanosecond, fakeClock)
 		fakeClock.Step(1 * time.Millisecond)
 
 		Expect(heartbeat.Check(nil)).To(Succeed())
 	})
 
-	It("returns an error after timeout", func() {
+	It("should return an error after timeout", func() {
 		heartbeat := healthcheck.NewHeartbeat(5*time.Millisecond, fakeClock)
 		heartbeat.StartMonitoring()
 		fakeClock.Step(15 * time.Millisecond)
@@ -38,7 +38,7 @@ var _ = Describe("Heartbeat", func() {
 		Expect(heartbeat.Check(nil)).To(HaveOccurred())
 	})
 
-	It("does not timeout after activity update", func() {
+	It("should not timeout after activity update", func() {
 		heartbeat := healthcheck.NewHeartbeat(20*time.Millisecond, fakeClock)
 		heartbeat.StartMonitoring()
 		fakeClock.Step(5 * time.Millisecond)
