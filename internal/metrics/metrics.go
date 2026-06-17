@@ -12,6 +12,7 @@ import (
 // Namespace is the namespace component of the fully qualified metric name
 const Namespace = "pvc_autoscaler"
 
+//nolint:goconst
 var (
 	// ResizedTotal is a metric which increments each time a PVC is being
 	// resized.
