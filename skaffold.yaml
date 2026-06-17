@@ -40,6 +40,7 @@ build:
             - api/autoscaling/v1alpha1
             - cmd/pvc-autoscaler
             - internal/common
+            - internal/healthcheck
             - internal/metrics
             - internal/metrics/source
             - internal/metrics/source/prometheus

@@ -29,6 +29,7 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/healthcheck"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
@@ -97,6 +98,7 @@ type Runner struct {
 	metricsSource metricssource.Source
 	eventRecorder record.EventRecorder
 	pvcFetcher    pvcfetcher.Fetcher
+	heartbeat     *healthcheck.Heartbeat
 }
 
 var _ manager.Runnable = &Runner{}
@@ -175,6 +177,15 @@ func WithPVCFetcher(pvcFetcher pvcfetcher.Fetcher) Option {
 	return opt
 }
 
+// WithHeartbeat configures the [Runner] to report activity for health checks.
+func WithHeartbeat(h *healthcheck.Heartbeat) Option {
+	opt := func(r *Runner) {
+		r.heartbeat = h
+	}
+
+	return opt
+}
+
 // Start implements the
 // [sigs.k8s.io/controller-runtime/pkg/manager.Runnable] interface.
 func (r *Runner) Start(ctx context.Context) error {
@@ -182,11 +193,19 @@ func (r *Runner) Start(ctx context.Context) error {
 	logger := log.FromContext(ctx, "controller", common.ControllerName)
 	defer ticker.Stop()
 
+	if r.heartbeat != nil {
+		r.heartbeat.StartMonitoring()
+	}
+
 	for {
 		select {
 		case <-ticker.C:
 			if err := r.reconcileAll(ctx); err != nil {
 				logger.Error(err, "failed to reconcile persistentvolumeclaimautoscalers")
+			}
+
+			if r.heartbeat != nil {
+				r.heartbeat.UpdateLastActivity()
 			}
 		case <-ctx.Done():
 			return nil
