@@ -31,6 +31,8 @@ linters:
     - whitespace
 
   settings:
+    goconst:
+      ignore-tests: true
     embeddedstructfieldcheck:
       # Checks that sync.Mutex and sync.RWMutex are not used as embedded fields
       forbid-mutex: true
