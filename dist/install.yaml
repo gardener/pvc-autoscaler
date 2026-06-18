@@ -17,7 +17,7 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     cert-manager.io/inject-ca-from: pvc-autoscaler-system/pvc-autoscaler-serving-cert
-    controller-gen.kubebuilder.io/version: v0.20.1
+    controller-gen.kubebuilder.io/version: v0.21.0
   name: persistentvolumeclaimautoscalers.autoscaling.gardener.cloud
 spec:
   conversion:
