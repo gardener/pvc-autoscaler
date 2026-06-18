@@ -83,7 +83,8 @@
       "enabled": false
     },
     {
-      // Run make generate when controller-tools package has been updated as CRDs might need regeneration.
+      // Run make generate when controller-tools and kustomize package has been updated
+      // as CRDs or manifests built via kustomize might need regeneration.
       matchDatasources: [
         'github-releases',
       ],
@@ -93,9 +94,9 @@
         ],
         executionMode: 'branch',
       },
-      matchPackageNames: [
-        '/kubernetes-sigs/kustomize',
-        '/kubernetes-sigs/controller-tools',
+      matchDepNames: [
+        'kubernetes-sigs/kustomize',
+        'kubernetes-sigs/controller-tools',
       ],
     },
     {
