@@ -17,6 +17,7 @@ import (
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -792,16 +793,15 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 // setStatus updates the status of the [v1alpha1.PersistentVolumeClaimAutoscaler]
 // with the given conditions and the latest volume recommendations. For each
 // condition, an empty Message is treated as a sentinel value: the condition is
-// removed from the status by Type rather than set.
+// removed from the status by Type rather than set. The status is only patched
+// if the recommendations, resizing conditions, or current stats have changed
+// compared to the existing status.
 func (r *Runner) setStatus(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler, recommendationsCondition metav1.Condition, resizingCondition metav1.Condition, volumeRecommendations []v1alpha1.VolumeRecommendation) error {
-	patch := client.MergeFrom(pvca.DeepCopy())
+	original := pvca.DeepCopy()
 	conditions := pvca.Status.Conditions
 	if len(conditions) == 0 {
 		conditions = make([]metav1.Condition, 0)
 	}
-	now := time.Now()
-	pvca.Status.LastCheck = metav1.NewTime(now)
-	pvca.Status.NextCheck = metav1.NewTime(now.Add(r.interval))
 
 	for _, condition := range []metav1.Condition{resizingCondition, recommendationsCondition} {
 		if condition.Message == "" {
@@ -818,5 +818,9 @@ func (r *Runner) setStatus(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	})
 	pvca.Status.VolumeRecommendations = volumeRecommendations
 
-	return r.client.Status().Patch(ctx, pvca, patch)
+	if apiequality.Semantic.DeepEqual(original.Status, pvca.Status) {
+		return nil
+	}
+
+	return r.client.Status().Patch(ctx, pvca, client.MergeFrom(original))
 }
