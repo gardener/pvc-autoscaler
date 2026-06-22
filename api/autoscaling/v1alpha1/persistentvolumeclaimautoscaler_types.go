@@ -57,13 +57,6 @@ type PersistentVolumeClaimAutoscalerSpec struct {
 // PersistentVolumeClaimAutoscalerStatus defines the observed state of
 // PersistentVolumeClaimAutoscaler
 type PersistentVolumeClaimAutoscalerStatus struct {
-	// LastCheck specifies the last time the PVC was checked by the controller.
-	LastCheck metav1.Time `json:"lastCheck,omitempty"`
-
-	// NextCheck specifies the next scheduled check of the PVC by the
-	// controller.
-	NextCheck metav1.Time `json:"nextCheck,omitempty"`
-
 	// VolumeRecommendations specifies the status and recommendations for the PVCs managed by the autoscaler.
 	VolumeRecommendations []VolumeRecommendation `json:"volumeRecommendations,omitempty"`
 
