@@ -229,6 +229,21 @@ spec:
                   - type
                   type: object
                 type: array
+              lastCheck:
+                description: |-
+                  LastCheck specifies the last time the PVC was checked by the controller.
+
+                  Deprecated: this field is deprecated and is no longer maintained by the pvc-autoscaler. It will be removed in a future release.
+                format: date-time
+                type: string
+              nextCheck:
+                description: |-
+                  NextCheck specifies the next scheduled check of the PVC by the
+                  controller.
+
+                  Deprecated: this field is deprecated and is no longer maintained by the pvc-autoscaler. It will be removed in a future release.
+                format: date-time
+                type: string
               volumeRecommendations:
                 description: VolumeRecommendations specifies the status and recommendations
                   for the PVCs managed by the autoscaler.

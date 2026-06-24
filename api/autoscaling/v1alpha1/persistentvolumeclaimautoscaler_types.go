@@ -57,6 +57,19 @@ type PersistentVolumeClaimAutoscalerSpec struct {
 // PersistentVolumeClaimAutoscalerStatus defines the observed state of
 // PersistentVolumeClaimAutoscaler
 type PersistentVolumeClaimAutoscalerStatus struct {
+	// LastCheck specifies the last time the PVC was checked by the controller.
+	//
+	// Deprecated: this field is deprecated and is no longer maintained by the pvc-autoscaler. It will be removed in a future release.
+	// TODO (RadaBDimitrova): remove this after pvc-autoscaler v0.3.0 has been released.
+	LastCheck metav1.Time `json:"lastCheck,omitempty"`
+
+	// NextCheck specifies the next scheduled check of the PVC by the
+	// controller.
+	//
+	// Deprecated: this field is deprecated and is no longer maintained by the pvc-autoscaler. It will be removed in a future release.
+	// TODO (RadaBDimitrova): remove this after pvc-autoscaler v0.3.0 has been released.
+	NextCheck metav1.Time `json:"nextCheck,omitempty"`
+
 	// VolumeRecommendations specifies the status and recommendations for the PVCs managed by the autoscaler.
 	VolumeRecommendations []VolumeRecommendation `json:"volumeRecommendations,omitempty"`
 
