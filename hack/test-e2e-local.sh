@@ -301,7 +301,7 @@ function _test_cooldown() {
 
   # We should be at 2Gi now
   _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 2Gi
-  _msg_info "first resize completed, cooldown timer started (3 minutes)"
+  _msg_info "first resize completed, cooldown timer started (5 minutes)"
 
   _set_fake_metrics_after_resize bytes 2Gi pod_cooldown
 
@@ -322,8 +322,8 @@ function _test_cooldown() {
   _msg_info "confirmed: resize blocked by cooldown"
 
   # Wait for cooldown to expire and resize to complete
-  _msg_info "waiting for cooldown to expire (3 minutes) and resize to 3Gi..."
-  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi 30 7 # Wait up to 3.5 minutes (0.5 buffer) for resize to complete after cooldown expires
+  _msg_info "waiting for cooldown to expire (5 minutes) and resize to 3Gi..."
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 3Gi 30 11 # Wait up to 3.5 minutes (0.5 buffer) for resize to complete after cooldown expires
 
   _set_fake_metrics_after_resize bytes 3Gi pod_cooldown
   _msg_info "cooldown test completed successfully"
