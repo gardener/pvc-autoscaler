@@ -77,7 +77,7 @@ func main() {
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.StringVar(&leaderElectionID, "leader-election-id", "2b09b108.gardener.cloud",
-		"The name of the leader election lease resource.")
+		"The name of the resource that leader election will use for holding the leader lock")
 	flag.BoolVar(&secureMetrics, "metrics-secure", false,
 		"If set the metrics endpoint is served securely")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
