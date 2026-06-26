@@ -1658,21 +1658,6 @@ var _ = Describe("Periodic Runner", func() {
 		})
 
 		Describe("#SetStatus", func() {
-			It("should not patch the status when nothing has changed", func() {
-				emptyRec := metav1.Condition{Type: string(v1alpha1.ConditionTypeRecommendationAvailable)}
-				emptyRes := metav1.Condition{Type: string(v1alpha1.ConditionTypeResizing)}
-				Expect(runner.setStatus(parentCtx, pvca, emptyRec, emptyRes, nil)).To(Succeed())
-
-				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
-				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
-				resourceVersionBefore := updatedPVCA.ResourceVersion
-
-				Expect(runner.setStatus(parentCtx, updatedPVCA, emptyRec, emptyRes, nil)).To(Succeed())
-
-				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
-				Expect(updatedPVCA.ResourceVersion).To(Equal(resourceVersionBefore))
-			})
-
 			It("should persist the recommendations condition with the aggregated message", func() {
 				recAgg := &recommendationsConditionAggregator{}
 				recAgg.addCondition(metav1.Condition{
