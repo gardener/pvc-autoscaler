@@ -100,30 +100,25 @@ conditions, etc.
 
 # Local development
 
-The local environment of `pvc-autoscaler` uses
-[minikube](https://minikube.sigs.k8s.io/docs/) for bootstrapping a dev
-Kubernetes cluster.
+The local environment of `pvc-autoscaler` supports both
+[minikube](https://minikube.sigs.k8s.io/docs/) and [KinD](https://kind.sigs.k8s.io)
+as the local Kubernetes cluster. Once a cluster is running, deployment is handled
+exclusively via [Skaffold](https://skaffold.dev/) — the same commands work regardless
+of which cluster type you chose.
 
-In order to start a new local environment execute the following command.
+## Setting up the cluster
+
+**minikube**
 
 ``` shell
-make minukube-start
+make minikube-up
 ```
 
-The command above will install [OpenEBS](https://openebs.io/), the
-[LVM-LocalPV CSI driver](https://github.com/openebs/lvm-localpv) and configure the
-`openebs-lvm` storage class with volume expansion support.
-
-Along with that it also installs
+This installs [OpenEBS](https://openebs.io/), the
+[LVM-LocalPV CSI driver](https://github.com/openebs/lvm-localpv), and configures the
+`openebs-lvm` storage class with volume expansion support. It also installs
 [kube-prometheus](https://github.com/prometheus-operator/kube-prometheus), which
 provides Prometheus, Grafana and Alert Manager.
-
-By default the minikube profile will be named `pvc-autoscaler`, which can be
-configured via the `MINIKUBE_PROFILE` env variable, e.g.
-
-``` shell
-MINIKUBE_PROFILE=my-dev-env make minikube-start
-```
 
 The default [minikube driver](https://minikube.sigs.k8s.io/docs/drivers/) is set
 to `qemu`, which can be configured via the `MINIKUBE_DRIVER` env variable.
@@ -133,34 +128,50 @@ For example, if you are on GNU/Linux and have
 the driver to `kvm2`, e.g.
 
 ``` shell
-MINIKUBE_DRIVER=kvm2 make minikube-start
+MINIKUBE_DRIVER=kvm2 make minikube-up
 ```
 
-In order to build and load an image of `pvc-autoscaler` into your `minikube`
-nodes execute the following command.
+**KinD**
 
 ``` shell
-make minikube-load-image
+make kind-up
 ```
 
-The following command will deploy `pvc-autoscaler` in the cluster.
+> [!NOTE]
+> On KinD, real PVC volume usage metrics are not available for e2e testing.
+> KinD's default [local-path-provisioner](https://github.com/rancher/local-path-provisioner) backs PVCs with plain subdirectories on the node's root filesystem rather than separate block devices.
+> Because of this, kubelet's `kubelet_volume_stats_capacity_bytes` and `kubelet_volume_stats_available_bytes` reflect the capacity and free space of the node's root disk, not the requested PVC size.
+> Writing files into the PVC therefore changes node-level disk stats that are shared across all PVCs and pods, making it impossible to simulate per-PVC utilisation thresholds reliably.
+> To work around this, the KinD e2e setup uses a fake metrics server that serves pre-configured Prometheus metrics at each test stage instead of relying on real kubelet-reported usage — see [config/overlays/kind/fake-metrics](./config/overlays/kind/fake-metrics).
+
+## Deploying pvc-autoscaler
+
+After the cluster is up (with either `make minikube-up` or `make kind-up`), deploy
+`pvc-autoscaler` and all required resources using Skaffold.
 
 ``` shell
-make deploy
+make pvc-autoscaler-up
 ```
 
-If you want to run `pvc-autoscaler` outside of the Kubernetes cluster you can
-run this command instead.
+For iterative development with automatic redeploy on code changes, use the dev target instead.
 
 ``` shell
-make run
+make pvc-autoscaler-dev
 ```
 
-When done with the local environment you can delete it using the following
-command.
+## Tearing down
+
+To remove the deployed resources without destroying the cluster.
 
 ``` shell
-make minikube-stop
+make pvc-autoscaler-down
+```
+
+When done with the local environment entirely, tear down the cluster.
+
+``` shell
+make minikube-down   # if using minikube
+make kind-down       # if using KinD
 ```
 
 Also, make sure to check the help information about each Makefile target by
@@ -168,30 +179,6 @@ executing this command.
 
 ``` shell
 make help
-```
-
-The local setup also supports Kind Kubernetes clusters. For convenience you can create a dev Kind cluster by using the following command.
-
-```shell
-make kind-up
-```
-
-You can also deploy the `pvc-autoscaler` in the kind cluster via this command.
-
-```shell
-make pvc-autoscaler-up
-```
-
-If you want automatic deploy on change in code, you can use this command.
-
-```shell
-make pvc-autoscaler-dev
-```
-
-When you're done with development, you can safely run the following command.
-
-```shell
-make kind-down
 ```
 
 # Tests
@@ -203,7 +190,8 @@ make test
 ```
 
 In order to run the end-to-end tests we need a clean test environment. After you have
-created a development cluster with KinD, you can run the e2e tests against it using
+created a development cluster with `make minikube-up` or `make kind-up` and deployed
+the necessary resources with `make pvc-autoscaler-up`, you can run the e2e tests using
 the following command.
 
 ``` shell
