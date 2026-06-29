@@ -707,23 +707,29 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 
 	// We don't want to exceed the max capacity
 	if targetSize.Value() > policy.MaxCapacity.Value() {
-		r.eventRecorder.Eventf(
-			pvc,
-			corev1.EventTypeWarning,
-			"MaxCapacityReached",
-			"max capacity (%s) has been reached, will not resize",
-			policy.MaxCapacity.String(),
-		)
-		logger.Info("max capacity reached")
-		metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
-		resizingConditions.addCondition(metav1.Condition{
-			Type:    string(v1alpha1.ConditionTypeResizing),
-			Status:  metav1.ConditionFalse,
-			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf("%s: max capacity reached", pvc.Name),
-		})
+		// Only clamp to max capacity if the increase is at least one scaling resolution,
+		// otherwise the increase is too small to be meaningful
+		if policy.MaxCapacity.Value()-currSpecSize.Value() < common.ScalingResolutionBytes {
+			r.eventRecorder.Eventf(
+				pvc,
+				corev1.EventTypeWarning,
+				"MaxCapacityReached",
+				"max capacity (%s) has been reached, will not resize",
+				policy.MaxCapacity.String(),
+			)
+			logger.Info("max capacity reached")
+			metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
+			resizingConditions.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeResizing),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonReconcile,
+				Message: fmt.Sprintf("%s: max capacity reached", pvc.Name),
+			})
 
-		return volumeRecommendation, nil
+			return volumeRecommendation, nil
+		}
+		// Clamp to max capacity instead of skipping the resize entirely
+		targetSize = &policy.MaxCapacity
 	}
 
 	if policy.ScaleUp.CooldownDuration != nil {

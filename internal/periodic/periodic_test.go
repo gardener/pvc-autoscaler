@@ -1591,7 +1591,7 @@ var _ = Describe("Periodic Runner", func() {
 				resizedPvc.Status.Capacity[corev1.ResourceStorage] = secondIncreaseCap
 				Expect(k8sClient.Status().Patch(parentCtx, &resizedPvc, patch)).To(Succeed())
 
-				By("Expecting third attempt to fail with max capacity reached")
+				By("Expecting third attempt to fail with max capacity reached (already at max)")
 				aggregator = &resizingConditionAggregator{}
 				volumePolicy, errPolicy = getVolumePolicy(resizedPvc.Name, pvca.Spec.VolumePolicies)
 				Expect(errPolicy).NotTo(HaveOccurred())
@@ -1606,6 +1606,53 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Message", ContainSubstring("max capacity reached")),
 				))
 			})
+
+			DescribeTable("clamp resize to max capacity",
+				func(maxCapacity resource.Quantity, minStep resource.Quantity, expectResize bool, expectedSize resource.Quantity) {
+					volumeRecommendation := v1alpha1.VolumeRecommendation{
+						Name: pvc.Name,
+						Current: v1alpha1.CurrentVolumeStatus{
+							UsedSpacePercent: ptr.To(95),
+						},
+					}
+
+					var buf strings.Builder
+					logger := zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &buf))).WithValues("pvc", "test-pvc")
+
+					pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+					pvca.Spec.VolumePolicies[0].MaxCapacity = maxCapacity
+					pvca.Spec.VolumePolicies[0].ScaleUp.MinStepAbsolute = ptr.To(minStep)
+					Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+
+					aggregator := &resizingConditionAggregator{}
+					volumePolicy, errPolicy := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+					Expect(errPolicy).NotTo(HaveOccurred())
+					_, err := runner.resizePVC(parentCtx, logger, pvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
+					Expect(err).NotTo(HaveOccurred())
+
+					var updatedPvc corev1.PersistentVolumeClaim
+					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &updatedPvc)).To(Succeed())
+					Expect(updatedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(expectedSize))
+
+					if expectResize {
+						Expect(buf.String()).To(ContainSubstring("resizing persistent volume claim"))
+					} else {
+						Expect(buf.String()).To(ContainSubstring("max capacity reached"))
+						Expect(aggregator.getAggregatedCondition()).To(And(
+							HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
+							HaveField("Status", metav1.ConditionFalse),
+							HaveField("Reason", ReasonReconcile),
+							HaveField("Message", ContainSubstring("max capacity reached")),
+						))
+					}
+				},
+				Entry("should not resize when headroom is below scaling resolution",
+					resource.MustParse("1500Mi"), resource.MustParse("1Gi"), false, resource.MustParse("1Gi"),
+				),
+				Entry("should clamp resize to max capacity when step would overshoot",
+					resource.MustParse("2Gi"), resource.MustParse("2Gi"), true, resource.MustParse("2Gi"),
+				),
+			)
 
 			DescribeTable("should handle cooldown duration",
 				func(lastResizeOffset time.Duration, expectResize bool, expectedLog string) {
