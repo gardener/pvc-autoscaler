@@ -26,6 +26,13 @@ deploy:
           nodeExporter.enabled: "false"
           prometheusOperator.enabled: "true"
           prometheus.enabled: "true"
+profiles:
+- name: minikube
+  activation:
+  - kubeContext: pvc-autoscaler-minikube
+  deploy:
+    helm:
+      releases: []
 ---
 apiVersion: skaffold/v4beta12
 kind: Config
@@ -60,3 +67,14 @@ deploy:
       apply:
         - --server-side
         - --force-conflicts
+profiles:
+- name: minikube
+  activation:
+  - kubeContext: pvc-autoscaler-minikube
+  build:
+    local:
+      useDockerCLI: true
+  patches:
+  - op: replace
+    path: /manifests/kustomize/paths/0
+    value: config/overlays/minikube

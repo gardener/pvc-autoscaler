@@ -35,13 +35,13 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 REPO_ROOT                         := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-KIND_KUBECONFIG                   := $(REPO_ROOT)/example/kind/local/kubeconfig
+LOCAL_KUBECONFIG                  := $(REPO_ROOT)/example/local/kubeconfig
 DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
 KINDEST_NODE_IMAGE_TAG		      ?= v1.33.12@sha256:3f5c8443c620245e4d355cfe09e96a91ead32ceaa569d3f1ca9edf0cb2fe2ff4
 
 ## Rules
 tools-for-generate: controller-gen golangci-lint goimports yq
-kind-up kind-down pvc-autoscaler-up pvc-autoscaler-dev test-e2e-local ci-e2e-kind: export KUBECONFIG = $(KIND_KUBECONFIG)
+kind-up kind-down minikube-up minikube-down pvc-autoscaler-up pvc-autoscaler-dev pvc-autoscaler-down test-e2e-local ci-e2e-kind: export KUBECONFIG = $(LOCAL_KUBECONFIG)
 ci-e2e-kind: export ARTIFACTS ?= /tmp/artifacts
 
 .PHONY: all
@@ -133,6 +133,8 @@ verify-extended: check-generate check format test-cov test-cov-clean sast-report
 lint-fix: golangci-lint ## Run golangci-lint linter and perform fixes
 	$(GOLANGCI_LINT) run --fix
 
+##@ Local Setup
+
 .PHONY: kind-up
 kind-up: kind kustomize kubectl
 	./hack/kind-up.sh \
@@ -142,6 +144,14 @@ kind-up: kind kustomize kubectl
 .PHONY: kind-down
 kind-down: kind
 	$(KIND) delete cluster --name pvc-autoscaler
+
+.PHONY: minikube-up
+minikube-up: minikube yq  ## Start a local dev environment
+	env MINIKUBE_PROFILE=$(MINIKUBE_PROFILE) ./hack/minikube-up.sh
+
+.PHONY: minikube-down
+minikube-down: minikube  ## Stop the local dev environment
+	$(MINIKUBE) delete --profile $(MINIKUBE_PROFILE)
 
 .PHONY: pvc-autoscaler-up
 pvc-autoscaler-up: skaffold kustomize kubectl helm yq
@@ -155,19 +165,6 @@ pvc-autoscaler-dev: skaffold kustomize kubectl helm yq
 pvc-autoscaler-down: skaffold kustomize kubectl helm yq
 	$(SKAFFOLD) delete
 
-.PHONY: minikube-start
-minikube-start: minikube yq  ## Start a local dev environment
-	env MINIKUBE_PROFILE=$(MINIKUBE_PROFILE) ./hack/minikube-start.sh
-
-.PHONY: minikube-stop
-minikube-stop: minikube  ## Stop the local dev environment
-	$(MINIKUBE) delete --profile $(MINIKUBE_PROFILE)
-
-.PHONY: minikube-load-image
-minikube-load-image: minikube docker-build  ## Load the operator image into the minikube nodes
-	$(CONTAINER_TOOL) image save -o image.tar ${IMG}:${IMAGE_TAG}
-	$(MINIKUBE) image load --overwrite=true image.tar
-	rm -f image.tar
 
 ##@ Build
 
@@ -220,12 +217,12 @@ ifndef ignore-not-found
   ignore-not-found = false
 endif
 
-.PHONY: install
-install: generate kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
+.PHONY: install-crds
+install-crds: generate kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) apply -f -
 
-.PHONY: uninstall
-uninstall: generate kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
+.PHONY: uninstall-crds
+uninstall-crds: generate kustomize ## Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
 	$(KUSTOMIZE) build config/crd | $(KUBECTL) delete --ignore-not-found=$(ignore-not-found) -f -
 
 .PHONY: deploy
@@ -292,7 +289,7 @@ ENVTEST_VERSION ?= $(subst v,release-,$(call major_minor_version_gomod,sigs.k8s.
 GOIMPORTS_VERSION ?= $(call version_gomod,golang.org/x/tools)
 
 # minikube settings
-MINIKUBE_PROFILE ?= pvc-autoscaler
+MINIKUBE_PROFILE = pvc-autoscaler-minikube
 MINIKUBE_DRIVER ?= qemu
 
 # A target which is used to clean up previous versions of tools

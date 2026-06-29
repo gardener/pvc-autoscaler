@@ -22,17 +22,22 @@ POD_PATH=${POD_PATH:-/app}
 NUM_FILES=${NUM_FILES:-5}
 FILE_SIZE=${FILE_SIZE:-100M}
 
-# The script to run within the pod
+# The script to run within the pod.
+#
+# Uses BusyBox-compatible flags for `mktemp` (-u for dry-run, -p for tmpdir) so
+# this works on minimal images such as alpine.
 _script=$(
   cat <<'EOF'
-for i in $( seq 1 ${NUM_FILES} ); do
-  _file=$( mktemp --dry-run --tmpdir="${POD_PATH}" )
+i=1
+while [ "${i}" -le "${NUM_FILES}" ]; do
+  _file=$( mktemp -u -p "${POD_PATH}" )
   dd if=/dev/zero of="${_file}" bs="${FILE_SIZE}" count=1 > /dev/null 2>&1
+  i=$(( i + 1 ))
 done
 EOF
 )
 
-# Run our script
+# Run our script.
 kubectl \
   --namespace "${NAMESPACE}" \
-  exec -it "${POD}" -- bash -c "NUM_FILES=${NUM_FILES}; POD_PATH=${POD_PATH}; FILE_SIZE=${FILE_SIZE}; ${_script}"
+  exec -i "${POD}" -- sh -c "NUM_FILES=${NUM_FILES}; POD_PATH=${POD_PATH}; FILE_SIZE=${FILE_SIZE}; ${_script}"
