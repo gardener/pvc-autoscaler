@@ -66,11 +66,16 @@ help: ## Display this help.
 
 ##@ Development
 
-.PHONY: generate
-generate: controller-gen build-installer ## Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations. Also generates WebhookConfiguration, ClusterRole and CRD objects.
+define run-generate
 	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
 	$(MAKE) format
+endef
+
+.PHONY: generate
+generate: controller-gen ## Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations. Also generates WebhookConfiguration, ClusterRole and CRD objects.
+	$(call run-generate)
+	$(MAKE) build-installer
 
 .PHONY: sast
 sast: gosec
@@ -205,7 +210,8 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	rm Dockerfile.cross
 
 .PHONY: build-installer
-build-installer: generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
+build-installer: controller-gen kustomize ## Generate a consolidated YAML with CRDs and deployment.
+	$(call run-generate)
 	mkdir -p dist
 	echo "---" > dist/install.yaml  # Add a document separator before appending
 	cd config/overlays/default && $(KUSTOMIZE) edit set image controller=${IMG}:latest
