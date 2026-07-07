@@ -26,13 +26,6 @@ deploy:
           nodeExporter.enabled: "false"
           prometheusOperator.enabled: "true"
           prometheus.enabled: "true"
-profiles:
-- name: minikube
-  activation:
-  - kubeContext: pvc-autoscaler-minikube
-  deploy:
-    helm:
-      releases: []
 ---
 apiVersion: skaffold/v4beta12
 kind: Config
