@@ -17,7 +17,11 @@ const AutoscalerNameIndexKey = ".spec.autoscalerName"
 // AddAutoscalerNameFieldIndexer adds an index for AutoscalerName to the given indexer.
 func AddAutoscalerNameFieldIndexer(ctx context.Context, indexer client.FieldIndexer) error {
 	if err := indexer.IndexField(ctx, &PersistentVolumeClaimAutoscaler{}, AutoscalerNameIndexKey, func(obj client.Object) []string {
-		pvca := obj.(*PersistentVolumeClaimAutoscaler)
+		pvca, ok := obj.(*PersistentVolumeClaimAutoscaler)
+		if !ok {
+			return nil
+		}
+
 		return []string{pvca.Spec.AutoscalerName}
 	}); err != nil {
 		return fmt.Errorf("failed to add indexer for %s to PersistentVolumeClaimAutoscaler Informer: %w", AutoscalerNameIndexKey, err)
