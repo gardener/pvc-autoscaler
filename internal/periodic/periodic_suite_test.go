@@ -22,10 +22,12 @@ import (
 	"k8s.io/client-go/restmapper"
 	"k8s.io/client-go/scale"
 	"k8s.io/client-go/tools/record"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
@@ -33,13 +35,16 @@ import (
 	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 )
 
-var cfg *rest.Config
-var k8sClient client.Client
-var testEnv *envtest.Environment
-var eventRecorder = record.NewFakeRecorder(1024)
-var pvcFetcher pvcfetcher.Fetcher
-var parentCtx context.Context
-var cancelFunc context.CancelFunc
+var (
+	cfg           *rest.Config
+	k8sClient     client.Client
+	mgrClient     client.Client
+	testEnv       *envtest.Environment
+	eventRecorder = record.NewFakeRecorder(1024)
+	pvcFetcher    pvcfetcher.Fetcher
+	parentCtx     context.Context
+	cancelFunc    context.CancelFunc
+)
 
 func TestPeriodic(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -80,10 +85,27 @@ var _ = BeforeSuite(func() {
 	err = v1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	opts := client.Options{Scheme: scheme.Scheme}
-	k8sClient, err = client.New(cfg, opts)
+	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
+		Scheme:  scheme.Scheme,
+		Metrics: metricsserver.Options{BindAddress: "0"},
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	mgrClient = mgr.GetClient()
+
+	Expect(v1alpha1.AddAutoscalerNameFieldIndexer(context.Background(), mgr.GetFieldIndexer())).To(Succeed())
+
+	go func() {
+		defer GinkgoRecover()
+		Expect(mgr.Start(parentCtx)).To(Succeed())
+	}()
+
+	// Wait for the cache to be synced before running tests.
+	Expect(mgr.GetCache().WaitForCacheSync(parentCtx)).To(BeTrue())
 
 	// Create test storage class
 	Expect(k8sClient.Create(context.Background(), &testutils.StorageClass)).To(Succeed())
