@@ -78,4 +78,38 @@ var _ = Describe("Utils", func() {
 			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimVolumeModifyVolumeError, corev1.ConditionTrue)).To(BeFalse())
 		})
 	})
+
+	Context("# IsPersistentVolumeClaimResizeInfeasible", func() {
+		newPVC := func(status corev1.ClaimResourceStatus) *corev1.PersistentVolumeClaim {
+			return &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
+				Status: corev1.PersistentVolumeClaimStatus{
+					AllocatedResourceStatuses: map[corev1.ResourceName]corev1.ClaimResourceStatus{
+						corev1.ResourceStorage: status,
+					},
+				},
+			}
+		}
+
+		It("returns false when the allocated resource statuses map is empty", func() {
+			pvc := &corev1.PersistentVolumeClaim{
+				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
+			}
+			Expect(utils.IsPersistentVolumeClaimResizeInfeasible(pvc)).To(BeFalse())
+		})
+
+		It("returns false when the storage status indicates progress", func() {
+			Expect(utils.IsPersistentVolumeClaimResizeInfeasible(newPVC(corev1.PersistentVolumeClaimControllerResizeInProgress))).To(BeFalse())
+			Expect(utils.IsPersistentVolumeClaimResizeInfeasible(newPVC(corev1.PersistentVolumeClaimNodeResizeInProgress))).To(BeFalse())
+			Expect(utils.IsPersistentVolumeClaimResizeInfeasible(newPVC(corev1.PersistentVolumeClaimNodeResizePending))).To(BeFalse())
+		})
+
+		It("returns true for ControllerResizeInfeasible", func() {
+			Expect(utils.IsPersistentVolumeClaimResizeInfeasible(newPVC(corev1.PersistentVolumeClaimControllerResizeInfeasible))).To(BeTrue())
+		})
+
+		It("returns true for NodeResizeInfeasible", func() {
+			Expect(utils.IsPersistentVolumeClaimResizeInfeasible(newPVC(corev1.PersistentVolumeClaimNodeResizeInfeasible))).To(BeTrue())
+		})
+	})
 })
