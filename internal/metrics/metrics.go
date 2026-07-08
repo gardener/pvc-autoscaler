@@ -57,8 +57,19 @@ var (
 		},
 		[]string{"namespace", "persistentvolumeclaim", "reason"},
 	)
+
+	// ResizeFailureRecoveryTotal is a metric which increments each time the
+	// a PVC's requested storage to tries to recover from an infeasible volume expansion.
+	ResizeFailureRecoveryTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Name:      "resize_failure_recovery_total",
+			Help:      "Total number of times the autoscaler reduced a PVC's requested storage to recover from an infeasible resize",
+		},
+		[]string{"namespace", "persistentvolumeclaim"},
+	)
 )
 
 func init() {
-	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal)
+	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal, ResizeFailureRecoveryTotal)
 }
