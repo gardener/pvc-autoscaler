@@ -60,3 +60,14 @@ deploy:
       apply:
         - --server-side
         - --force-conflicts
+profiles:
+- name: minikube
+  activation:
+  - kubeContext: pvc-autoscaler-minikube
+  build:
+    local:
+      useDockerCLI: true
+  patches:
+  - op: replace
+    path: /manifests/kustomize/paths/0
+    value: config/overlays/minikube
