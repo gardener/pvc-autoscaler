@@ -88,6 +88,8 @@ const (
 	ReasonReconcile = "Reconcile"
 	// ReasonPVCResizeCooldown indicates that the PVC resize is in cooldown period.
 	ReasonPVCResizeCooldown = "PersistentVolumeClaimResizeCooldown"
+	// ReasonResizeFailureRecovery indicates that the autoscaler reduced the requested storage on a PVC to recover from an infeasible volume expansion.
+	ReasonResizeFailureRecovery = "ResizeFailureRecovery"
 )
 
 // Runner is a [sigs.k8s.io/controller-runtime/pkg/manager.Runnable], which
@@ -416,6 +418,16 @@ func (r *Runner) reconcilePVCA(
 				Reason:  ReasonMetricsFetchError,
 				Message: fmt.Sprintf("%s: %s", pvcObjKey.Name, err.Error()),
 			})
+
+			continue
+		}
+
+		if utils.IsPersistentVolumeClaimResizeInfeasible(pvc) {
+			volumeRecommendation, err = r.recoverFromFailedResize(ctx, logger, pvc, volumeRecommendation, resizingConditions)
+			if err != nil {
+				logger.Error(err, "failed to recover from failed pvc resize")
+			}
+			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
 			continue
 		}
@@ -806,6 +818,54 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 		Status:  metav1.ConditionTrue,
 		Reason:  ReasonReconcile,
 		Message: fmt.Sprintf("%s: resizing from %s to %s due to %s", pvc.Name, currSpecSize.String(), targetSize.String(), scalingReason),
+	})
+
+	return volumeRecommendation, nil
+}
+
+// recoverFromFailedResize reduces the [corev1.PersistentVolumeClaim]'s requested storage back to the last-known-good capacity when the CSI driver
+// has reported the expansion as infeasible.
+func (r *Runner) recoverFromFailedResize(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
+	metrics.ResizeFailureRecoveryTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
+
+	currSpecSize := pvc.Spec.Resources.Requests.Storage()
+	targetSize := pvc.Status.AllocatedResources.Storage()
+	if targetSize.IsZero() || targetSize.Cmp(*currSpecSize) >= 0 {
+		return volumeRecommendation, nil
+	}
+
+	infeasibleStatus := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
+
+	logger.Info("recovering from failed pvc resize", "from", currSpecSize.String(), "to", targetSize.String(), "status", string(infeasibleStatus))
+	r.eventRecorder.Eventf(
+		pvc,
+		corev1.EventTypeWarning,
+		"ResizeFailureRecovery",
+		"reducing requested storage from %s to %s because volume expansion was reported as infeasible: %s",
+		currSpecSize.String(),
+		targetSize.String(),
+		string(infeasibleStatus),
+	)
+
+	pvcPatch := client.MergeFrom(pvc.DeepCopy())
+	pvc.Spec.Resources.Requests[corev1.ResourceStorage] = *targetSize
+	if err := r.client.Patch(ctx, pvc, pvcPatch); err != nil {
+		resizingConditions.addCondition(metav1.Condition{
+			Type:    string(v1alpha1.ConditionTypeResizing),
+			Status:  metav1.ConditionFalse,
+			Reason:  ReasonResizeFailureRecovery,
+			Message: fmt.Sprintf("%s: failed to roll back requested storage from %s to %s after infeasible resize: %s", pvc.Name, currSpecSize.String(), targetSize.String(), err.Error()),
+		})
+
+		return volumeRecommendation, err
+	}
+	volumeRecommendation.Target.Size = targetSize
+
+	resizingConditions.addCondition(metav1.Condition{
+		Type:    string(v1alpha1.ConditionTypeResizing),
+		Status:  metav1.ConditionFalse,
+		Reason:  ReasonResizeFailureRecovery,
+		Message: fmt.Sprintf("%s: rolled back requested storage from %s to %s after infeasible resize (%s)", pvc.Name, currSpecSize.String(), targetSize.String(), string(infeasibleStatus)),
 	})
 
 	return volumeRecommendation, nil
