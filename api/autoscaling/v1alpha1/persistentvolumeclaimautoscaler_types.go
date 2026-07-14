@@ -17,6 +17,7 @@ import (
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:shortName=pvca
+// +kubebuilder:printcolumn:name="AutoscalerName",type=string,JSONPath=`.spec.autoscalerName`
 // +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetRef.name`
 
 // PersistentVolumeClaimAutoscaler is the Schema for the
@@ -45,6 +46,14 @@ func init() {
 
 // PersistentVolumeClaimAutoscalerSpec defines the desired state of the PersistentVolumeClaimAutoscaler.
 type PersistentVolumeClaimAutoscalerSpec struct {
+	// AutoscalerName optionally assigns this PVCA to a named autoscaler instance.
+	// An autoscaler started with --autoscaler-name=<name> reconciles only PVCAs whose
+	// autoscalerName matches. An autoscaler started without --autoscaler-name reconciles
+	// only PVCAs with an empty autoscalerName. Defaults to "".
+	// +kubebuilder:default=""
+	// +optional
+	AutoscalerName string `json:"autoscalerName,omitempty"`
+
 	// TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
 	// whose PVCs will be managed by the autoscaler.
 	TargetRef autoscalingv1.CrossVersionObjectReference `json:"targetRef"`

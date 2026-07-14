@@ -64,6 +64,7 @@ func main() {
 	var metricsCapacityBytesQuery string
 	var metricsAvailableInodesQuery string
 	var metricsCapacityInodesQuery string
+	var autoscalerName string
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -84,6 +85,7 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 
 	flag.DurationVar(&interval, "interval", 5*time.Minute, "The interval at which to run the periodic check")
+	flag.StringVar(&autoscalerName, "autoscaler-name", "", "Only reconcile PVCAs with this autoscalerName value. An empty value (default) reconciles PVCAs with no autoscalerName set.")
 
 	opts := zap.Options{
 		Development: true,
@@ -143,6 +145,11 @@ func main() {
 
 	ctx := ctrl.SetupSignalHandler()
 
+	if err := v1alpha1.AddAutoscalerNameFieldIndexer(ctx, mgr.GetFieldIndexer()); err != nil {
+		setupLog.Error(err, "unable to set up field indexer", "controller", common.ControllerName)
+		os.Exit(1)
+	}
+
 	prometheusOpts := []prometheus.Option{
 		prometheus.WithAddress(prometheusAddress),
 		prometheus.WithAvailableBytesQuery(metricsAvailableBytesQuery),
@@ -173,6 +180,7 @@ func main() {
 		periodic.WithEventRecorder(mgr.GetEventRecorderFor(common.ControllerName)),
 		periodic.WithPVCFetcher(pvcFetcher),
 		periodic.WithHeartbeat(heartbeat),
+		periodic.WithAutoscalerName(autoscalerName),
 	)
 	if err != nil {
 		setupLog.Error(err, "unable to create periodic runner", "controller", common.ControllerName)

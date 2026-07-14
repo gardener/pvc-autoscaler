@@ -94,12 +94,13 @@ const (
 // processes [v1alpha1.PersistentVolumeClaimAutoscaler] items on a regular basis
 // and performs PVC resizing when thresholds are reached.
 type Runner struct {
-	client        client.Client
-	interval      time.Duration
-	metricsSource metricssource.Source
-	eventRecorder record.EventRecorder
-	pvcFetcher    pvcfetcher.Fetcher
-	heartbeat     *healthcheck.Heartbeat
+	client         client.Client
+	interval       time.Duration
+	metricsSource  metricssource.Source
+	eventRecorder  record.EventRecorder
+	pvcFetcher     pvcfetcher.Fetcher
+	heartbeat      *healthcheck.Heartbeat
+	autoscalerName string
 }
 
 var _ manager.Runnable = &Runner{}
@@ -187,6 +188,18 @@ func WithHeartbeat(h *healthcheck.Heartbeat) Option {
 	return opt
 }
 
+// WithAutoscalerName configures the [Runner] to reconcile only
+// [v1alpha1.PersistentVolumeClaimAutoscaler] objects whose spec.autoscalerName
+// matches the given value. An empty string (the default) reconciles only PVCAs
+// with an empty autoscalerName.
+func WithAutoscalerName(name string) Option {
+	opt := func(r *Runner) {
+		r.autoscalerName = name
+	}
+
+	return opt
+}
+
 // Start implements the
 // [sigs.k8s.io/controller-runtime/pkg/manager.Runnable] interface.
 func (r *Runner) Start(ctx context.Context) error {
@@ -222,7 +235,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 		pvcaList v1alpha1.PersistentVolumeClaimAutoscalerList
 	)
 
-	if err := r.client.List(ctx, &pvcaList); err != nil {
+	if err := r.client.List(ctx, &pvcaList, client.MatchingFields{v1alpha1.AutoscalerNameIndexKey: r.autoscalerName}); err != nil {
 		return err
 	}
 
@@ -260,6 +273,8 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 
 	for _, pvca := range persistentVolumeClaimAutoscalers {
 		pvcaKey := client.ObjectKeyFromObject(&pvca)
+		logger.V(2).Info("fetching persistentvolumeclaims for persistentvolumeclaimautoscaler", "autoscalerName", r.autoscalerName, "pvca", pvcaKey)
+
 		persistentVolumeClaims, err := r.pvcFetcher.Fetch(ctx, &pvca)
 		if err != nil {
 			logger.Error(err, "failed to fetch persistentvolumeclaims for persistentvolumeclaimautoscaler", "pvca", pvcaKey)

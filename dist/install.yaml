@@ -41,6 +41,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .spec.autoscalerName
+      name: AutoscalerName
+      type: string
     - jsonPath: .spec.targetRef.name
       name: Target
       type: string
@@ -72,6 +75,14 @@ spec:
             description: PersistentVolumeClaimAutoscalerSpec defines the desired state
               of the PersistentVolumeClaimAutoscaler.
             properties:
+              autoscalerName:
+                default: ""
+                description: |-
+                  AutoscalerName optionally assigns this PVCA to a named autoscaler instance.
+                  An autoscaler started with --autoscaler-name=<name> reconciles only PVCAs whose
+                  autoscalerName matches. An autoscaler started without --autoscaler-name reconciles
+                  only PVCAs with an empty autoscalerName. Defaults to "".
+                type: string
               targetRef:
                 description: |-
                   TargetRef specifies the reference to the workload controller (e.g., StatefulSet)
