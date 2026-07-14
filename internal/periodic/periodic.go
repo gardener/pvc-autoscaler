@@ -273,6 +273,8 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 
 	for _, pvca := range persistentVolumeClaimAutoscalers {
 		pvcaKey := client.ObjectKeyFromObject(&pvca)
+		logger.V(2).Info("fetching persistentvolumeclaims for persistentvolumeclaimautoscaler", "autoscalerName", r.autoscalerName, "pvca", pvcaKey)
+
 		persistentVolumeClaims, err := r.pvcFetcher.Fetch(ctx, &pvca)
 		if err != nil {
 			logger.Error(err, "failed to fetch persistentvolumeclaims for persistentvolumeclaimautoscaler", "pvca", pvcaKey)

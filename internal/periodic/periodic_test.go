@@ -73,12 +73,12 @@ func createPVCA(ctx context.Context, name, autoscalerName string, targetRef auto
 // ResourceVersion, ensuring a preceding k8sClient.Patch is visible to the runner.
 func waitForPVCACacheSync(ctx context.Context, pvca *v1alpha1.PersistentVolumeClaimAutoscaler) {
 	rv := pvca.ResourceVersion
-	Eventually(func() string {
+	Eventually(func(g Gomega) {
 		cached := &v1alpha1.PersistentVolumeClaimAutoscaler{}
-		_ = mgrClient.Get(ctx, client.ObjectKeyFromObject(pvca), cached)
-
-		return cached.ResourceVersion
-	}).Should(Equal(rv))
+		err := mgrClient.Get(ctx, client.ObjectKeyFromObject(pvca), cached)
+		g.Expect(err).NotTo(HaveOccurred())
+		g.Expect(cached.ResourceVersion).To(Equal(rv))
+	}).Should(Succeed())
 }
 
 // creates a new test periodic runner
