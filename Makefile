@@ -280,7 +280,7 @@ HELM_VERSION ?= v4.2.3
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION ?= v0.32.0
 # renovate: datasource=github-releases depName=GoogleContainerTools/skaffold
-SKAFFOLD_VERSION ?= v2.23.0
+SKAFFOLD_VERSION ?= v2.24.0
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
 KUBECTL_VERSION ?= v1.36.3
 # renovate: datasource=github-releases depName=securego/gosec
