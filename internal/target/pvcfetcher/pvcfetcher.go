@@ -99,7 +99,7 @@ func (f *pvcFetcher) Fetch(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	if len(podList.Items) == 0 {
-		return nil, fmt.Errorf("no pods found for selector %s", selector)
+		return nil, nil
 	}
 
 	pvcs, err := f.getPVCsFromPods(ctx, podList.Items)
@@ -108,7 +108,7 @@ func (f *pvcFetcher) Fetch(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	if len(pvcs) == 0 {
-		return nil, fmt.Errorf("no PersistentVolumeClaims found for selector %s", selector)
+		return nil, nil
 	}
 
 	return pvcs, nil

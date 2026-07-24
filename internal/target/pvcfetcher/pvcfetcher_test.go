@@ -108,15 +108,15 @@ var _ = Describe("PVCFetcher", func() {
 			Expect(err.Error()).To(ContainSubstring("failed to fetch selector"))
 		})
 
-		It("should return error when no pods match the selector", func() {
+		It("should return nil when no pods match the selector", func() {
 			selectorFetcher.selector, _ = labels.Parse("app=test")
 
 			pvcs, err := fetcher.Fetch(ctx, pvca)
-			Expect(err).To(MatchError(ContainSubstring("no pods found for selector app=test")))
-			Expect(pvcs).To(BeEmpty())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pvcs).To(BeNil())
 		})
 
-		It("should return error when pods have no PVC volumes", func() {
+		It("should return nil when pods have no PVC volumes", func() {
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-pod",
@@ -146,8 +146,8 @@ var _ = Describe("PVCFetcher", func() {
 			Expect(fakeClient.Create(ctx, pod)).To(Succeed())
 
 			pvcs, err := fetcher.Fetch(ctx, pvca)
-			Expect(err).To(MatchError(ContainSubstring("no PersistentVolumeClaims found for selector app=test")))
-			Expect(pvcs).To(BeEmpty())
+			Expect(err).ToNot(HaveOccurred())
+			Expect(pvcs).To(BeNil())
 		})
 
 		It("should return PVCs from pods with PVC volumes", func() {
