@@ -47,6 +47,17 @@ var (
 		[]string{"namespace", "persistentvolumeclaim"},
 	)
 
+	// MaxCapacityReached reports how many currently targeted PVCs are at their
+	// configured max capacity. Unlike MaxCapacityReachedTotal it is a snapshot
+	// that rises and falls as PVCs enter and leave the max-capacity state.
+	MaxCapacityReached = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Name:      "max_capacity_reached",
+			Help:      "Number of targeted PVCs currently at their max capacity",
+		},
+	)
+
 	// SkippedTotal is a metric which increments each time a PVC is skipped
 	// from being reconciled.
 	SkippedTotal = prometheus.NewCounterVec(
@@ -60,5 +71,5 @@ var (
 )
 
 func init() {
-	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal)
+	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal, MaxCapacityReached)
 }
