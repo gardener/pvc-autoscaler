@@ -68,8 +68,20 @@ var (
 		},
 		[]string{"namespace", "persistentvolumeclaim", "reason"},
 	)
+
+	// ResizeStartedTimestampSeconds reports, per PVC currently being resized, the
+	// unix timestamp at which the in-flight resize started. It is unset for PVCs
+	// that are not mid-resize.
+	ResizeStartedTimestampSeconds = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Name:      "resize_started_timestamp_seconds",
+			Help:      "Unix timestamp at which an in-progress PVC resize started; unset when no resize is in progress",
+		},
+		[]string{"namespace", "persistentvolumeclaim"},
+	)
 )
 
 func init() {
-	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal, MaxCapacityReached)
+	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal, MaxCapacityReached, ResizeStartedTimestampSeconds)
 }

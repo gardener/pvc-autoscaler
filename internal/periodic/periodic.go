@@ -242,6 +242,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 	// Nothing to do for now
 	if len(pvcaList.Items) == 0 {
 		metrics.MaxCapacityReached.Set(0)
+		metrics.ResizeStartedTimestampSeconds.Reset()
 
 		return nil
 	}
@@ -252,6 +253,8 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 	}
 
 	pvcaToPVCsMap, pvcToOwnersMap := r.fetchPVCsForPVCAs(ctx, logger, pvcaList.Items)
+
+	metrics.ResizeStartedTimestampSeconds.Reset()
 
 	atMaxCapacity := 0
 	for pvca, pvcs := range pvcaToPVCsMap {
@@ -428,7 +431,11 @@ func (r *Runner) reconcilePVCA(
 		shouldResize, scalingReason := r.shouldResizePVC(pvc, *policy, volumeRecommendation)
 		if !shouldResize && scalingReason == "max capacity reached" {
 			*atMaxCapacity++
-			if !r.isResizeInProgress(logger, pvc, "", resizingConditions) {
+			if r.isResizeInProgress(logger, pvc, "", resizingConditions) {
+				metrics.ResizeStartedTimestampSeconds.
+					WithLabelValues(pvc.Namespace, pvc.Name).
+					Set(utils.ResizeStartTime(volumeRecommendation))
+			} else {
 				resizingConditions.addCondition(metav1.Condition{
 					Type:    string(v1alpha1.ConditionTypeResizing),
 					Status:  metav1.ConditionFalse,
@@ -442,6 +449,11 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		inProgress := r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions)
+		if inProgress {
+			metrics.ResizeStartedTimestampSeconds.
+				WithLabelValues(pvc.Namespace, pvc.Name).
+				Set(utils.ResizeStartTime(volumeRecommendation))
+		}
 
 		if shouldResize && !inProgress {
 			volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, *policy, scalingReason, volumeRecommendation, resizingConditions)

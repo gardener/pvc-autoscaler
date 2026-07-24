@@ -809,6 +809,73 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(testutil.ToFloat64(metrics.MaxCapacityReached)).To(Equal(float64(0)))
 			})
 
+			It("should report the resize-started timestamp gauge while a resize is in flight and clear it once done", func() {
+				By("Registering metrics for the test PVC so its threshold is reached")
+				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
+				fakeItem := &fake.Item{
+					NamespacedName:         client.ObjectKeyFromObject(pvc),
+					CapacityBytes:          1073741824,
+					AvailableBytes:         1073741824,
+					CapacityInodes:         10000,
+					AvailableInodes:        10000,
+					ConsumeBytesIncrement:  1000,
+					ConsumeInodesIncrement: 1000,
+				}
+				metricsSource.Register(fakeItem)
+
+				newCtx, cancelFunc := context.WithCancel(parentCtx)
+				go func() {
+					ch := time.After(500 * time.Millisecond)
+					<-ch
+					cancelFunc()
+				}()
+				metricsSource.Start(newCtx)
+				withMetricsSourceOpt := WithMetricsSource(metricsSource)
+				withMetricsSourceOpt(runner)
+
+				By("Reconciling once to initiate the resize (spec bumped, scaled-from annotation set)")
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				By("Verifying no series is reported on the sweep that initiates the resize")
+				Expect(testutil.CollectAndCount(metrics.ResizeStartedTimestampSeconds)).To(Equal(0))
+
+				By("Waiting for the resize to be observable via the cache: spec > status, scaled-from == status")
+				Eventually(func(g Gomega) {
+					cached := &corev1.PersistentVolumeClaim{}
+					g.Expect(mgrClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), cached)).To(Succeed())
+					g.Expect(cached.Annotations).To(HaveKeyWithValue(common.AnnotationPreviousSize, "1Gi"))
+				}).Should(Succeed())
+
+				By("Reading the persisted LastResizeTime from the PVCA status recommendation")
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.VolumeRecommendations).To(HaveLen(1))
+				lastResizeTime := updatedPVCA.Status.VolumeRecommendations[0].LastResizeTime
+				Expect(lastResizeTime).NotTo(BeNil())
+
+				By("Reconciling again while the resize is still in flight and asserting the gauge is set")
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+				Expect(testutil.CollectAndCount(metrics.ResizeStartedTimestampSeconds)).To(Equal(1))
+				Expect(testutil.ToFloat64(metrics.ResizeStartedTimestampSeconds.WithLabelValues(pvc.Namespace, pvc.Name))).
+					To(BeNumerically("==", float64(lastResizeTime.Unix())))
+
+				By("Simulating resize completion by bumping the PVC status capacity to match spec")
+				refreshed := &corev1.PersistentVolumeClaim{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), refreshed)).To(Succeed())
+				statusPatch := client.MergeFrom(refreshed.DeepCopy())
+				refreshed.Status.Capacity[corev1.ResourceStorage] = *refreshed.Spec.Resources.Requests.Storage()
+				Expect(k8sClient.Status().Patch(parentCtx, refreshed, statusPatch)).To(Succeed())
+				Eventually(func(g Gomega) {
+					cached := &corev1.PersistentVolumeClaim{}
+					g.Expect(mgrClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), cached)).To(Succeed())
+					g.Expect(cached.Status.Capacity.Storage().Cmp(*cached.Spec.Resources.Requests.Storage())).To(Equal(0))
+				}).Should(Succeed())
+
+				By("Reconciling once more and asserting the series is cleared")
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+				Expect(testutil.CollectAndCount(metrics.ResizeStartedTimestampSeconds)).To(Equal(0))
+			})
+
 			It("should reconcile when threshold has been reached", func() {
 				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
 				fakeItem := &fake.Item{
