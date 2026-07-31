@@ -97,13 +97,14 @@ const (
 // processes [v1alpha1.PersistentVolumeClaimAutoscaler] items on a regular basis
 // and performs PVC resizing when thresholds are reached.
 type Runner struct {
-	client         client.Client
-	interval       time.Duration
-	metricsSource  metricssource.Source
-	eventRecorder  record.EventRecorder
-	pvcFetcher     pvcfetcher.Fetcher
-	heartbeat      *healthcheck.Heartbeat
-	autoscalerName string
+	client            client.Client
+	interval          time.Duration
+	metricsSource     metricssource.Source
+	eventRecorder     record.EventRecorder
+	pvcFetcher        pvcfetcher.Fetcher
+	heartbeat         *healthcheck.Heartbeat
+	autoscalerName    string
+	kubernetesVersion string
 }
 
 var _ manager.Runnable = &Runner{}
@@ -198,6 +199,17 @@ func WithHeartbeat(h *healthcheck.Heartbeat) Option {
 func WithAutoscalerName(name string) Option {
 	opt := func(r *Runner) {
 		r.autoscalerName = name
+	}
+
+	return opt
+}
+
+// WithKubernetesVersion configures the [Runner] with the version of the
+// Kubernetes cluster it runs against. It is used for recovery from infeasible volume
+// expansions (RecoverVolumeExpansionFailure), which is GA as of Kubernetes 1.34.
+func WithKubernetesVersion(version string) Option {
+	opt := func(r *Runner) {
+		r.kubernetesVersion = version
 	}
 
 	return opt
@@ -424,6 +436,13 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		if utils.IsPersistentVolumeClaimResizeInfeasible(pvc) {
+			if !utils.IsKubernetesVersionGreaterEqual134(r.kubernetesVersion) {
+				logger.Info("skipping recovery from infeasible pvc resize, requires Kubernetes >= 1.34", "pvc", pvcObjKey.Name, "kubernetesVersion", r.kubernetesVersion)
+				setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
+
+				continue
+			}
+
 			volumeRecommendation, err = r.recoverFromFailedResize(ctx, logger, pvc, volumeRecommendation, resizingConditions)
 			if err != nil {
 				logger.Error(err, "failed to recover from failed pvc resize")
