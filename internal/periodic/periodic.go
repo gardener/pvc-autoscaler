@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -823,15 +824,26 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 	return volumeRecommendation, nil
 }
 
-// recoverFromFailedResize reduces the [corev1.PersistentVolumeClaim]'s requested storage back to the last-known-good capacity when the CSI driver
-// has reported the expansion as infeasible.
+// recoverFromFailedResize reduces the [corev1.PersistentVolumeClaim]'s requested storage when the CSI driver has reported the
+// expansion as infeasible. It retries at half the step (allocated + max(ScalingResolutionBytes, failedStep/2)).
 func (r *Runner) recoverFromFailedResize(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
 	metrics.ResizeFailureRecoveryTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
 
 	currSpecSize := pvc.Spec.Resources.Requests.Storage()
-	targetSize := pvc.Status.AllocatedResources.Storage()
-	if targetSize.IsZero() || targetSize.Cmp(*currSpecSize) >= 0 {
+	allocated := pvc.Status.AllocatedResources.Storage()
+	if allocated.IsZero() || allocated.Cmp(*currSpecSize) >= 0 {
 		return volumeRecommendation, nil
+	}
+
+	failedStep := currSpecSize.Value() - allocated.Value()
+	recoveryIncrement := int64(math.Max(float64(common.ScalingResolutionBytes), float64(failedStep)/2.0))
+	newTargetBytes := int64(math.Ceil(float64(allocated.Value()+recoveryIncrement)/float64(common.ScalingResolutionBytes))) * common.ScalingResolutionBytes
+	targetSize := resource.NewQuantity(newTargetBytes, resource.BinarySI)
+
+	// If the half-step meets or exceeds the size that just failed, roll back to the last-known-good capacity instead.
+	if targetSize.Cmp(*currSpecSize) >= 0 {
+		rollback := allocated.DeepCopy()
+		targetSize = &rollback
 	}
 
 	infeasibleStatus := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
@@ -847,14 +859,20 @@ func (r *Runner) recoverFromFailedResize(ctx context.Context, logger logr.Logger
 		string(infeasibleStatus),
 	)
 
-	pvcPatch := client.MergeFrom(pvc.DeepCopy())
+	pvcPatch := client.MergeFromWithOptions(pvc.DeepCopy(), client.MergeFromWithOptimisticLock{})
 	pvc.Spec.Resources.Requests[corev1.ResourceStorage] = *targetSize
 	if err := r.client.Patch(ctx, pvc, pvcPatch); err != nil {
+		if apierrors.IsConflict(err) {
+			logger.Info("skipping recovery, pvc changed concurrently", "from", currSpecSize.String(), "to", targetSize.String())
+
+			return volumeRecommendation, nil
+		}
+
 		resizingConditions.addCondition(metav1.Condition{
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionFalse,
 			Reason:  ReasonResizeFailureRecovery,
-			Message: fmt.Sprintf("%s: failed to roll back requested storage from %s to %s after infeasible resize: %s", pvc.Name, currSpecSize.String(), targetSize.String(), err.Error()),
+			Message: fmt.Sprintf("%s: failed to reduce requested storage from %s to %s after infeasible resize: %s", pvc.Name, currSpecSize.String(), targetSize.String(), err.Error()),
 		})
 
 		return volumeRecommendation, err
@@ -865,7 +883,7 @@ func (r *Runner) recoverFromFailedResize(ctx context.Context, logger logr.Logger
 		Type:    string(v1alpha1.ConditionTypeResizing),
 		Status:  metav1.ConditionFalse,
 		Reason:  ReasonResizeFailureRecovery,
-		Message: fmt.Sprintf("%s: rolled back requested storage from %s to %s after infeasible resize (%s)", pvc.Name, currSpecSize.String(), targetSize.String(), string(infeasibleStatus)),
+		Message: fmt.Sprintf("%s: reduced requested storage from %s to %s after infeasible resize (%s)", pvc.Name, currSpecSize.String(), targetSize.String(), string(infeasibleStatus)),
 	})
 
 	return volumeRecommendation, nil
