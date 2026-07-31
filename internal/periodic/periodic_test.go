@@ -96,6 +96,7 @@ func newRunner() (*Runner, error) {
 		WithMetricsSource(metricsSource),
 		WithPVCFetcher(pvcFetcher),
 		WithAutoscalerName(""),
+		WithKubernetesVersion("v1.34.0"),
 	)
 
 	return runner, err
