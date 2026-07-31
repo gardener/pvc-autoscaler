@@ -59,7 +59,7 @@ var (
 	)
 
 	// ResizeFailureRecoveryTotal is a metric which increments each time the
-	// a PVC's requested storage to tries to recover from an infeasible volume expansion.
+	// autoscaler reduces a PVC's requested storage to recover from an infeasible volume expansion.
 	ResizeFailureRecoveryTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: Namespace,
