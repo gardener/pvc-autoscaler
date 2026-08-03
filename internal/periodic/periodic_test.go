@@ -930,7 +930,7 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
 					HaveField("Status", metav1.ConditionUnknown),
 					HaveField("Reason", ReasonPVCFetchError),
-					HaveField("Message", Equal("Resizing state is unknown: failed to fetch PersistentVolumeClaims")),
+					HaveField("Message", ContainSubstring("Resizing state is unknown: Failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler")),
 				)))
 				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
 					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
@@ -1180,6 +1180,7 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
 					HaveField("Status", metav1.ConditionFalse),
 					HaveField("Reason", ReasonNoPVCsMatched),
+					HaveField("Message", "Failed to fetch PersistentVolumeClaims: no matching pods found for PersistentVolumeClaimAutoscaler"),
 				)))
 			})
 
@@ -1239,6 +1240,7 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
 					HaveField("Status", metav1.ConditionFalse),
 					HaveField("Reason", ReasonNoPVCsMatched),
+					HaveField("Message", "Failed to fetch PersistentVolumeClaims: no PersistentVolumeClaims found for matched pods"),
 				)))
 			})
 
