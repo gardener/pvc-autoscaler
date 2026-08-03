@@ -23,6 +23,12 @@ var (
 
 	// ErrNoSelectorFetcher is returned when the [Fetcher] is configured without a selector fetcher.
 	ErrNoSelectorFetcher = errors.New("no selector fetcher provided")
+
+	// ErrNoPodsFound is returned when no pods match the target's selector.
+	ErrNoPodsFound = errors.New("no matching pods found for PersistentVolumeClaimAutoscaler")
+
+	// ErrNoPVCsFound is returned when pods are found but none of them have PVC volumes.
+	ErrNoPVCsFound = errors.New("no PersistentVolumeClaims found for matched pods")
 )
 
 // Fetcher is an interface that can be used to fetch all PersistentVolumeClaims
@@ -99,7 +105,7 @@ func (f *pvcFetcher) Fetch(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	if len(podList.Items) == 0 {
-		return nil, nil
+		return nil, ErrNoPodsFound
 	}
 
 	pvcs, err := f.getPVCsFromPods(ctx, podList.Items)
@@ -108,7 +114,7 @@ func (f *pvcFetcher) Fetch(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	if len(pvcs) == 0 {
-		return nil, nil
+		return nil, ErrNoPVCsFound
 	}
 
 	return pvcs, nil
