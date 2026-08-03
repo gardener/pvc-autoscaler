@@ -283,11 +283,7 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 			message := fmt.Sprintf("Failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler: %s", err.Error())
 
 			if errors.Is(err, pvcfetcher.ErrNoPodsFound) || errors.Is(err, pvcfetcher.ErrNoPVCsFound) {
-				// Log at low verbosity because there are expected conditions in which no pods could be
-				// matched or no PVCs could be found, e.g. workload scaled to zero. These should not be considered
-				// as operational errors
 				logger.V(2).Info("no persistentvolumeclaims found for persistentvolumeclaimautoscaler", "pvca", pvcaKey, "reason", err.Error())
-
 				reason = ReasonNoPVCsMatched
 				message = fmt.Sprintf("Failed to fetch PersistentVolumeClaims: %s", err.Error())
 			} else {
