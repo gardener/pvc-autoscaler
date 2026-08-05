@@ -1708,6 +1708,118 @@ var _ = Describe("Periodic Runner", func() {
 			)
 		})
 
+		Describe("resize strategies", func() {
+			var (
+				strategy     v1alpha1.VolumeResizeStrategy
+				logOutput    strings.Builder
+				aggregator   *resizingConditionAggregator
+				volumePolicy *v1alpha1.VolumePolicy
+			)
+
+			BeforeEach(func() {
+				logOutput.Reset()
+				aggregator = &resizingConditionAggregator{}
+			})
+
+			JustBeforeEach(func() {
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.VolumePolicies[0].ScaleUp.ResizeStrategy = strategy
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+				waitForPVCACacheSync(parentCtx, pvca)
+
+				var err error
+				volumePolicy, err = getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("using InPlace strategy", func() {
+				BeforeEach(func() {
+					strategy = v1alpha1.InPlaceVolumeResizeStrategy
+				})
+
+				It("should patch the PVC when threshold is reached", func() {
+					volumeRecommendation := v1alpha1.VolumeRecommendation{
+						Name:    pvc.Name,
+						Current: v1alpha1.CurrentVolumeStatus{UsedSpacePercent: ptr.To(95)},
+					}
+					_, err := runner.resizePVC(parentCtx, zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &logOutput))), pvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(logOutput.String()).To(ContainSubstring("resizing persistent volume claim"))
+
+					var pvcObj corev1.PersistentVolumeClaim
+					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &pvcObj)).To(Succeed())
+					Expect(pvcObj.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("2Gi")))
+					Expect(aggregator.getAggregatedCondition()).To(And(
+						HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
+						HaveField("Status", metav1.ConditionTrue),
+					))
+				})
+
+				It("should set Resizing=False condition when max capacity is reached", func() {
+					pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+					pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("1500Mi")
+					Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+					waitForPVCACacheSync(parentCtx, pvca)
+
+					volumeRecommendation := v1alpha1.VolumeRecommendation{
+						Name:    pvc.Name,
+						Current: v1alpha1.CurrentVolumeStatus{UsedSpacePercent: ptr.To(95)},
+					}
+					volumePolicy, _ = getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+					_, err := runner.resizePVC(parentCtx, zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &logOutput))), pvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(logOutput.String()).To(ContainSubstring("max capacity reached"))
+					Expect(aggregator.getAggregatedCondition()).To(And(
+						HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
+						HaveField("Status", metav1.ConditionFalse),
+						HaveField("Message", ContainSubstring("max capacity reached")),
+					))
+				})
+			})
+
+			When("using Off strategy", func() {
+				BeforeEach(func() {
+					strategy = v1alpha1.OffVolumeResizeStrategy
+				})
+
+				It("should update the recommendation without patching the PVC when threshold is reached", func() {
+					volumeRecommendation := v1alpha1.VolumeRecommendation{
+						Name:    pvc.Name,
+						Current: v1alpha1.CurrentVolumeStatus{UsedSpacePercent: ptr.To(95)},
+					}
+					updatedRecommendation, err := runner.resizePVC(parentCtx, zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &logOutput))), pvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
+					Expect(err).NotTo(HaveOccurred())
+
+					var pvcObj corev1.PersistentVolumeClaim
+					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &pvcObj)).To(Succeed())
+					Expect(pvcObj.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("1Gi")))
+					Expect(aggregator.getAggregatedCondition().Message).To(BeEmpty())
+					Expect(updatedRecommendation.Target.Size).NotTo(BeNil())
+					Expect(updatedRecommendation.Target.Size.String()).To(Equal("2Gi"))
+				})
+
+				It("should not set a Resizing condition when max capacity is reached", func() {
+					pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+					pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("1500Mi")
+					Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+					waitForPVCACacheSync(parentCtx, pvca)
+					volumePolicy, _ = getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+
+					volumeRecommendation := v1alpha1.VolumeRecommendation{
+						Name:    pvc.Name,
+						Current: v1alpha1.CurrentVolumeStatus{UsedSpacePercent: ptr.To(95)},
+					}
+					_, err := runner.resizePVC(parentCtx, zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &logOutput))), pvc, *volumePolicy, "passing storage threshold", volumeRecommendation, aggregator)
+					Expect(err).NotTo(HaveOccurred())
+
+					Expect(logOutput.String()).To(ContainSubstring("max capacity reached"))
+					Expect(aggregator.getAggregatedCondition().Message).To(BeEmpty())
+				})
+			})
+		})
+
 		Describe("#SetStatus", func() {
 			It("should persist the recommendations condition with the aggregated message", func() {
 				recAgg := &recommendationsConditionAggregator{}
