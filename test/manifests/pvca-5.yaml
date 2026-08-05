@@ -1,0 +1,15 @@
+---
+apiVersion: autoscaling.gardener.cloud/v1alpha1
+kind: PersistentVolumeClaimAutoscaler
+metadata:
+  name: test-pvca-5
+  namespace: pvc-autoscaler-system
+spec:
+  targetRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: test-pvc-5
+  volumePolicies:
+  - maxCapacity: 3Gi
+    scaleUp:
+      resizeStrategy: "Off"

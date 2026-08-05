@@ -397,6 +397,61 @@ function _test_consume_space_and_resize_statefulset() {
   _cleanup_statefulset "${_sts_name}" "${_pvca_name}" "${_namespace}" "${_pvc_0}" "${_pvc_1}"
 }
 
+# Tests that the Off resize strategy produces a recommendation but never patches the PVC.
+# The PVC must remain at its original capacity even when usage crosses the threshold.
+function _test_off_resize_strategy() {
+  local _pvc_yaml="${_TEST_MANIFESTS_DIR}/pvc-5.yaml"
+  local _pvca_yaml="${_TEST_MANIFESTS_DIR}/pvca-5.yaml"
+  local _pod_yaml="${_TEST_MANIFESTS_DIR}/pod-5.yaml"
+  local _pod_name=$( yq '.metadata.name' "${_pod_yaml}" )
+  local _pvca_name=$( yq '.metadata.name' "${_pvca_yaml}" )
+  local _pvc_name=$( yq '.metadata.name' "${_pvc_yaml}" )
+  local _pod_path=$( yq '.spec.containers[0].volumeMounts[0].mountPath' "${_pod_yaml}" )
+  local _namespace=$( yq '.metadata.namespace // "default"' "${_pod_yaml}" )
+
+  _msg_info "starting test: Off resize strategy produces recommendation but no resize"
+  _msg_info "creating test pvc, pvca and pod ..."
+  _kubectl_create_with_storage_class "${_pvc_yaml}"
+  kubectl create -f "${_pvca_yaml}"
+  kubectl create -f "${_pod_yaml}"
+
+  _msg_info "waiting for test pod to be ready ..."
+  kubectl wait "pod/${_pod_name}" \
+          --for condition=Ready \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  _msg_info "waiting for PVC Autoscaler resource to have RecommendationAvailable condition ..."
+  kubectl wait "pvca/${_pvca_name}" \
+          --for condition=RecommendationAvailable \
+          --namespace "${_namespace}" \
+          --timeout 10m
+
+  # Consume ~90% of the 1Gi PVC — this crosses the threshold on both minikube and KinD.
+  _consume bytes 9 1Gi "${_pod_name}" "${_namespace}" "${_pod_path}" pod_off_strategy
+
+  # Usage is above the threshold; the autoscaler should record a recommendation
+  # but must not resize the PVC because the strategy is Off.
+  _wait_for_event Warning UsedSpaceThresholdReached "pvc/${_pvc_name}"
+
+  # PVC must remain at 1Gi — no resize event should ever appear.
+  _ensure_pvc_capacity "${_pvc_name}" "${_namespace}" 1Gi
+
+  # Confirm no Resizing event was emitted for the PVC.
+  local _resizing_events=$( kubectl events \
+                                    -n "${_namespace}" \
+                                    --for "pvc/${_pvc_name}" \
+                                    --types Normal \
+                                    -o yaml | \
+                              yq '.items.[] | select(.reason == "Resizing") | .message' )
+  if [ -n "${_resizing_events}" ]; then
+    _msg_error "unexpected Resizing event found on pvc/${_pvc_name} with Off strategy" 1
+  fi
+  _msg_info "confirmed: no Resizing event emitted with Off strategy"
+
+  _cleanup "${_pod_name}" "${_pvc_name}" "${_pvca_name}" "${_namespace}"
+}
+
 # Cleanup helper for the StatefulSet-based test. StatefulSets do not delete
 # their PVCs, so we drop them explicitly.
 function _cleanup_statefulset() {
@@ -447,6 +502,11 @@ function _main() {
 
   if ! _test_consume_space_and_resize_statefulset; then
     _msg_error "test consume space and resize for statefulset has failed" 0
+    _has_failed="true"
+  fi
+
+  if ! _test_off_resize_strategy; then
+    _msg_error "test Off resize strategy has failed" 0
     _has_failed="true"
   fi
 
