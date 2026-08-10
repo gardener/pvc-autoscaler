@@ -6,10 +6,14 @@ package utils
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 )
 
 // ErrBadPercentageValue is an error which is returned when attempting to parse
@@ -34,6 +38,26 @@ func ParsePercentage(s string) (float64, error) {
 	}
 
 	return val, nil
+}
+
+// ScaledDueToClause renders the ", due to <reason>" fragment used in the in-progress
+// resize messages, so a PVC whose resize is observed without a scaling reason looks neat.
+func ScaledDueToClause(scalingReason string) string {
+	if scalingReason == "" {
+		return ""
+	}
+
+	return fmt.Sprintf(" due to %s", scalingReason)
+}
+
+// ResizeStartTime returns the unix time (seconds) the in-flight resize started,
+// taken from the recommendation's LastResizeTime. When unset it falls back to now.
+func ResizeStartTime(vr v1alpha1.VolumeRecommendation) float64 {
+	if vr.LastResizeTime != nil {
+		return float64(vr.LastResizeTime.Unix())
+	}
+
+	return float64(time.Now().Unix())
 }
 
 // IsPersistentVolumeClaimConditionTrue is a predicate which tests whether the
