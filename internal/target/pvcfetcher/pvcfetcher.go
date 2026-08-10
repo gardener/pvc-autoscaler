@@ -28,7 +28,7 @@ var (
 	ErrNoPodsFound = errors.New("no matching pods found for PersistentVolumeClaimAutoscaler")
 
 	// ErrNoPVCsFound is returned when pods are found but none of them have PVC volumes.
-	ErrNoPVCsFound = errors.New("no PersistentVolumeClaims found for matched pods")
+	ErrNoPVCsFound = errors.New("matched pods do not reference any PersistentVolumeClaims")
 )
 
 // Fetcher is an interface that can be used to fetch all PersistentVolumeClaims
