@@ -164,7 +164,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	pvcFetcher, err := newPVCFetcher(mgr.GetRESTMapper(), mgr.GetConfig(), mgr.GetClient())
+	pvcFetcher, kubernetesVersion, err := newPVCFetcher(mgr.GetRESTMapper(), mgr.GetConfig(), mgr.GetClient())
 	if err != nil {
 		setupLog.Error(err, "unable to create PersistentVolumeClaim fetcher", "controller", common.ControllerName)
 		os.Exit(1)
@@ -181,6 +181,7 @@ func main() {
 		periodic.WithPVCFetcher(pvcFetcher),
 		periodic.WithHeartbeat(heartbeat),
 		periodic.WithAutoscalerName(autoscalerName),
+		periodic.WithKubernetesVersion(kubernetesVersion),
 	)
 	if err != nil {
 		setupLog.Error(err, "unable to create periodic runner", "controller", common.ControllerName)
@@ -217,10 +218,10 @@ func main() {
 	}
 }
 
-func newPVCFetcher(restMapper meta.RESTMapper, config *rest.Config, c client.Client) (pvcfetcher.Fetcher, error) {
-	scalesClient, err := newScalesClient(restMapper, config)
+func newPVCFetcher(restMapper meta.RESTMapper, config *rest.Config, c client.Client) (pvcfetcher.Fetcher, string, error) {
+	scalesClient, kubernetesVersion, err := newScalesClient(restMapper, config)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create scales client: %w", err)
+		return nil, "", fmt.Errorf("unable to create scales client: %w", err)
 	}
 
 	selectorFetcher, err := selectorfetcher.New(
@@ -228,19 +229,29 @@ func newPVCFetcher(restMapper meta.RESTMapper, config *rest.Config, c client.Cli
 		selectorfetcher.WithScaleClient(scalesClient),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create selector fetcher: %w", err)
+		return nil, "", fmt.Errorf("unable to create selector fetcher: %w", err)
 	}
 
-	return pvcfetcher.New(
+	fetcher, err := pvcfetcher.New(
 		pvcfetcher.WithClient(c),
 		pvcfetcher.WithSelectorFetcher(selectorFetcher),
 	)
+	if err != nil {
+		return nil, "", err
+	}
+
+	return fetcher, kubernetesVersion, nil
 }
 
-func newScalesClient(restMapper meta.RESTMapper, config *rest.Config) (scaleclient.ScalesGetter, error) {
+func newScalesClient(restMapper meta.RESTMapper, config *rest.Config) (scaleclient.ScalesGetter, string, error) {
 	clientSet, err := clientset.NewForConfig(config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new clientset: %w", err)
+		return nil, "", fmt.Errorf("failed to create new clientset: %w", err)
+	}
+
+	serverVersion, err := clientSet.Discovery().ServerVersion()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to discover Kubernetes server version: %w", err)
 	}
 
 	// we don't use cached discovery because DiscoveryScaleKindResolver does its own caching,
@@ -248,8 +259,8 @@ func newScalesClient(restMapper meta.RESTMapper, config *rest.Config) (scaleclie
 	scaleKindResolver := scaleclient.NewDiscoveryScaleKindResolver(clientSet.Discovery())
 	scaleClient, err := scaleclient.NewForConfig(config, restMapper, dynamic.LegacyAPIPathResolverFunc, scaleKindResolver)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new scale client: %w", err)
+		return nil, "", fmt.Errorf("failed to create new scale client: %w", err)
 	}
 
-	return scaleClient, nil
+	return scaleClient, serverVersion.GitVersion, nil
 }
