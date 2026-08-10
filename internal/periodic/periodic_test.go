@@ -1180,7 +1180,7 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
 					HaveField("Status", metav1.ConditionFalse),
 					HaveField("Reason", ReasonNoPVCsMatched),
-					HaveField("Message", "Failed to fetch PersistentVolumeClaims: no matching pods found for PersistentVolumeClaimAutoscaler"),
+					HaveField("Message", "No PersistentVolumeClaims found for PersistentVolumeClaimAutoscaler: no matching pods found for PersistentVolumeClaimAutoscaler"),
 				)))
 			})
 
@@ -1240,7 +1240,7 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
 					HaveField("Status", metav1.ConditionFalse),
 					HaveField("Reason", ReasonNoPVCsMatched),
-					HaveField("Message", "Failed to fetch PersistentVolumeClaims: no PersistentVolumeClaims found for matched pods"),
+					HaveField("Message", "No PersistentVolumeClaims found for PersistentVolumeClaimAutoscaler: matched pods do not reference any PersistentVolumeClaims"),
 				)))
 			})
 
