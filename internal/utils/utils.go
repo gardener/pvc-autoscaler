@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+
+	"github.com/gardener/pvc-autoscaler/internal/common"
 )
 
 // ErrBadPercentageValue is an error which is returned when attempting to parse
@@ -40,7 +42,7 @@ func ParsePercentage(s string) (float64, error) {
 // ScaledDueToClause renders the ", due to <reason>" fragment used in the in-progress
 // resize messages, so a PVC whose resize is observed without a scaling reason looks neat.
 func ScaledDueToClause(scalingReason string) string {
-	if scalingReason == "max capacity reached" {
+	if scalingReason == common.ScalingReasonMaxCapacity {
 		return ""
 	}
 

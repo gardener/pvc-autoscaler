@@ -59,4 +59,16 @@ const (
 	// cleared after a successful resize, to indicate that the autoscaler has done
 	// work on this PVC.
 	AnnotationPreviousSize = "pvc.autoscaling.gardener.cloud/prev-size"
+
+	// ScalingReasonMaxCapacity is the scaling reason reported when a PVC is at (or
+	// within one scaling resolution of) its configured max capacity.
+	ScalingReasonMaxCapacity = "max capacity reached"
+
+	// ScalingReasonStorageThreshold is the scaling reason reported when a PVC's
+	// used space exceeds the configured utilization threshold.
+	ScalingReasonStorageThreshold = "passing storage threshold"
+
+	// ScalingReasonInodesThreshold is the scaling reason reported when a PVC's
+	// used inodes exceed the configured utilization threshold.
+	ScalingReasonInodesThreshold = "passing inodes threshold"
 )
