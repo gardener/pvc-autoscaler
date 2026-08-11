@@ -17,8 +17,8 @@ import (
 )
 
 var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
-	Context("When creating PersistentVolumeClaimAutoscaler under Defaulting Webhook", func() {
-		It("Should fill in default values if empty", func() {
+	When("creating PersistentVolumeClaimAutoscaler under Defaulting Webhook", func() {
+		It("should fill in default values if empty", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-1",
@@ -51,8 +51,8 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 		})
 	})
 
-	Context("When creating PersistentVolumeClaimAutoscaler under Validating Webhook", func() {
-		It("Should admit if all required fields are provided", func() {
+	When("creating PersistentVolumeClaimAutoscaler under Validating Webhook", func() {
+		It("should admit if all required fields are provided", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-2",
@@ -82,7 +82,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
 		})
 
-		It("Should deny if no volume policies are specified", func() {
+		It("should deny if no volume policies are specified", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-3",
@@ -100,7 +100,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should default and admit if match criteria is not specified", func() {
+		It("should default and admit if match criteria is not specified", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-missing-match",
@@ -130,7 +130,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
 		})
 
-		It("Should deny if maxCapacity is not specified", func() {
+		It("should deny if maxCapacity is not specified", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-5",
@@ -156,7 +156,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if invalid stepPercent is specified", func() {
+		It("should deny if invalid stepPercent is specified", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-6",
@@ -183,7 +183,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if invalid utilizationThresholdPercent is specified", func() {
+		It("should deny if invalid utilizationThresholdPercent is specified", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-7",
@@ -210,7 +210,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if minStepAbsolute is less than 1Gi", func() {
+		It("should deny if minStepAbsolute is less than 1Gi", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-8",
@@ -238,7 +238,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if invalid cooldownDuration is specified", func() {
+		It("should deny if invalid cooldownDuration is specified", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-9",
@@ -267,7 +267,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if match name contains unsupported characters", func() {
+		It("should deny if match name contains unsupported characters", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-match-name-invalid-characters",
@@ -299,7 +299,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if targetRef kind is empty", func() {
+		It("should deny if targetRef kind is empty", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-10",
@@ -328,7 +328,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if targetRef kind contains invalid characters", func() {
+		It("should deny if targetRef kind contains invalid characters", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-11",
@@ -357,7 +357,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should admit if targetRef kind is Deployment", func() {
+		It("should admit if targetRef kind is Deployment", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-12",
@@ -387,7 +387,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
 		})
 
-		It("Should admit if targetRef kind is StatefulSet", func() {
+		It("should admit if targetRef kind is StatefulSet", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-12b",
@@ -417,7 +417,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Delete(ctx, obj)).To(Succeed())
 		})
 
-		It("Should deny if targetRef name is empty", func() {
+		It("should deny if targetRef name is empty", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-13",
@@ -446,7 +446,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if targetRef name contains invalid characters", func() {
+		It("should deny if targetRef name contains invalid characters", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-14",
@@ -475,7 +475,7 @@ var _ = Describe("PersistentVolumeClaimAutoscaler Webhook", func() {
 			Expect(k8sClient.Create(ctx, obj)).NotTo(Succeed())
 		})
 
-		It("Should deny if targetRef apiVersion is empty", func() {
+		It("should deny if targetRef apiVersion is empty", func() {
 			obj := &PersistentVolumeClaimAutoscaler{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "pvca-15",
