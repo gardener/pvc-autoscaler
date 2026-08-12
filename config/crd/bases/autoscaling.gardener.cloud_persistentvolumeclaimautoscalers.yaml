@@ -129,6 +129,14 @@ spec:
                             This ensures that the change in capacity is at least this amount, regardless of the percentage.
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
+                        resizeStrategy:
+                          default: InPlace
+                          description: ResizeStrategy defines the strategy that will
+                            be used to resize the targeted PVC objects.
+                          enum:
+                          - InPlace
+                          - "Off"
+                          type: string
                         stepPercent:
                           default: 10
                           description: StepPercent specifies the percentage by which

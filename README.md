@@ -58,7 +58,7 @@ you configure the `--prometheus-address` option for the
 # Usage
 
 In order to start monitoring and automatically resize a persistent volume, when
-the available space or inodes drop below a certain threshold you need to
+the available space or inodes rise above a certain threshold you need to
 create a new `PersistentVolumeClaimAutoscaler` resource, e.g.
 
 ``` yaml
@@ -79,19 +79,25 @@ spec:
       stepPercent: 10
       minStepAbsolute: 1Gi
       cooldownDuration: 10m
+      resizeStrategy: InPlace
 ```
 
-The following properties must be specified when creating a new
+The following properties can be specified when creating a new
 `PersistentVolumeClaimAutoscaler` resource.
 
-| Property                                                     | Description                                                                     | Default |
-|:-------------------------------------------------------------|:--------------------------------------------------------------------------------|:-------:|
-| `.spec.targetRef.name`                                       | Name of the controller or PVC to monitor and autoscale                          | N/A     |
-| `.spec.volumePolicies[].maxCapacity`                         | Max capacity up to which a PVC can be resized                                   | N/A     |
-| `.spec.volumePolicies[].scaleUp.utilizationThresholdPercent` | Threshold percentage for used space/inodes that triggers a resize               | `80`    |
-| `.spec.volumePolicies[].scaleUp.stepPercent`                 | Percentage by which to increase the PVC during resize                           | `10`    |
-| `.spec.volumePolicies[].scaleUp.minStepAbsolute`             | Minimum absolute increase in capacity during scale-up                           | `1Gi`   |
-| `.spec.volumePolicies[].scaleUp.cooldownDuration`            | Duration to wait before another scale-up operation for the targeted PVC objects | N/A     |
+| Property                                                     | Description                                                                     | Default    |
+|:-------------------------------------------------------------|:--------------------------------------------------------------------------------|:----------:|
+| `.spec.targetRef.name`                                       | Name of the controller or PVC to monitor and autoscaler                         | N/A        |
+| `.spec.volumePolicies[].maxCapacity`                         | Max capacity up to which a PVC can be resized                                   | N/A        |
+| `.spec.volumePolicies[].scaleUp.utilizationThresholdPercent` | Threshold percentage for used space/inodes that triggers a resize               | `80`       |
+| `.spec.volumePolicies[].scaleUp.stepPercent`                 | Percentage by which to increase the PVC during resize                           | `10`       |
+| `.spec.volumePolicies[].scaleUp.minStepAbsolute`             | Minimum absolute increase in capacity during scale-up                           | `1Gi`      |
+| `.spec.volumePolicies[].scaleUp.cooldownDuration`            | Duration to wait before another scale-up operation for the targeted PVC objects | N/A        |
+| `.spec.volumePolicies[].scaleUp.resizeStrategy`              | The strategy to use when resizing PersistentVolumeClaims                        | `InPlace`  |
+
+**Available Resize Strategies**
+- `InPlace` - resizes the PVC directly by modifying it's size.
+- `Off` - turns off resizing and only target recommendations continue to be calculated.
 
 In order to watch the status of the autoscaler you can `kubectl describe` your
 `PersistentVolumeClaimAutoscaler` resource, where you will find information

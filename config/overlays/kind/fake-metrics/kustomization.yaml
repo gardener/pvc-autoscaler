@@ -27,6 +27,7 @@ configMapGenerator:
   - sts_bytes_low_1Gi.txt
   - sts_bytes_high_1Gi.txt
   - sts_bytes_low_2Gi.txt
+  - pod_off_strategy_high_1Gi.txt
 
 resources:
 - metrics-test-pod-with-pvc.yaml

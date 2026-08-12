@@ -143,7 +143,24 @@ type ScalingRules struct {
 	// operation before another scaling operation can be triggered for the targeted PVC objects.
 	// +optional
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
+
+	// ResizeStrategy defines the strategy that will be used to resize the targeted PVC objects.
+	// +kubebuilder:default:=InPlace
+	// +kubebuilder:validation:Enum=InPlace;Off
+	// +optional
+	ResizeStrategy VolumeResizeStrategy `json:"resizeStrategy,omitempty"`
 }
+
+// VolumeResizeStrategy is a string enumeration type that enumerates all possible resize strategies
+// for the PVCs targeted by the PersistentVolumeClaimAutoscaler.
+type VolumeResizeStrategy string
+
+const (
+	// InPlaceVolumeResizeStrategy resizes the volume by directly modifying the corresponding PVC.
+	InPlaceVolumeResizeStrategy VolumeResizeStrategy = "InPlace"
+	// OffVolumeResizeStrategy turns off resizing.
+	OffVolumeResizeStrategy VolumeResizeStrategy = "Off"
+)
 
 // VolumeRecommendation defines the observed state of a PVC managed by the autoscaler.
 type VolumeRecommendation struct {

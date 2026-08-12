@@ -738,22 +738,31 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 				pvc,
 				corev1.EventTypeWarning,
 				"MaxCapacityReached",
-				"max capacity (%s) has been reached, will not resize",
+				"max capacity (%s) has been reached",
 				policy.MaxCapacity.String(),
 			)
 			logger.Info("max capacity reached")
-			metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
-			resizingConditions.addCondition(metav1.Condition{
-				Type:    string(v1alpha1.ConditionTypeResizing),
-				Status:  metav1.ConditionFalse,
-				Reason:  ReasonReconcile,
-				Message: fmt.Sprintf("%s: max capacity reached", pvc.Name),
-			})
+
+			if policy.ScaleUp.ResizeStrategy != v1alpha1.OffVolumeResizeStrategy {
+				metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
+				resizingConditions.addCondition(metav1.Condition{
+					Type:    string(v1alpha1.ConditionTypeResizing),
+					Status:  metav1.ConditionFalse,
+					Reason:  ReasonReconcile,
+					Message: fmt.Sprintf("%s: max capacity reached", pvc.Name),
+				})
+			}
 
 			return volumeRecommendation, nil
 		}
 		// Clamp to max capacity instead of skipping the resize entirely
 		targetSize = &policy.MaxCapacity
+	}
+
+	if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
+		volumeRecommendation.Target.Size = targetSize
+
+		return volumeRecommendation, nil
 	}
 
 	if policy.ScaleUp.CooldownDuration != nil {
