@@ -342,11 +342,18 @@ func (r *Runner) reconcilePVCA(
 
 	volumeRecommendations := make([]v1alpha1.VolumeRecommendation, 0, len(pvcs))
 	for _, volumeRecommendation := range pvca.Status.VolumeRecommendations {
-		if slices.ContainsFunc(pvcs, func(pvc *corev1.PersistentVolumeClaim) bool {
+		if !slices.ContainsFunc(pvcs, func(pvc *corev1.PersistentVolumeClaim) bool {
 			return pvc.Name == volumeRecommendation.Name
 		}) {
-			volumeRecommendations = append(volumeRecommendations, volumeRecommendation)
+			continue
 		}
+
+		policy, err := getVolumePolicy(volumeRecommendation.Name, pvca.Spec.VolumePolicies)
+		if err != nil || policy == nil {
+			continue
+		}
+
+		volumeRecommendations = append(volumeRecommendations, volumeRecommendation)
 	}
 
 	for _, pvc := range pvcs {
@@ -393,12 +400,6 @@ func (r *Runner) reconcilePVCA(
 
 		if policy == nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", "no matching volume policy")
-			recommendationConditions.addCondition(metav1.Condition{
-				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-				Status:  metav1.ConditionFalse,
-				Reason:  ReasonRecommendationError,
-				Message: fmt.Sprintf("%s: no matching volume policy", pvcObjKey.Name),
-			})
 
 			continue
 		}
