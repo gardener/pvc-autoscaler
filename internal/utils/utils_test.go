@@ -14,7 +14,7 @@ import (
 )
 
 var _ = Describe("Utils", func() {
-	Context("# ParsePercentage", func() {
+	Describe("#ParsePercentage", func() {
 		It("should succeed", func() {
 			tests := []struct {
 				val  string
@@ -37,7 +37,7 @@ var _ = Describe("Utils", func() {
 		})
 	})
 
-	Context("# IsPersistentVolumeClaimConditionPresentAndEqual", func() {
+	Describe("#IsPersistentVolumeClaimConditionPresentAndEqual", func() {
 		pvc := &corev1.PersistentVolumeClaim{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "sample-pvc",
@@ -61,21 +61,80 @@ var _ = Describe("Utils", func() {
 			},
 		}
 
-		It("is present and true", func() {
+		It("should be present and true", func() {
 			Expect(utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending)).To(BeTrue())
 		})
 
-		It("is present and equal", func() {
+		It("should be present and equal", func() {
 			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimFileSystemResizePending, corev1.ConditionTrue)).To(BeTrue())
 			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimResizing, corev1.ConditionFalse)).To(BeTrue())
 			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimVolumeModifyingVolume, corev1.ConditionUnknown)).To(BeTrue())
 		})
 
-		It("is present and false", func() {
+		It("should be present and false", func() {
 			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimFileSystemResizePending, corev1.ConditionFalse)).To(BeFalse())
 			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimResizing, corev1.ConditionTrue)).To(BeFalse())
 			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimResizing, corev1.ConditionTrue)).To(BeFalse())
 			Expect(utils.IsPersistentVolumeClaimConditionPresentAndEqual(pvc, corev1.PersistentVolumeClaimVolumeModifyVolumeError, corev1.ConditionTrue)).To(BeFalse())
+		})
+	})
+
+	Context("scheduling gates", func() {
+		const gate = "pvc.autoscaling.gardener.cloud/offline-resize"
+
+		var newPod = func(gates ...string) *corev1.Pod {
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "sample-pod", Namespace: "default"},
+			}
+			for _, gate := range gates {
+				pod.Spec.SchedulingGates = append(pod.Spec.SchedulingGates, corev1.PodSchedulingGate{Name: gate})
+			}
+			return pod
+		}
+
+		Describe("#HasSchedulingGate", func() {
+			It("should return true when the gate is present", func() {
+				Expect(utils.HasSchedulingGate(newPod("other", gate), gate)).To(BeTrue())
+			})
+
+			It("should return false when the gate is absent", func() {
+				Expect(utils.HasSchedulingGate(newPod("other"), gate)).To(BeFalse())
+			})
+		})
+
+		Describe("#AddSchedulingGate", func() {
+			It("should add the gate and report modification", func() {
+				pod := newPod("other")
+				utils.AddSchedulingGate(pod, gate)
+
+				Expect(pod.Spec.SchedulingGates).To(HaveLen(2))
+				Expect(pod.Spec.SchedulingGates).To(ContainElement(HaveField("Name", gate)))
+			})
+
+			It("should be idempotent when the gate is already present", func() {
+				pod := newPod(gate)
+				utils.AddSchedulingGate(pod, gate)
+
+				Expect(pod.Spec.SchedulingGates).To(HaveLen(1))
+			})
+		})
+
+		Describe("#RemoveSchedulingGate", func() {
+			It("should remove the gate and report modification", func() {
+				pod := newPod("other", gate)
+				utils.RemoveSchedulingGate(pod, gate)
+
+				Expect(pod.Spec.SchedulingGates).To(HaveLen(1))
+				Expect(pod.Spec.SchedulingGates).To(ConsistOf(HaveField("Name", "other")))
+			})
+
+			It("should be a no-op when the gate is absent", func() {
+				pod := newPod("other")
+				utils.RemoveSchedulingGate(pod, gate)
+
+				Expect(pod.Spec.SchedulingGates).To(HaveLen(1))
+				Expect(pod.Spec.SchedulingGates).To(ConsistOf(HaveField("Name", "other")))
+			})
 		})
 	})
 })
