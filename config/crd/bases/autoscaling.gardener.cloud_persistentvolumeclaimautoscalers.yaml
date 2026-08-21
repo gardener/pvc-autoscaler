@@ -130,12 +130,15 @@ spec:
                           pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
                           x-kubernetes-int-or-string: true
                         resizeStrategy:
-                          default: InPlace
-                          description: ResizeStrategy defines the strategy that will
-                            be used to resize the targeted PVC objects.
+                          default: PreferInPlace
+                          description: |-
+                            ResizeStrategy defines the strategy that will be used to resize the targeted PVC objects.
+                            With PreferInPlace (the default) the autoscaler additionally recovers PVCs whose in-place
+                            resize failed by evicting the Pods using them so the volume can be resized offline.
                           enum:
                           - InPlace
                           - "Off"
+                          - PreferInPlace
                           type: string
                         stepPercent:
                           default: 10
