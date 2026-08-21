@@ -855,50 +855,31 @@ var _ = Describe("Periodic Runner", func() {
 				)))
 			})
 
-			It("should set RecommendationAvailable condition to false when no matching volume policy exists", func() {
-				By("Creating a PVC that has no volumePolicy match")
-				noMatchPVC := createPVC(parentCtx, "no-match-pvc", ptr.To(testutils.StorageClassName), nil)
-				DeferCleanup(func() {
-					By("Deleting no-match PVC")
-					Expect(testutils.CleanupObject(parentCtx, k8sClient, noMatchPVC)).To(Succeed())
-					Eventually(func() error {
-						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(noMatchPVC), noMatchPVC)
-					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
-				})
+			It("should drop a stale volume recommendation when its PVC no longer matches a policy", func() {
+				By("Seeding the PVCA status with a recommendation for the PVC")
+				patch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Status.VolumeRecommendations = []v1alpha1.VolumeRecommendation{{Name: pvc.Name}}
+				Expect(k8sClient.Status().Patch(parentCtx, pvca, patch)).To(Succeed())
 
-				By("Creating a PVCA with only a named policy that doesn't match the PVC")
-				noMatchTargetRef := autoscalingv1.CrossVersionObjectReference{
-					APIVersion: "v1",
-					Kind:       "PersistentVolumeClaim",
-					Name:       noMatchPVC.Name,
-				}
-				noMatchPVCA := createPVCA(parentCtx, "pvca-no-match", "", noMatchTargetRef, []v1alpha1.VolumePolicy{
+				By("Changing the volume policy so it no longer matches the PVC")
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.VolumePolicies = []v1alpha1.VolumePolicy{
 					{
-						Match: v1alpha1.Match{
-							Name: "non-matching-pvc-name",
-						},
-						MaxCapacity: resource.MustParse("10Gi"),
+						Match:       v1alpha1.Match{Name: "does-not-match-*"},
+						MaxCapacity: resource.MustParse("3Gi"),
 					},
-				})
-				DeferCleanup(func() {
-					By("Deleting no-match PVCA")
-					Expect(testutils.CleanupObject(parentCtx, k8sClient, noMatchPVCA)).To(Succeed())
-					Eventually(func() error {
-						return k8sClient.Get(parentCtx, client.ObjectKeyFromObject(noMatchPVCA), noMatchPVCA)
-					}).Should(MatchError(apierrors.IsNotFound, "IsNotFound"))
-				})
+				}
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+				waitForPVCACacheSync(parentCtx, pvca)
 
 				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
-				By("Verifying the RecommendationAvailable condition indicates no matching policy")
+				By("Verifying the stale recommendation was pruned from the status")
 				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
-				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(noMatchPVCA), updatedPVCA)).To(Succeed())
-				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
-					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
-					HaveField("Status", metav1.ConditionFalse),
-					HaveField("Reason", ReasonRecommendationError),
-					HaveField("Message", ContainSubstring("no matching volume policy")),
-				)))
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.VolumeRecommendations).NotTo(ContainElement(
+					HaveField("Name", pvc.Name),
+				))
 			})
 
 			It("should set Resizing to Unknown on PVC fetch failure when it was previously set", func() {
