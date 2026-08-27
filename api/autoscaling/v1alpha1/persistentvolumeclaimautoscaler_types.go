@@ -145,8 +145,10 @@ type ScalingRules struct {
 	CooldownDuration *metav1.Duration `json:"cooldownDuration,omitempty"`
 
 	// ResizeStrategy defines the strategy that will be used to resize the targeted PVC objects.
-	// +kubebuilder:default:=InPlace
-	// +kubebuilder:validation:Enum=InPlace;Off
+	// With PreferInPlace (the default) the autoscaler additionally recovers PVCs whose in-place
+	// resize failed by evicting the Pods using them so the volume can be resized offline.
+	// +kubebuilder:default:=PreferInPlace
+	// +kubebuilder:validation:Enum=InPlace;Off;PreferInPlace
 	// +optional
 	ResizeStrategy VolumeResizeStrategy `json:"resizeStrategy,omitempty"`
 }
@@ -156,6 +158,10 @@ type ScalingRules struct {
 type VolumeResizeStrategy string
 
 const (
+	// PreferInPlaceVolumeResizeStrategy resizes the volume in place, and additionally recovers
+	// from a failed in-place resize by evicting the Pods using the PVC so  the volume can be
+	// detached and resized offline.
+	PreferInPlaceVolumeResizeStrategy VolumeResizeStrategy = "PreferInPlace"
 	// InPlaceVolumeResizeStrategy resizes the volume by directly modifying the corresponding PVC.
 	InPlaceVolumeResizeStrategy VolumeResizeStrategy = "InPlace"
 	// OffVolumeResizeStrategy turns off resizing.

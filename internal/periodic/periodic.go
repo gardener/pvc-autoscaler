@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"path"
 	"slices"
 	"strings"
 	"time"
@@ -342,11 +341,18 @@ func (r *Runner) reconcilePVCA(
 
 	volumeRecommendations := make([]v1alpha1.VolumeRecommendation, 0, len(pvcs))
 	for _, volumeRecommendation := range pvca.Status.VolumeRecommendations {
-		if slices.ContainsFunc(pvcs, func(pvc *corev1.PersistentVolumeClaim) bool {
+		if !slices.ContainsFunc(pvcs, func(pvc *corev1.PersistentVolumeClaim) bool {
 			return pvc.Name == volumeRecommendation.Name
 		}) {
-			volumeRecommendations = append(volumeRecommendations, volumeRecommendation)
+			continue
 		}
+
+		policy, err := utils.GetVolumePolicy(volumeRecommendation.Name, pvca.Spec.VolumePolicies)
+		if err != nil || policy == nil {
+			continue
+		}
+
+		volumeRecommendations = append(volumeRecommendations, volumeRecommendation)
 	}
 
 	for _, pvc := range pvcs {
@@ -378,7 +384,7 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		policy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+		policy, err := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 			recommendationConditions.addCondition(metav1.Condition{
@@ -393,12 +399,6 @@ func (r *Runner) reconcilePVCA(
 
 		if policy == nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", "no matching volume policy")
-			recommendationConditions.addCondition(metav1.Condition{
-				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
-				Status:  metav1.ConditionFalse,
-				Reason:  ReasonRecommendationError,
-				Message: fmt.Sprintf("%s: no matching volume policy", pvcObjKey.Name),
-			})
 
 			continue
 		}
@@ -492,24 +492,6 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 	}
 
 	return volumeRecommendation, nil
-}
-
-// getVolumePolicy returns the VolumePolicy for a given [corev1.PersistentVolumeClaim] name.
-// It returns nil if there is no policy specified for the [corev1.PersistentVolumeClaim].
-// Policies are evaluated in the order they appear in the list, and the first
-// matching policy is returned.
-func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) (*v1alpha1.VolumePolicy, error) {
-	for _, volumePolicy := range volumePolicies {
-		matched, err := path.Match(volumePolicy.Match.Name, pvcName)
-		if err != nil {
-			return nil, fmt.Errorf("invalid volume policy name %q: %w", volumePolicy.Match.Name, err)
-		}
-		if matched {
-			return &volumePolicy, nil
-		}
-	}
-
-	return nil, nil
 }
 
 // getOrCreateVolumeRecommendationForPVC returns the [v1alpha1.VolumeRecommendation] for
