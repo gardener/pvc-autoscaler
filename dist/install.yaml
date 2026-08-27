@@ -833,6 +833,31 @@ spec:
   - Ingress
 ---
 apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: pvc-autoscaler-mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: pvc-autoscaler-webhook-service
+      namespace: pvc-autoscaler-system
+      path: /mutate--v1-pod
+  failurePolicy: Ignore
+  name: mpod.autoscaling.gardener.cloud
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    resources:
+    - pods
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
   annotations:
