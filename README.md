@@ -93,10 +93,17 @@ The following properties can be specified when creating a new
 | `.spec.volumePolicies[].scaleUp.stepPercent`                 | Percentage by which to increase the PVC during resize                           | `10`       |
 | `.spec.volumePolicies[].scaleUp.minStepAbsolute`             | Minimum absolute increase in capacity during scale-up                           | `1Gi`      |
 | `.spec.volumePolicies[].scaleUp.cooldownDuration`            | Duration to wait before another scale-up operation for the targeted PVC objects | N/A        |
-| `.spec.volumePolicies[].scaleUp.resizeStrategy`              | The strategy to use when resizing PersistentVolumeClaims                        | `InPlace`  |
+| `.spec.volumePolicies[].scaleUp.resizeStrategy`              | The strategy to use when resizing PersistentVolumeClaims                        | `PreferInPlace` |
 
 **Available Resize Strategies**
-- `InPlace` - resizes the PVC directly by modifying it's size.
+- `PreferInPlace` (default) - resizes the PVC in place, and additionally recovers from a failed
+  in-place resize (a `ControllerResizeError` on the PVC, e.g. on infrastructures that cannot
+  resize a volume while it is attached to a running Pod) by evicting the Pods using the PVC so
+  the volume can be detached and resized offline. Re-created Pods are held unscheduled via a
+  scheduling gate until the resize is ready to be finalized. To avoid unexpected downtime, make
+  sure to configure appropriate `PodDisruptionBudged`s for the Pods under the `PersistentVolumeClaimAutoscaler`
+  and run your workload with multiple replicas.
+- `InPlace` - resizes the PVC directly by modifying it's size, without any offline-resize recovery.
 - `Off` - turns off resizing and only target recommendations continue to be calculated.
 
 In order to watch the status of the autoscaler you can `kubectl describe` your
