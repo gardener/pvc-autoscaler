@@ -266,7 +266,6 @@ var _ = Describe("Offline Resize Reconciler", func() {
 					}).Should(Succeed())
 				})
 			})
-
 		})
 
 		When("the PVC has no ControllerResizeError condition", func() {

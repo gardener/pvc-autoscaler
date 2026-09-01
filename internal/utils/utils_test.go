@@ -97,6 +97,7 @@ var _ = Describe("Utils", func() {
 			for _, gate := range gates {
 				pod.Spec.SchedulingGates = append(pod.Spec.SchedulingGates, corev1.PodSchedulingGate{Name: gate})
 			}
+
 			return pod
 		}
 
