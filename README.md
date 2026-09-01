@@ -100,7 +100,9 @@ The following properties can be specified when creating a new
   in-place resize (a `ControllerResizeError` on the PVC, e.g. on infrastructures that cannot
   resize a volume while it is attached to a running Pod) by evicting the Pods using the PVC so
   the volume can be detached and resized offline. Re-created Pods are held unscheduled via a
-  scheduling gate until the resize is ready to be finalized.
+  scheduling gate until the resize is ready to be finalized. To avoid unexpected downtime, make
+  sure to configure appropriate `PodDisruptionBudged`s for the Pods under the `PersistentVolumeClaimAutoscaler`
+  and run your workload with multiple replicas.
 - `InPlace` - resizes the PVC directly by modifying it's size, without any offline-resize recovery.
 - `Off` - turns off resizing and only target recommendations continue to be calculated.
 
