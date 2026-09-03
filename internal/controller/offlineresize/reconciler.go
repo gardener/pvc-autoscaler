@@ -189,21 +189,19 @@ func (r *Reconciler) evictPodsUsingPVC(ctx context.Context, logger logr.Logger, 
 	}
 
 	var blocked bool
-	for i := range pods {
-		pod := &pods[i]
-
+	for _, pod := range pods {
 		if pod.DeletionTimestamp != nil {
 			continue
 		}
 
 		if pod.Status.Phase != corev1.PodRunning {
-			logger.Info("pod is not running, skipping eviction", "pod", client.ObjectKeyFromObject(pod), "phase", pod.Status.Phase)
+			logger.Info("pod is not running, skipping eviction", "pod", client.ObjectKeyFromObject(&pod), "phase", pod.Status.Phase)
 
 			continue
 		}
 
-		logger.Info("evicting pod for offline resize", "pod", client.ObjectKeyFromObject(pod))
-		if err := r.evict(ctx, pod); err != nil {
+		logger.Info("evicting pod for offline resize", "pod", client.ObjectKeyFromObject(&pod))
+		if err := r.evict(ctx, &pod); err != nil {
 			if apierrors.IsNotFound(err) {
 				continue
 			}
@@ -213,20 +211,20 @@ func (r *Reconciler) evictPodsUsingPVC(ctx context.Context, logger logr.Logger, 
 			// eviction would violate the PodDisruptionBudget.
 			if apierrors.IsTooManyRequests(err) {
 				blocked = true
-				r.eventRecorder.Eventf(pod, corev1.EventTypeWarning, ReasonEvictionBlocked,
+				r.eventRecorder.Eventf(&pod, corev1.EventTypeWarning, ReasonEvictionBlocked,
 					"eviction of pod %s for offline resize of PersistentVolumeClaim %s was blocked, will retry: %s",
-					client.ObjectKeyFromObject(pod), pvc.Name, err.Error())
-				logger.Info("eviction blocked, will retry", "pod", client.ObjectKeyFromObject(pod), "reason", err.Error())
+					client.ObjectKeyFromObject(&pod), pvc.Name, err.Error())
+				logger.Info("eviction blocked, will retry", "pod", client.ObjectKeyFromObject(&pod), "reason", err.Error())
 
 				continue
 			}
 
-			return fmt.Errorf("failed to evict pod %s: %w", client.ObjectKeyFromObject(pod), err)
+			return fmt.Errorf("failed to evict pod %s: %w", client.ObjectKeyFromObject(&pod), err)
 		}
 
-		r.eventRecorder.Eventf(pod, corev1.EventTypeNormal, ReasonEvicting,
+		r.eventRecorder.Eventf(&pod, corev1.EventTypeNormal, ReasonEvicting,
 			"evicted pod %s so PersistentVolumeClaim %s can be resized offline",
-			client.ObjectKeyFromObject(pod), pvc.Name)
+			client.ObjectKeyFromObject(&pod), pvc.Name)
 	}
 
 	if blocked {
