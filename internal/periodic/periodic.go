@@ -76,6 +76,8 @@ const (
 	ReasonMetricsFetchError = "MetricsFetchError"
 	// ReasonPVCFetchError indicates an error occurred during fetching of PVCs.
 	ReasonPVCFetchError = "PersistentVolumeClaimFetchError"
+	// ReasonNoPVCsMatched indicates that pods were found but none had PVC volumes matching the policy.
+	ReasonNoPVCsMatched = "NoPersistentVolumeClaimsMatched"
 	// ReasonAmbiguousPVCA indicates that a PVC is autoscaled by multiple PVCAs.
 	ReasonAmbiguousPVCA = "AmbiguousPersistentVolumeClaimAutoscaler"
 	// ReasonRecommendationError indicates an error occurred during recommendation computation.
@@ -277,24 +279,31 @@ func (r *Runner) fetchPVCsForPVCAs(ctx context.Context, logger logr.Logger, pers
 
 		persistentVolumeClaims, err := r.pvcFetcher.Fetch(ctx, &pvca)
 		if err != nil {
-			logger.Error(err, "failed to fetch persistentvolumeclaims for persistentvolumeclaimautoscaler", "pvca", pvcaKey)
+			reason := ReasonPVCFetchError
+			message := fmt.Sprintf("Failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler: %s", err.Error())
+
+			if errors.Is(err, pvcfetcher.ErrNoPodsFound) || errors.Is(err, pvcfetcher.ErrNoPVCsFound) {
+				logger.V(2).Info("no persistentvolumeclaims found for persistentvolumeclaimautoscaler", "pvca", pvcaKey, "reason", err.Error())
+				reason = ReasonNoPVCsMatched
+				message = fmt.Sprintf("No PersistentVolumeClaims found for PersistentVolumeClaimAutoscaler: %s", err.Error())
+			} else {
+				logger.Error(err, "failed to fetch persistentvolumeclaims for persistentvolumeclaimautoscaler", "pvca", pvcaKey)
+			}
 
 			recommendationsCondition := metav1.Condition{
 				Type:    string(v1alpha1.ConditionTypeRecommendationAvailable),
 				Status:  metav1.ConditionFalse,
-				Reason:  ReasonPVCFetchError,
-				Message: fmt.Sprintf("Failed to fetch PersistentVolumeClaims for PersistentVolumeClaimAutoscaler: %s", err.Error()),
+				Reason:  reason,
+				Message: message,
 			}
 
-			// If the resizing condition is already set on the PVCA resource due to an ongoing resize, set it to Unknown here as
-			// it is not possible to check the actual resizing status of the PVCs, if they cannot be fetched.
 			resizingCondition := metav1.Condition{Type: string(v1alpha1.ConditionTypeResizing)}
 			if existing := meta.FindStatusCondition(pvca.Status.Conditions, resizingCondition.Type); existing != nil {
 				resizingCondition = metav1.Condition{
 					Type:    string(v1alpha1.ConditionTypeResizing),
 					Status:  metav1.ConditionUnknown,
-					Reason:  ReasonPVCFetchError,
-					Message: "Resizing state is unknown: failed to fetch PersistentVolumeClaims",
+					Reason:  reason,
+					Message: fmt.Sprintf("Resizing state is unknown: %s", message),
 				}
 			}
 
