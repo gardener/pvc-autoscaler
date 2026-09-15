@@ -40,6 +40,7 @@ build:
             - api/autoscaling/v1alpha1
             - cmd/pvc-autoscaler
             - internal/common
+            - internal/controller/offlineresize
             - internal/healthcheck
             - internal/metrics
             - internal/metrics/source
@@ -61,13 +62,13 @@ deploy:
         - --server-side
         - --force-conflicts
 profiles:
-- name: minikube
-  activation:
-  - kubeContext: pvc-autoscaler-minikube
-  build:
-    local:
-      useDockerCLI: true
-  patches:
-  - op: replace
-    path: /manifests/kustomize/paths/0
-    value: config/overlays/minikube
+  - name: minikube
+    activation:
+      - kubeContext: pvc-autoscaler-minikube
+    build:
+      local:
+        useDockerCLI: true
+    patches:
+      - op: replace
+        path: /manifests/kustomize/paths/0
+        value: config/overlays/minikube

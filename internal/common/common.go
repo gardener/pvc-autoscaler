@@ -59,4 +59,12 @@ const (
 	// cleared after a successful resize, to indicate that the autoscaler has done
 	// work on this PVC.
 	AnnotationPreviousSize = "pvc.autoscaling.gardener.cloud/prev-size"
+
+	// SchedulingGateOfflineResize is the name of the scheduling gate that the
+	// pvc-autoscaler adds to Pods whose PVC failed to resize online (while the Pod
+	// is still running). The gate holds the Pod unscheduled so that
+	// the VolumeAttachment can be deleted and the volume detached and resized
+	// offline. It is removed once the PVC gets the FileSystemResizePending condition,
+	// allowing the Pod to be scheduled, re-mount the volume and finish the resize.
+	SchedulingGateOfflineResize = "pvc.autoscaling.gardener.cloud/offline-resize"
 )

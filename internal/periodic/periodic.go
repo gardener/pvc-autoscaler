@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"path"
 	"slices"
 	"strings"
 	"time"
@@ -348,7 +347,7 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		policy, err := getVolumePolicy(volumeRecommendation.Name, pvca.Spec.VolumePolicies)
+		policy, err := utils.GetVolumePolicy(volumeRecommendation.Name, pvca.Spec.VolumePolicies)
 		if err != nil || policy == nil {
 			continue
 		}
@@ -385,7 +384,7 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		policy, err := getVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
+		policy, err := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
 		if err != nil {
 			logger.Info("skipping persistentvolumeclaim", "reason", err.Error())
 			recommendationConditions.addCondition(metav1.Condition{
@@ -493,24 +492,6 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 	}
 
 	return volumeRecommendation, nil
-}
-
-// getVolumePolicy returns the VolumePolicy for a given [corev1.PersistentVolumeClaim] name.
-// It returns nil if there is no policy specified for the [corev1.PersistentVolumeClaim].
-// Policies are evaluated in the order they appear in the list, and the first
-// matching policy is returned.
-func getVolumePolicy(pvcName string, volumePolicies []v1alpha1.VolumePolicy) (*v1alpha1.VolumePolicy, error) {
-	for _, volumePolicy := range volumePolicies {
-		matched, err := path.Match(volumePolicy.Match.Name, pvcName)
-		if err != nil {
-			return nil, fmt.Errorf("invalid volume policy name %q: %w", volumePolicy.Match.Name, err)
-		}
-		if matched {
-			return &volumePolicy, nil
-		}
-	}
-
-	return nil, nil
 }
 
 // getOrCreateVolumeRecommendationForPVC returns the [v1alpha1.VolumeRecommendation] for

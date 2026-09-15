@@ -30,6 +30,7 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/controller/offlineresize"
 	"github.com/gardener/pvc-autoscaler/internal/healthcheck"
 	_ "github.com/gardener/pvc-autoscaler/internal/metrics"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source"
@@ -189,6 +190,22 @@ func main() {
 
 	if err := mgr.Add(runner); err != nil {
 		setupLog.Error(err, "unable to add periodic runner to manager", "controller", common.ControllerName)
+		os.Exit(1)
+	}
+
+	// Add the offline-resize recovery controller
+	offlineResizeReconciler, err := offlineresize.New(
+		offlineresize.WithClient(mgr.GetClient()),
+		offlineresize.WithEventRecorder(mgr.GetEventRecorderFor(offlineresize.ControllerName)),
+		offlineresize.WithAutoscalerName(autoscalerName),
+	)
+	if err != nil {
+		setupLog.Error(err, "unable to create offline-resize reconciler", "controller", offlineresize.ControllerName)
+		os.Exit(1)
+	}
+
+	if err := offlineResizeReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to set up offline-resize reconciler with manager", "controller", offlineresize.ControllerName)
 		os.Exit(1)
 	}
 
