@@ -46,7 +46,7 @@ func ParsePercentage(s string) (float64, error) {
 // ScaledDueToClause renders the ", due to <reason>" fragment used in the in-progress
 // resize messages, so a PVC whose resize is observed without a scaling reason looks neat.
 func ScaledDueToClause(scalingReason string) string {
-	if scalingReason == common.ScalingReasonMaxCapacity {
+	if scalingReason == "" || scalingReason == common.ScalingReasonMaxCapacity {
 		return ""
 	}
 

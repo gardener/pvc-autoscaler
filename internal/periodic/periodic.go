@@ -107,14 +107,12 @@ type Runner struct {
 
 // recommendation is the outcome of [Runner.recommendResize]. It captures both
 // whether a resize is warranted and, when it is, the fully computed target size
-// so [Runner.resizePVC] only has to perform the patch.
+// so [Runner.resizePVC] only has to perform the patch. A nil targetSize means no
+// resize is warranted (including when the PVC is already at max capacity).
 type recommendation struct {
 	// targetSize is the size the PVC should be resized to. It is nil when no
 	// resize is warranted.
 	targetSize *resource.Quantity
-	// alreadyAtMaxCapacity reports that the PVC is already at (or within one
-	// scaling resolution of) its max capacity and cannot be resized further.
-	alreadyAtMaxCapacity bool
 	// clampedToMaxCapacity reports that targetSize was clamped down to the
 	// policy's max capacity.
 	clampedToMaxCapacity bool
@@ -452,12 +450,6 @@ func (r *Runner) reconcilePVCA(
 		scalingReason := scalingReason(pvc, *policy, volumeRecommendation)
 		if !r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions) {
 			decision := r.recommendResize(logger, pvc, scalingReason, *policy, volumeRecommendation, resizingConditions)
-			if decision.alreadyAtMaxCapacity {
-				setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
-
-				continue
-			}
-
 			if decision.targetSize != nil {
 				if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
 					volumeRecommendation.Target.Size = decision.targetSize
@@ -627,7 +619,7 @@ func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolum
 			})
 		}
 
-		return recommendation{alreadyAtMaxCapacity: true}
+		return recommendation{}
 
 	// Used space reached threshold
 	case common.ScalingReasonStorageThreshold:

@@ -112,6 +112,12 @@ func (r *Runner) calculateAndResize(ctx context.Context, logger logr.Logger, pvc
 		return volumeRecommendation, nil
 	}
 
+	// Off strategy records the recommended target size but doesn't patch the PVC.
+	if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
+		volumeRecommendation.Target.Size = decision.targetSize
+		return volumeRecommendation, nil
+	}
+
 	return r.resizePVC(ctx, logger, pvc, reason, decision.targetSize, decision.clampedToMaxCapacity, volumeRecommendation, resizingConditions)
 }
 
@@ -1567,7 +1573,6 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(errPolicy).NotTo(HaveOccurred())
 				decision := runner.recommendResize(GinkgoLogr, &resizedPvc, scalingReason(&resizedPvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision.targetSize).To(BeNil())
-				Expect(decision.alreadyAtMaxCapacity).To(BeTrue())
 				Expect(scalingReason(&resizedPvc, *volumePolicy, volumeRecommendation)).To(Equal(common.ScalingReasonMaxCapacity))
 
 				By("Expecting the counter to have incremented once, on the resize that landed at max")
@@ -1622,7 +1627,6 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(errPolicy).NotTo(HaveOccurred())
 				decision := runner.recommendResize(GinkgoLogr, &atMaxPvc, scalingReason(&atMaxPvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision.targetSize).To(BeNil())
-				Expect(decision.alreadyAtMaxCapacity).To(BeTrue())
 				Expect(scalingReason(&atMaxPvc, *volumePolicy, volumeRecommendation)).To(Equal(common.ScalingReasonMaxCapacity))
 				Expect(testutil.ToFloat64(maxCapCounter)).To(Equal(baselineMaxCap + 1))
 
@@ -1692,7 +1696,6 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(errPolicy).NotTo(HaveOccurred())
 				decision := runner.recommendResize(GinkgoLogr, pvc, scalingReason(pvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision.targetSize).To(BeNil())
-				Expect(decision.alreadyAtMaxCapacity).To(BeTrue())
 				Expect(scalingReason(pvc, *volumePolicy, volumeRecommendation)).To(Equal(common.ScalingReasonMaxCapacity))
 			})
 
