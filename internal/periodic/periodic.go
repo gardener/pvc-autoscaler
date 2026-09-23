@@ -35,6 +35,7 @@ import (
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
+	"github.com/gardener/pvc-autoscaler/internal/version"
 )
 
 // UnknownUtilizationValue is the value which will be used when the free
@@ -445,7 +446,7 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		if utils.IsPersistentVolumeClaimResizeInfeasible(pvc) {
-			if !utils.IsKubernetesVersionGreaterEqual134(r.kubernetesVersion) {
+			if !version.IsKubernetesVersionGreaterEqual134(r.kubernetesVersion) {
 				logger.Info("skipping recovery from infeasible pvc resize, requires Kubernetes >= 1.34", "pvc", pvcObjKey.Name, "kubernetesVersion", r.kubernetesVersion)
 				setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
