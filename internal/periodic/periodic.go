@@ -209,9 +209,9 @@ func WithAutoscalerName(name string) Option {
 // WithKubernetesVersion configures the [Runner] with the version of the
 // Kubernetes cluster it runs against. It is used for recovery from infeasible volume
 // expansions (RecoverVolumeExpansionFailure), which is GA as of Kubernetes 1.34.
-func WithKubernetesVersion(version string) Option {
+func WithKubernetesVersion(kubernetesVersion string) Option {
 	opt := func(r *Runner) {
-		r.kubernetesVersion = version
+		r.kubernetesVersion = kubernetesVersion
 	}
 
 	return opt
