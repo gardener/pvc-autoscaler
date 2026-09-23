@@ -64,6 +64,7 @@ func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolum
 // the given PersistentVolumeClaim has been rejected by the CSI driver as infeasible.
 func IsPersistentVolumeClaimResizeInfeasible(obj *corev1.PersistentVolumeClaim) bool {
 	status, ok := obj.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
+
 	return ok && status == corev1.PersistentVolumeClaimControllerResizeInfeasible || status == corev1.PersistentVolumeClaimNodeResizeInfeasible
 }
 
