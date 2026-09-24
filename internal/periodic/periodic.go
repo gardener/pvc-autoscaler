@@ -454,7 +454,7 @@ func (r *Runner) reconcilePVCA(
 				if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
 					volumeRecommendation.Target.Size = decision.targetSize
 				} else {
-					volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, scalingReason, decision.targetSize, decision.clampedToMaxCapacity, volumeRecommendation, resizingConditions)
+					volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, scalingReason, decision, volumeRecommendation, resizingConditions)
 					if err != nil {
 						logger.Error(err, "failed to resize pvc")
 					}
@@ -782,7 +782,8 @@ func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVo
 
 // resizePVC performs the actual resize of the [corev1.PersistentVolumeClaim] to
 // the target size computed by [Runner.recommendResize].
-func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason string, targetSize *resource.Quantity, clampedToMaxCapacity bool, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
+func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason string, rec recommendation, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
+	targetSize := rec.targetSize
 	currSpecSize := pvc.Spec.Resources.Requests.Storage()
 
 	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", targetSize.String())
@@ -816,7 +817,7 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 		return volumeRecommendation, err
 	}
 
-	if clampedToMaxCapacity {
+	if rec.clampedToMaxCapacity {
 		metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
 	}
 	volumeRecommendation.Target.Size = targetSize

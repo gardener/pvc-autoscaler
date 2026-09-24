@@ -115,10 +115,11 @@ func (r *Runner) calculateAndResize(ctx context.Context, logger logr.Logger, pvc
 	// Off strategy records the recommended target size but doesn't patch the PVC.
 	if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
 		volumeRecommendation.Target.Size = decision.targetSize
+
 		return volumeRecommendation, nil
 	}
 
-	return r.resizePVC(ctx, logger, pvc, reason, decision.targetSize, decision.clampedToMaxCapacity, volumeRecommendation, resizingConditions)
+	return r.resizePVC(ctx, logger, pvc, reason, decision, volumeRecommendation, resizingConditions)
 }
 
 // createPodWithPVC creates a Pod in the "default" namespace with the given
