@@ -75,7 +75,7 @@ const (
 	ReasonMetricsFetchError = "MetricsFetchError"
 	// ReasonPVCFetchError indicates an error occurred during fetching of PVCs.
 	ReasonPVCFetchError = "PersistentVolumeClaimFetchError"
-	// ReasonNoPVCsMatched indicates that pods were found but none had PVC volumes matching the policy.
+	// ReasonNoPVCsMatched indicates that either no pods were found or none of the matched pods had PVC volumes matching the policy.
 	ReasonNoPVCsMatched = "NoPersistentVolumeClaimsMatched"
 	// ReasonAmbiguousPVCA indicates that a PVC is autoscaled by multiple PVCAs.
 	ReasonAmbiguousPVCA = "AmbiguousPersistentVolumeClaimAutoscaler"
