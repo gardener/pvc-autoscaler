@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: SAP SE or an SAP affiliate company and Gardener contributors
+// SPDX-FileCopyrightText: Contributors to the Gardener project
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -51,6 +51,7 @@ func NewMutator(c client.Client, decoder admission.Decoder, autoscalerName strin
 // webhook server under [webhookPath].
 func (m *Mutator) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	mgr.GetWebhookServer().Register(webhookPath, &admission.Webhook{Handler: m})
+
 	return nil
 }
 
