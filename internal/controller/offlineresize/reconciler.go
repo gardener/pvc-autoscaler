@@ -155,7 +155,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 	// Eviction is opt-in: only act on PVCs managed by a PVCA that belongs to this
 	// autoscaler instance and whose effective policy enables offline-resize recovery.
-	owner, policy, err := utils.FindOwningPVCAAndPolicy(ctx, r.client, r.autoscalerName, pvc)
+	owner, policy, err := utils.FindOwningPVCAAndPolicy(ctx, r.client, r.autoscalerName, pvc.Name, pvc.Namespace)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to determine ownership of PersistentVolumeClaim: %w", err)
 	}
