@@ -147,7 +147,12 @@ func main() {
 	ctx := ctrl.SetupSignalHandler()
 
 	if err := v1alpha1.AddAutoscalerNameFieldIndexer(ctx, mgr.GetFieldIndexer()); err != nil {
-		setupLog.Error(err, "unable to set up field indexer", "controller", common.ControllerName)
+		setupLog.Error(err, "unable to set up autoscaler name field indexer", "controller", common.ControllerName)
+		os.Exit(1)
+	}
+
+	if err := v1alpha1.AddVolumeRecommendationFieldIndexer(ctx, mgr.GetFieldIndexer()); err != nil {
+		setupLog.Error(err, "unable to set up volume recommendation field indexer", "controller", common.ControllerName)
 		os.Exit(1)
 	}
 
