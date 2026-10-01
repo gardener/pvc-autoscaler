@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
@@ -38,6 +39,7 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/periodic"
 	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
 	"github.com/gardener/pvc-autoscaler/internal/target/selectorfetcher"
+	podwebhook "github.com/gardener/pvc-autoscaler/internal/webhook/pod"
 )
 
 var (
@@ -212,6 +214,12 @@ func main() {
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err = (&v1alpha1.PersistentVolumeClaimAutoscaler{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "controller", common.ControllerName)
+			os.Exit(1)
+		}
+
+		podMutator := podwebhook.NewMutator(mgr.GetClient(), admission.NewDecoder(mgr.GetScheme()), autoscalerName)
+		if err = podMutator.SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "pod")
 			os.Exit(1)
 		}
 	}

@@ -49,6 +49,7 @@ build:
             - internal/target/pvcfetcher
             - internal/target/selectorfetcher
             - internal/utils
+            - internal/webhook/pod
             - VERSION
         main: ./cmd/pvc-autoscaler
 manifests:
