@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -41,6 +42,10 @@ const (
 	// ReasonGateRemoved indicates that the offline-resize scheduling gate was removed
 	// from a Pod so it can be scheduled again.
 	ReasonGateRemoved = "OfflineResizeGateRemoved"
+
+	// requeueDurationOnControllerResizeError is how long the reconciler waits before
+	// retrying the eviction path while a PVC is stuck in the ControllerResizeError window.
+	requeueDurationOnControllerResizeError = time.Second * 10
 )
 
 // ErrNoClient is returned when the [Reconciler] is configured without a client.
@@ -174,7 +179,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimControllerResizeError) {
-		return reconcile.Result{}, r.evictPodsUsingPVC(ctx, logger, pvc)
+		return reconcile.Result{RequeueAfter: requeueDurationOnControllerResizeError}, r.evictPodsUsingPVC(ctx, logger, pvc)
 	}
 
 	return reconcile.Result{}, nil

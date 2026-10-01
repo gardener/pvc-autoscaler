@@ -6,6 +6,7 @@ package offlineresize_test
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -171,7 +172,7 @@ var _ = Describe("Offline Resize Reconciler", func() {
 			It("should evict the pod using the PVC", func() {
 				result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(pvc)})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result).To(Equal(reconcile.Result{}))
+				Expect(result).To(Equal(reconcile.Result{RequeueAfter: 10 * time.Second}))
 
 				Eventually(func() bool {
 					return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{}))
@@ -186,7 +187,7 @@ var _ = Describe("Offline Resize Reconciler", func() {
 				It("should not evict the pod", func() {
 					result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(pvc)})
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result).To(Equal(reconcile.Result{}))
+					Expect(result).To(Equal(reconcile.Result{RequeueAfter: 10 * time.Second}))
 
 					Consistently(func() error {
 						return k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{})
