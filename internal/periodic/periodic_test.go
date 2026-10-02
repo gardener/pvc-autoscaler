@@ -27,6 +27,7 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/expansionfailure"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/fake"
 	testutils "github.com/gardener/pvc-autoscaler/test/utils"
@@ -686,7 +687,7 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
 					HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
 					HaveField("Status", metav1.ConditionFalse),
-					HaveField("Reason", ReasonResizeFailureRecovery),
+					HaveField("Reason", expansionfailure.ReasonResizeFailureRecovery),
 				)))
 			})
 
@@ -1738,64 +1739,6 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(aggregator.getAggregatedCondition().Message).To(BeEmpty())
 				})
 			})
-		})
-
-		Describe("#recoverFromFailedResize", func() {
-			DescribeTable("should reduce requested storage after an infeasible resize",
-				func(failed, capacity, allocated, expectedTarget string, status corev1.ClaimResourceStatus, expectRecovery bool) {
-					By("Patching PVC spec to the failed size")
-					specPatch := client.MergeFrom(pvc.DeepCopy())
-					pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse(failed)
-					Expect(k8sClient.Patch(parentCtx, pvc, specPatch)).To(Succeed())
-
-					By("Patching PVC status to reflect the infeasible expansion")
-					statusPatch := client.MergeFrom(pvc.DeepCopy())
-					pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(capacity)}
-					pvc.Status.AllocatedResourceStatuses = map[corev1.ResourceName]corev1.ClaimResourceStatus{
-						corev1.ResourceStorage: status,
-					}
-					pvc.Status.AllocatedResources = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(allocated)}
-					Expect(k8sClient.Status().Patch(parentCtx, pvc, statusPatch)).To(Succeed())
-
-					var buf strings.Builder
-					logger := zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &buf))).WithValues("pvc", pvc.Name)
-
-					aggregator := &resizingConditionAggregator{}
-					volumeRecommendation := v1alpha1.VolumeRecommendation{Name: pvc.Name}
-					updatedRecommendation, err := runner.recoverFromFailedResize(parentCtx, logger, pvc, volumeRecommendation, aggregator)
-					Expect(err).NotTo(HaveOccurred())
-
-					if !expectRecovery {
-						Expect(buf.String()).NotTo(ContainSubstring("recovering from failed pvc resize"))
-						Expect(aggregator.getAggregatedCondition().Message).To(BeEmpty())
-						Expect(updatedRecommendation).To(Equal(volumeRecommendation))
-
-						return
-					}
-
-					Expect(buf.String()).To(ContainSubstring("recovering from failed pvc resize"))
-
-					By("Verifying PVC spec was reduced to the expected target")
-					var updatedPvc corev1.PersistentVolumeClaim
-					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &updatedPvc)).To(Succeed())
-					Expect(updatedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(expectedTarget)))
-
-					Expect(updatedRecommendation.Target.Size).NotTo(BeNil())
-					Expect(*updatedRecommendation.Target.Size).To(Equal(resource.MustParse(expectedTarget)))
-					Expect(updatedRecommendation.LastResizeTime).To(BeNil())
-
-					Expect(aggregator.getAggregatedCondition()).To(And(
-						HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
-						HaveField("Status", metav1.ConditionFalse),
-						HaveField("Reason", ReasonResizeFailureRecovery),
-						HaveField("Message", MatchRegexp(`reduced requested storage from `+failed+` to `+expectedTarget+` after infeasible resize \(`+string(status)+`\)`)),
-					))
-				},
-				Entry("should retry at a half-step when the storage controller reports ControllerResizeInfeasible", "5Gi", "900Mi", "1Gi", "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
-				Entry("should retry at a half-step when the storage controller reports NodeResizeInfeasible", "5Gi", "900Mi", "1Gi", "3Gi", corev1.PersistentVolumeClaimNodeResizeInfeasible, true),
-				Entry("should fall back to the last-known-good capacity when the half-step would meet or exceed the failed size", "2Gi", "900Mi", "1Gi", "1Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
-				Entry("should be a no-op when the requested size already equals the last-known-good capacity", "1Gi", "1Gi", "1Gi", "1Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
-			)
 		})
 
 		Describe("#SetStatus", func() {
