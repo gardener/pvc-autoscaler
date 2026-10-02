@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -64,24 +63,22 @@ func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolum
 // given PersistentVolumeClaim and whose spec.autoscalerName matches the given
 // autoscalerName, together with the VolumePolicy that applies to the PVC, or
 // (nil, nil) if the PVC is not managed by any such PVCA.
-func FindOwningPVCAAndPolicy(ctx context.Context, c client.Client, autoscalerName string, pvc *corev1.PersistentVolumeClaim) (*v1alpha1.PersistentVolumeClaimAutoscaler, *v1alpha1.VolumePolicy, error) {
+func FindOwningPVCAAndPolicy(ctx context.Context, c client.Client, autoscalerName, pvcName, pvcNamespace string) (*v1alpha1.PersistentVolumeClaimAutoscaler, *v1alpha1.VolumePolicy, error) {
 	pvcaList := &v1alpha1.PersistentVolumeClaimAutoscalerList{}
-	if err := c.List(ctx, pvcaList, client.InNamespace(pvc.Namespace), client.MatchingFields{v1alpha1.AutoscalerNameIndexKey: autoscalerName}); err != nil {
+	if err := c.List(ctx, pvcaList, client.InNamespace(pvcNamespace), client.MatchingFields{v1alpha1.VolumeRecommendationIndexKey: pvcName, v1alpha1.AutoscalerNameIndexKey: autoscalerName}); err != nil {
 		return nil, nil, fmt.Errorf("failed to list PersistentVolumeClaimAutoscalers: %w", err)
 	}
 
-	for _, pvca := range pvcaList.Items {
-		if slices.ContainsFunc(pvca.Status.VolumeRecommendations, func(vr v1alpha1.VolumeRecommendation) bool {
-			return vr.Name == pvc.Name
-		}) {
-			policy, err := GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
-			if err != nil {
-				return nil, nil, err
-			}
-
-			return &pvca, policy, nil
-		}
+	// A PVC is listed in at most one PVCA's recommendations, so any returned PVCA is its owner.
+	if len(pvcaList.Items) == 0 {
+		return nil, nil, nil
 	}
 
-	return nil, nil, nil
+	pvca := pvcaList.Items[0]
+	policy, err := GetVolumePolicy(pvcName, pvca.Spec.VolumePolicies)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return &pvca, policy, nil
 }
