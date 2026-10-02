@@ -3,8 +3,8 @@ module github.com/gardener/pvc-autoscaler
 go 1.25.5
 
 require (
-	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/Masterminds/semver/v3 v3.4.0
+	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-logr/logr v1.4.4
 	github.com/onsi/ginkgo/v2 v2.32.2
 	github.com/onsi/gomega v1.44.0
