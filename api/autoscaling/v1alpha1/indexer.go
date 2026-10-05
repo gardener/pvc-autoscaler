@@ -47,8 +47,8 @@ func AddVolumeRecommendationFieldIndexer(ctx context.Context, indexer client.Fie
 		}
 
 		values := make([]string, 0, len(pvca.Status.VolumeRecommendations))
-		for _, vr := range pvca.Status.VolumeRecommendations {
-			values = append(values, vr.Name)
+		for _, volumeRecommendation := range pvca.Status.VolumeRecommendations {
+			values = append(values, volumeRecommendation.Name)
 		}
 
 		return values
