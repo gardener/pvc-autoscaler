@@ -435,18 +435,28 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		scalingReason := scalingReason(pvc, *policy, volumeRecommendation)
-		if !r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions) {
-			targetSize := r.recommendResize(logger, pvc, scalingReason, *policy, volumeRecommendation, resizingConditions)
-			if targetSize != nil {
-				if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
-					volumeRecommendation.Target.Size = targetSize
-				} else {
-					volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, scalingReason, targetSize, volumeRecommendation, resizingConditions)
-					if err != nil {
-						logger.Error(err, "failed to resize pvc")
-					}
-				}
-			}
+		if r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions) {
+			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
+
+			continue
+		}
+
+		targetSize := r.recommendResize(logger, pvc, scalingReason, *policy, volumeRecommendation, resizingConditions)
+		if targetSize == nil {
+			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
+
+			continue
+		}
+
+		if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
+			volumeRecommendation.Target.Size = targetSize
+			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
+
+			continue
+		}
+
+		if volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, scalingReason, targetSize, volumeRecommendation, resizingConditions); err != nil {
+			logger.Error(err, "failed to resize pvc")
 		}
 
 		setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
