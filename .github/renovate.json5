@@ -12,7 +12,7 @@
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
   // Ignore the commits pushed by the `renovate-post-upgrade` GitHub Action (running
-  // `make generate`/`make tidy`) when detecting whether a branch was manually edited.
+  // `make generate`) when detecting whether a branch was manually edited.
   // Otherwise, Renovate would treat the branch as modified and stop updating the PR.
   gitIgnoredAuthors: [
     '41898282+github-actions[bot]@users.noreply.github.com',
