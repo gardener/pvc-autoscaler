@@ -40,19 +40,19 @@ func AddAutoscalerNameFieldIndexer(ctx context.Context, indexer client.FieldInde
 // AddVolumeRecommendationFieldIndexer adds an index that maps a PersistentVolumeClaim to the
 // PVCA that owns it (lists it in status.volumeRecommendations).
 func AddVolumeRecommendationFieldIndexer(ctx context.Context, indexer client.FieldIndexer) error {
-	if err := indexer.IndexField(ctx, &PersistentVolumeClaimAutoscaler{}, VolumeRecommendationIndexKey, func(obj client.Object) []string {
+	err := indexer.IndexField(ctx, &PersistentVolumeClaimAutoscaler{}, VolumeRecommendationIndexKey, func(obj client.Object) []string {
 		pvca, ok := obj.(*PersistentVolumeClaimAutoscaler)
 		if !ok {
 			return nil
 		}
-
 		values := make([]string, 0, len(pvca.Status.VolumeRecommendations))
 		for _, volumeRecommendation := range pvca.Status.VolumeRecommendations {
 			values = append(values, volumeRecommendation.Name)
 		}
 
 		return values
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("failed to add indexer for %s to PersistentVolumeClaimAutoscaler Informer: %w", VolumeRecommendationIndexKey, err)
 	}
 

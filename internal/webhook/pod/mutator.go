@@ -101,7 +101,7 @@ func (m *Mutator) shouldGate(ctx context.Context, logger logr.Logger, pod *corev
 			continue
 		}
 
-		owner, policy, err := utils.FindOwningPVCAAndPolicy(ctx, m.client, m.autoscalerName, pvc)
+		owner, policy, err := utils.FindOwningPVCAAndPolicy(ctx, m.client, m.autoscalerName, pvc.Name, pvc.Namespace)
 		if err != nil {
 			// Do not block Pod creation because of a transient lookup error.
 			logger.Error(err, "failed to determine ownership of PersistentVolumeClaim referenced by pod, not adding scheduling gate", "pvc", pvcKey, "pod", client.ObjectKeyFromObject(pod))
