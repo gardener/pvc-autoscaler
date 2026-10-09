@@ -221,6 +221,7 @@ var _ = Describe("Periodic Runner", func() {
 			runner, err = newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
+			metrics.PVCAtMaxCapacity.Reset()
 
 			defaultVolumePolicies = []v1alpha1.VolumePolicy{
 				{
@@ -663,7 +664,7 @@ var _ = Describe("Periodic Runner", func() {
 				waitForPVCACacheSync(parentCtx, pvca)
 
 				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
-				Expect(testutil.ToFloat64(metrics.MaxCapacityReached)).To(Equal(float64(1)))
+				Expect(testutil.ToFloat64(metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name))).To(Equal(float64(1)))
 
 				By("Recording a terminal Resizing=False max-capacity condition on the PVCA")
 				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
@@ -682,7 +683,7 @@ var _ = Describe("Periodic Runner", func() {
 				waitForPVCACacheSync(parentCtx, pvca)
 
 				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
-				Expect(testutil.ToFloat64(metrics.MaxCapacityReached)).To(Equal(float64(0)))
+				Expect(testutil.ToFloat64(metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name))).To(Equal(float64(0)))
 			})
 
 			It("should reconcile when threshold has been reached", func() {
@@ -1858,7 +1859,7 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
 					By("Expecting the PVC to still be counted at max capacity")
-					Expect(testutil.ToFloat64(metrics.MaxCapacityReached)).To(Equal(float64(1)))
+					Expect(testutil.ToFloat64(metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name))).To(Equal(float64(1)))
 
 					By("Expecting no Resizing max-capacity condition for the Off strategy")
 					updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}

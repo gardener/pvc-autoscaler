@@ -102,7 +102,6 @@ type Runner struct {
 	pvcFetcher     pvcfetcher.Fetcher
 	heartbeat      *healthcheck.Heartbeat
 	autoscalerName string
-	atMaxCapacity  int
 }
 
 var _ manager.Runnable = &Runner{}
@@ -243,7 +242,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 
 	// Nothing to do for now
 	if len(pvcaList.Items) == 0 {
-		metrics.MaxCapacityReached.Set(0)
+		metrics.PVCAtMaxCapacity.Reset()
 
 		return nil
 	}
@@ -255,11 +254,10 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 
 	pvcaToPVCsMap, pvcToOwnersMap := r.fetchPVCsForPVCAs(ctx, logger, pvcaList.Items)
 
-	r.atMaxCapacity = 0
+	metrics.PVCAtMaxCapacity.Reset()
 	for pvca, pvcs := range pvcaToPVCsMap {
 		r.reconcilePVCA(ctx, logger, pvca, pvcs, pvcToOwnersMap, metricsData)
 	}
-	metrics.MaxCapacityReached.Set(float64(r.atMaxCapacity))
 
 	return nil
 }
@@ -607,8 +605,8 @@ func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolum
 			policy.MaxCapacity.String(),
 		)
 
-		r.atMaxCapacity++
 		metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
+		metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name).Set(1)
 		if policy.ScaleUp.ResizeStrategy != v1alpha1.OffVolumeResizeStrategy {
 			resizingConditions.addCondition(metav1.Condition{
 				Type:    string(v1alpha1.ConditionTypeResizing),
@@ -648,6 +646,8 @@ func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolum
 	default:
 		return nil
 	}
+
+	metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name).Set(0)
 
 	// Compute the target size for the resize
 	stepPercent := float64(*policy.ScaleUp.StepPercent)
