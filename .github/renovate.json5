@@ -11,6 +11,12 @@
   ],
   "labels": ["kind/enhancement"],
   "postUpdateOptions": ["gomodTidy"],
+  // Ignore the commits pushed by the `renovate-post-upgrade` GitHub Action (running
+  // `make generate`) when detecting whether a branch was manually edited.
+  // Otherwise, Renovate would treat the branch as modified and stop updating the PR.
+  gitIgnoredAuthors: [
+    '41898282+github-actions[bot]@users.noreply.github.com',
+  ],
   "separateMinorPatch": true,
   // Only rebase when there are conflicts. Prow tests against the latest state of master branch anyway before merging the PR.
   "rebaseWhen": "conflicted",
@@ -81,37 +87,6 @@
         "sigs\\.k8s\\.io\/controller-runtime",
       ],
       "enabled": false
-    },
-    {
-      // Run make generate when controller-tools and kustomize package has been updated
-      // as CRDs or manifests built via kustomize might need regeneration.
-      matchDatasources: [
-        'github-releases',
-      ],
-      postUpgradeTasks: {
-        commands: [
-          'make generate',
-        ],
-        executionMode: 'branch',
-      },
-      matchDepNames: [
-        'kubernetes-sigs/kustomize',
-        'kubernetes-sigs/controller-tools',
-      ],
-    },
-    {
-      // Run make generate when an image referenced from `config/` is bumped, so the
-      // regenerated dist/install.yaml picks up the new image tag. Tool-version bumps
-      // that affect generation (controller-tools, kustomize) are handled separately.
-      postUpgradeTasks: {
-        commands: [
-          'make generate',
-        ],
-        executionMode: 'branch',
-      },
-      matchFileNames: [
-        'config/**',
-      ],
     },
     {
       // Ask for manual approval to create PRs for minor and major updates of dependencies which most likely
