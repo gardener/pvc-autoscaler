@@ -57,7 +57,7 @@ var (
 			Name:      "pvc_at_max_capacity",
 			Help:      "Whether a targeted PVC is currently at its configured max capacity (1) or not (0)",
 		},
-		[]string{"namespace", "persistentvolumeclaim"},
+		[]string{"namespace", "persistentvolumeclaim", "persistentvolumeclaimautoscaler"},
 	)
 
 	// SkippedTotal is a metric which increments each time a PVC is skipped

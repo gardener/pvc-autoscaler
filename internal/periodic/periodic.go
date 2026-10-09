@@ -433,6 +433,11 @@ func (r *Runner) reconcilePVCA(
 		}
 
 		scalingReason := scalingReason(pvc, *policy, volumeRecommendation)
+		maxCapacityValue := 0
+		if scalingReason == common.ScalingReasonMaxCapacity {
+			maxCapacityValue = 1
+		}
+		metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name, pvca.Name).Set(float64(maxCapacityValue))
 		if r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions) {
 			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
@@ -606,7 +611,6 @@ func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolum
 		)
 
 		metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
-		metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name).Set(1)
 		if policy.ScaleUp.ResizeStrategy != v1alpha1.OffVolumeResizeStrategy {
 			resizingConditions.addCondition(metav1.Condition{
 				Type:    string(v1alpha1.ConditionTypeResizing),
@@ -646,8 +650,6 @@ func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolum
 	default:
 		return nil
 	}
-
-	metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name).Set(0)
 
 	// Compute the target size for the resize
 	stepPercent := float64(*policy.ScaleUp.StepPercent)
