@@ -242,6 +242,8 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 
 	// Nothing to do for now
 	if len(pvcaList.Items) == 0 {
+		metrics.PVCAtMaxCapacity.Reset()
+
 		return nil
 	}
 
@@ -252,6 +254,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 
 	pvcaToPVCsMap, pvcToOwnersMap := r.fetchPVCsForPVCAs(ctx, logger, pvcaList.Items)
 
+	metrics.PVCAtMaxCapacity.Reset()
 	for pvca, pvcs := range pvcaToPVCsMap {
 		r.reconcilePVCA(ctx, logger, pvca, pvcs, pvcToOwnersMap, metricsData)
 	}
@@ -429,14 +432,34 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		shouldResize, scalingReason := r.shouldResizePVC(pvc, *policy, volumeRecommendation)
-		inProgress := r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions)
+		scalingReason := scalingReason(pvc, *policy, volumeRecommendation)
+		maxCapacityValue := 0
+		if scalingReason == common.ScalingReasonMaxCapacity {
+			maxCapacityValue = 1
+		}
+		metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name, pvca.Name).Set(float64(maxCapacityValue))
+		if r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions) {
+			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
-		if shouldResize && !inProgress {
-			volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, *policy, scalingReason, volumeRecommendation, resizingConditions)
-			if err != nil {
-				logger.Error(err, "failed to resize pvc")
-			}
+			continue
+		}
+
+		targetSize := r.recommendResize(logger, pvc, scalingReason, *policy, volumeRecommendation, resizingConditions)
+		if targetSize == nil {
+			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
+
+			continue
+		}
+
+		if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
+			volumeRecommendation.Target.Size = targetSize
+			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
+
+			continue
+		}
+
+		if volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, scalingReason, targetSize, volumeRecommendation, resizingConditions); err != nil {
+			logger.Error(err, "failed to resize pvc")
 		}
 
 		setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
@@ -564,20 +587,43 @@ func (r *Runner) validatePVC(ctx context.Context, pvc *corev1.PersistentVolumeCl
 	return nil
 }
 
-// shouldResizePVC is a predicate which checks whether the
-// [corev1.PersistentVolumeClaim] object targeted by the
-// [v1alpha1.PersistentVolumeClaimAutoscaler] should be considered for
-// resize. When it returns true, it also returns the scaling reason.
-func (r *Runner) shouldResizePVC(pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) (bool, string) {
+// recommendResize decides whether the [corev1.PersistentVolumeClaim] should be
+// resized for the given scalingReason and, when it should, returns the fully
+// computed target size. A nil return means no resize is warranted (including
+// when the PVC is already at max capacity). It does not mutate the PVC.
+func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason string, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) *resource.Quantity {
 	var (
 		threshold         = *policy.ScaleUp.UtilizationThresholdPercent
 		usedSpacePercent  = ptr.Deref(volumeRecommendation.Current.UsedSpacePercent, 0)
 		usedInodesPercent = ptr.Deref(volumeRecommendation.Current.UsedInodesPercent, 0)
+		specSize          = pvc.Spec.Resources.Requests.Storage()
 	)
 
-	switch {
+	switch scalingReason {
+	// Already at max capacity, so do not resize
+	case common.ScalingReasonMaxCapacity:
+		r.eventRecorder.Eventf(
+			pvc,
+			corev1.EventTypeWarning,
+			"MaxCapacityReached",
+			"max capacity (%s) has been reached, will not resize",
+			policy.MaxCapacity.String(),
+		)
+
+		metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
+		if policy.ScaleUp.ResizeStrategy != v1alpha1.OffVolumeResizeStrategy {
+			resizingConditions.addCondition(metav1.Condition{
+				Type:    string(v1alpha1.ConditionTypeResizing),
+				Status:  metav1.ConditionFalse,
+				Reason:  ReasonReconcile,
+				Message: fmt.Sprintf("%s: max capacity reached", pvc.Name),
+			})
+		}
+
+		return nil
+
 	// Used space reached threshold
-	case usedSpacePercent > threshold:
+	case common.ScalingReasonStorageThreshold:
 		r.eventRecorder.Eventf(
 			pvc,
 			corev1.EventTypeWarning,
@@ -588,10 +634,8 @@ func (r *Runner) shouldResizePVC(pvc *corev1.PersistentVolumeClaim, policy v1alp
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name, "space").Inc()
 
-		return true, "passing storage threshold"
-
 	// Used inodes reached threshold
-	case usedInodesPercent > threshold:
+	case common.ScalingReasonInodesThreshold:
 		r.eventRecorder.Eventf(
 			pvc,
 			corev1.EventTypeWarning,
@@ -602,18 +646,63 @@ func (r *Runner) shouldResizePVC(pvc *corev1.PersistentVolumeClaim, policy v1alp
 		)
 		metrics.ThresholdReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name, "inodes").Inc()
 
-		return true, "passing inodes threshold"
-
 	// No need to reconcile the PVC for now
 	default:
-		return false, ""
+		return nil
 	}
+
+	// Compute the target size for the resize
+	stepPercent := float64(*policy.ScaleUp.StepPercent)
+	increment := math.Max(float64(specSize.Value())*(stepPercent/100.0), float64(policy.ScaleUp.MinStepAbsolute.Value()))
+	targetSizeBytes := int64(math.Ceil((float64(specSize.Value())+increment)/1073741824)) * 1073741824
+	targetSize := resource.NewQuantity(targetSizeBytes, resource.BinarySI)
+
+	// Check that we've got a valid new size
+	switch targetSize.Cmp(*specSize) {
+	case 0:
+		logger.Info("new and current size are the same")
+
+		return nil
+	case -1:
+		logger.Info("new size is less than current")
+
+		return nil
+	}
+
+	// We don't want to exceed the max capacity
+	if targetSize.Value() >= policy.MaxCapacity.Value() {
+		// Clamp to max capacity instead of overshooting it
+		targetSize = &policy.MaxCapacity
+	}
+
+	if policy.ScaleUp.ResizeStrategy != v1alpha1.OffVolumeResizeStrategy && policy.ScaleUp.CooldownDuration != nil {
+		lastResizeTime := volumeRecommendation.LastResizeTime
+		if lastResizeTime != nil {
+			elapsed := time.Since(lastResizeTime.Time)
+			cooldown := policy.ScaleUp.CooldownDuration.Duration
+			if elapsed < cooldown {
+				remaining := cooldown - elapsed
+				logger.Info("cooldown period not elapsed", "remaining", remaining.String())
+				resizingConditions.addCondition(metav1.Condition{
+					Type:    string(v1alpha1.ConditionTypeResizing),
+					Status:  metav1.ConditionFalse,
+					Reason:  ReasonPVCResizeCooldown,
+					Message: fmt.Sprintf("%s: cooldown duration has not elapsed yet", pvc.Name),
+				})
+
+				return nil
+			}
+		}
+	}
+
+	return targetSize
 }
 
 // isResizeInProgress checks whether the [corev1.PersistentVolumeClaim] is currently being resized.
 // Returns true if a resize operation is in progress.
 func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason string, resizingConditions *resizingConditionAggregator) bool {
 	currStatusSize := pvc.Status.Capacity.Storage()
+	dueTo := utils.ScaledDueToClause(scalingReason)
 
 	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimResizing) {
 		logger.Info("resize has been started")
@@ -621,7 +710,7 @@ func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVo
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf("%s: is being scaled due to %s, resize has been started", pvc.Name, scalingReason),
+			Message: fmt.Sprintf("%s: is being scaled%s, resize has been started", pvc.Name, dueTo),
 		})
 
 		return true
@@ -633,7 +722,7 @@ func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVo
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf("%s: is being scaled due to %s, file system resize is pending", pvc.Name, scalingReason),
+			Message: fmt.Sprintf("%s: is being scaled%s, file system resize is pending", pvc.Name, dueTo),
 		})
 
 		return true
@@ -645,7 +734,7 @@ func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVo
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf("%s: is being scaled due to %s, volume is being modified", pvc.Name, scalingReason),
+			Message: fmt.Sprintf("%s: is being scaled%s, volume is being modified", pvc.Name, dueTo),
 		})
 
 		return true
@@ -678,7 +767,7 @@ func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVo
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionTrue,
 			Reason:  ReasonReconcile,
-			Message: fmt.Sprintf("%s: is being scaled due to %s, persistent volume claim is still being resized", pvc.Name, scalingReason),
+			Message: fmt.Sprintf("%s: is being scaled%s, persistent volume claim is still being resized", pvc.Name, dueTo),
 		})
 
 		return true
@@ -687,87 +776,11 @@ func (r *Runner) isResizeInProgress(logger logr.Logger, pvc *corev1.PersistentVo
 	return false
 }
 
-// resizePVC performs the actual resize of the [corev1.PersistentVolumeClaim] targeted by the given
-// [v1alpha1.PersistentVolumeClaimAutoscaler].
-func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, scalingReason string, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
+// resizePVC performs the actual resize of the [corev1.PersistentVolumeClaim] to
+// the target size computed by [Runner.recommendResize].
+func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason string, targetSize *resource.Quantity, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
 	currSpecSize := pvc.Spec.Resources.Requests.Storage()
 
-	// Calculate the new size
-	stepPercent := float64(*policy.ScaleUp.StepPercent)
-	increment := math.Max(float64(currSpecSize.Value())*(stepPercent/100.0), float64(policy.ScaleUp.MinStepAbsolute.Value()))
-	targetSizeBytes := int64(math.Ceil((float64(currSpecSize.Value())+increment)/1073741824)) * 1073741824
-	targetSize := resource.NewQuantity(targetSizeBytes, resource.BinarySI)
-
-	// Check that we've got a valid new size
-	cmp := targetSize.Cmp(*currSpecSize)
-	switch cmp {
-	case 0:
-		logger.Info("new and current size are the same")
-
-		return volumeRecommendation, nil
-	case -1:
-		logger.Info("new size is less than current")
-
-		return volumeRecommendation, nil
-	}
-
-	// We don't want to exceed the max capacity
-	if targetSize.Value() > policy.MaxCapacity.Value() {
-		// Only clamp to max capacity if the increase is at least one scaling resolution,
-		// otherwise the increase is too small to be meaningful
-		if policy.MaxCapacity.Value()-currSpecSize.Value() < common.ScalingResolutionBytes {
-			r.eventRecorder.Eventf(
-				pvc,
-				corev1.EventTypeWarning,
-				"MaxCapacityReached",
-				"max capacity (%s) has been reached",
-				policy.MaxCapacity.String(),
-			)
-			logger.Info("max capacity reached")
-
-			if policy.ScaleUp.ResizeStrategy != v1alpha1.OffVolumeResizeStrategy {
-				metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
-				resizingConditions.addCondition(metav1.Condition{
-					Type:    string(v1alpha1.ConditionTypeResizing),
-					Status:  metav1.ConditionFalse,
-					Reason:  ReasonReconcile,
-					Message: fmt.Sprintf("%s: max capacity reached", pvc.Name),
-				})
-			}
-
-			return volumeRecommendation, nil
-		}
-		// Clamp to max capacity instead of skipping the resize entirely
-		targetSize = &policy.MaxCapacity
-	}
-
-	if policy.ScaleUp.ResizeStrategy == v1alpha1.OffVolumeResizeStrategy {
-		volumeRecommendation.Target.Size = targetSize
-
-		return volumeRecommendation, nil
-	}
-
-	if policy.ScaleUp.CooldownDuration != nil {
-		lastResizeTime := volumeRecommendation.LastResizeTime
-		if lastResizeTime != nil {
-			elapsed := time.Since(lastResizeTime.Time)
-			cooldown := policy.ScaleUp.CooldownDuration.Duration
-			if elapsed < cooldown {
-				remaining := cooldown - elapsed
-				logger.Info("cooldown period not elapsed", "remaining", remaining.String())
-				resizingConditions.addCondition(metav1.Condition{
-					Type:    string(v1alpha1.ConditionTypeResizing),
-					Status:  metav1.ConditionFalse,
-					Reason:  ReasonPVCResizeCooldown,
-					Message: fmt.Sprintf("%s: cooldown duration has not elapsed yet", pvc.Name),
-				})
-
-				return volumeRecommendation, nil
-			}
-		}
-	}
-
-	// And finally we should be good to resize now
 	logger.Info("resizing persistent volume claim", "from", currSpecSize.String(), "to", targetSize.String())
 	metrics.ResizedTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
 	r.eventRecorder.Eventf(
@@ -798,6 +811,7 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 
 		return volumeRecommendation, err
 	}
+
 	volumeRecommendation.Target.Size = targetSize
 	volumeRecommendation.LastResizeTime = ptr.To(metav1.Now())
 
@@ -844,4 +858,24 @@ func (r *Runner) setStatus(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 	}
 
 	return r.client.Status().Patch(ctx, pvca, client.MergeFrom(original))
+}
+
+// scalingReason classifies why the given PVC should/should not be scaled,
+// returning an empty string when no resize is warranted.
+func scalingReason(pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) string {
+	threshold := *policy.ScaleUp.UtilizationThresholdPercent
+	usedSpacePercent := ptr.Deref(volumeRecommendation.Current.UsedSpacePercent, 0)
+	usedInodesPercent := ptr.Deref(volumeRecommendation.Current.UsedInodesPercent, 0)
+	specSize := pvc.Spec.Resources.Requests.Storage()
+
+	switch {
+	case policy.MaxCapacity.Value()-specSize.Value() < common.ScalingResolutionBytes:
+		return common.ScalingReasonMaxCapacity
+	case usedSpacePercent > threshold:
+		return common.ScalingReasonStorageThreshold
+	case usedInodesPercent > threshold:
+		return common.ScalingReasonInodesThreshold
+	default:
+		return ""
+	}
 }
