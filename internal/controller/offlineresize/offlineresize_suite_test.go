@@ -76,7 +76,8 @@ var _ = BeforeSuite(func() {
 	})
 	Expect(err).NotTo(HaveOccurred())
 
-	Expect(v1alpha1.AddAutoscalerNameFieldIndexer(context.Background(), mgr.GetFieldIndexer())).To(Succeed())
+	Expect(v1alpha1.AddAutoscalerNameFieldIndexer(parentCtx, mgr.GetFieldIndexer())).To(Succeed())
+	Expect(v1alpha1.AddVolumeRecommendationFieldIndexer(parentCtx, mgr.GetFieldIndexer())).To(Succeed())
 
 	mgrClient = mgr.GetClient()
 

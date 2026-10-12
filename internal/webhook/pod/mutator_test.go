@@ -7,7 +7,6 @@ package pod_test
 import (
 	"context"
 	"encoding/json"
-	"testing"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	. "github.com/onsi/ginkgo/v2"
@@ -27,12 +26,6 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	podwebhook "github.com/gardener/pvc-autoscaler/internal/webhook/pod"
 )
-
-func TestPodWebhook(t *testing.T) {
-	RegisterFailHandler(Fail)
-	Expect(v1alpha1.AddToScheme(scheme.Scheme)).To(Succeed())
-	RunSpecs(t, "Pod Webhook Suite")
-}
 
 var _ = Describe("Pod Mutator", func() {
 	const (
@@ -116,9 +109,8 @@ var _ = Describe("Pod Mutator", func() {
 		c := fake.NewClientBuilder().
 			WithScheme(scheme.Scheme).
 			WithObjects(objs...).
-			WithIndex(&v1alpha1.PersistentVolumeClaimAutoscaler{}, v1alpha1.AutoscalerNameIndexKey, func(obj client.Object) []string {
-				return []string{obj.(*v1alpha1.PersistentVolumeClaimAutoscaler).Spec.AutoscalerName}
-			}).
+			WithIndex(&v1alpha1.PersistentVolumeClaimAutoscaler{}, v1alpha1.AutoscalerNameIndexKey, v1alpha1.AutoscalerNameIndexFunc).
+			WithIndex(&v1alpha1.PersistentVolumeClaimAutoscaler{}, v1alpha1.VolumeRecommendationIndexKey, v1alpha1.VolumeRecommendationIndexFunc).
 			Build()
 
 		raw, err := json.Marshal(pod)

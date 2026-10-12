@@ -97,7 +97,8 @@ var _ = BeforeSuite(func() {
 
 	mgrClient = mgr.GetClient()
 
-	Expect(v1alpha1.AddAutoscalerNameFieldIndexer(context.Background(), mgr.GetFieldIndexer())).To(Succeed())
+	Expect(v1alpha1.AddAutoscalerNameFieldIndexer(parentCtx, mgr.GetFieldIndexer())).To(Succeed())
+	Expect(v1alpha1.AddVolumeRecommendationFieldIndexer(parentCtx, mgr.GetFieldIndexer())).To(Succeed())
 
 	go func() {
 		defer GinkgoRecover()
@@ -108,7 +109,7 @@ var _ = BeforeSuite(func() {
 	Expect(mgr.GetCache().WaitForCacheSync(parentCtx)).To(BeTrue())
 
 	// Create test storage class
-	Expect(k8sClient.Create(context.Background(), &testutils.StorageClass)).To(Succeed())
+	Expect(k8sClient.Create(parentCtx, &testutils.StorageClass)).To(Succeed())
 
 	clientSet, err := clientset.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())

@@ -141,12 +141,25 @@ var _ = Describe("Utils", func() {
 				c := fake.NewClientBuilder().
 					WithScheme(testScheme).
 					WithObjects(objs...).
+					WithIndex(&v1alpha1.PersistentVolumeClaimAutoscaler{}, v1alpha1.VolumeRecommendationIndexKey, func(obj client.Object) []string {
+						pvca, ok := obj.(*v1alpha1.PersistentVolumeClaimAutoscaler)
+						if !ok {
+							return nil
+						}
+
+						values := make([]string, 0, len(pvca.Status.VolumeRecommendations))
+						for _, vr := range pvca.Status.VolumeRecommendations {
+							values = append(values, vr.Name)
+						}
+
+						return values
+					}).
 					WithIndex(&v1alpha1.PersistentVolumeClaimAutoscaler{}, v1alpha1.AutoscalerNameIndexKey, func(obj client.Object) []string {
 						return []string{obj.(*v1alpha1.PersistentVolumeClaimAutoscaler).Spec.AutoscalerName}
 					}).
 					Build()
 
-				owner, policy, err := utils.FindOwningPVCAAndPolicy(ctx, c, autoscalerName, pvc)
+				owner, policy, err := utils.FindOwningPVCAAndPolicy(ctx, c, autoscalerName, pvc.Name, pvc.Namespace)
 				Expect(err).NotTo(HaveOccurred())
 
 				if wantOwner {
