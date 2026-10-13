@@ -110,19 +110,26 @@ func WithAutoscalerName(name string) Option {
 // SetupWithManager wires the [Reconciler] into the given manager. It watches
 // PersistentVolumeClaims and filters, via a predicate, to those which are managed by
 // the pvc-autoscaler and have one of the conditions relevant to offline-resize recovery.
-// It additionally watches PersistentVolumeClaimAutoscalers (so a PVC is re-evaluated when
-// its ownership or effective policy changes) and gated Pods (so the scheduling gate is
-// removed once the PVC becomes ready for the filesystem resize).
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
 		For(&corev1.PersistentVolumeClaim{}, builder.WithPredicates(predicate.NewPredicateFuncs(PVCIsInResizeErrorOrFileSystemResizePending))).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 5}).
+		// Eviction and gate removal both depend on the PVC's ownership and effective policy,
+		// which live on the PVCA, not the PVC. A PVC event alone would not fire when the owning
+		// PVCA's status.volumeRecommendations or spec.volumePolicies change, so without this
+		// watch a PVC would keep acting on a stale policy (e.g. not evicting pods after the
+		// strategy was flipped to PreferInPlace) until the next PVC event happened to
+		// re-trigger it.
 		Watches(
 			&v1alpha1.PersistentVolumeClaimAutoscaler{},
 			handler.EnqueueRequestsFromMapFunc(MapPVCAToPVCs),
 			builder.WithPredicates(PVCARecommendationsOrPoliciesChangedPredicate()),
 		).
+		// The gate is set on Pods, but Reconcile keys off the PVC. A Pod carrying the gate may
+		// be created after the PVC's resize conditions have already settled.
+		// Watching gated Pods re-enqueues their PVC so the gate is removed, and makes the Pods
+		// re-discoverable after a controller restart.
 		Watches(
 			&corev1.Pod{},
 			handler.EnqueueRequestsFromMapFunc(MapPodToPVCs),
