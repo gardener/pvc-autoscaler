@@ -20,10 +20,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
@@ -107,35 +109,26 @@ func WithAutoscalerName(name string) Option {
 
 // SetupWithManager wires the [Reconciler] into the given manager. It watches
 // PersistentVolumeClaims and filters, via a predicate, to those which are managed by
-// the pvc-autoscaler (carry the previous-size annotation) and have one of the
-// conditions relevant to offline-resize recovery.
+// the pvc-autoscaler and have one of the conditions relevant to offline-resize recovery.
+// It additionally watches PersistentVolumeClaimAutoscalers (so a PVC is re-evaluated when
+// its ownership or effective policy changes) and gated Pods (so the scheduling gate is
+// removed once the PVC becomes ready for the filesystem resize).
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
-		For(&corev1.PersistentVolumeClaim{}, builder.WithPredicates(managedPVCPredicate())).
+		For(&corev1.PersistentVolumeClaim{}, builder.WithPredicates(predicate.NewPredicateFuncs(PVCIsInResizeErrorOrFileSystemResizePending))).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 5}).
+		Watches(
+			&v1alpha1.PersistentVolumeClaimAutoscaler{},
+			handler.EnqueueRequestsFromMapFunc(MapPVCAToPVCs),
+			builder.WithPredicates(PVCARecommendationsOrPoliciesChangedPredicate()),
+		).
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(MapPodToPVCs),
+			builder.WithPredicates(PodWithSchedulingGatePredicate()),
+		).
 		Complete(r)
-}
-
-// managedPVCPredicate limits reconciliation to PersistentVolumeClaims that the
-// pvc-autoscaler has resized (they carry the previous-size annotation) and which
-// have either the ControllerResizeError or FileSystemResizePending condition.
-func managedPVCPredicate() predicate.Predicate {
-	relevant := func(obj client.Object) bool {
-		pvc, ok := obj.(*corev1.PersistentVolumeClaim)
-		if !ok {
-			return false
-		}
-
-		if _, ok := pvc.Annotations[common.AnnotationPreviousSize]; !ok {
-			return false
-		}
-
-		return utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimControllerResizeError) ||
-			utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending)
-	}
-
-	return predicate.NewPredicateFuncs(relevant)
 }
 
 // Reconcile drives offline-resize recovery for a single PersistentVolumeClaim.
