@@ -149,12 +149,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, fmt.Errorf("failed to get PersistentVolumeClaim: %w", err)
 	}
 
-	// Gate removal is intentionally unconditional: it is not gated on ownership or
-	// the PreferInPlace strategy. A gate could only ever have been added while the
-	// PVC was owned and the strategy was PreferInPlace, so if the PVC is no longer
-	// owned (e.g. the PVCA was deleted) or the strategy was flipped away since then,
-	// we must still remove the gate so the Pod is not stranded unschedulable forever.
-	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending) {
+	// Remove the gate regardless of ownership or policy: a gate left behind after the
+	// PVC stops being managed (or the strategy changes) would strand the Pod forever.
+	// Keep the gate only while the resize is still erroring and not yet pending offline,
+	// so the Pod stays off the volume until it is safe to schedule.
+	controllerResizeError := utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimControllerResizeError)
+	fileSystemResizePending := utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending)
+	if fileSystemResizePending || !controllerResizeError {
 		return reconcile.Result{}, r.removeSchedulingGates(ctx, logger, pvc)
 	}
 
@@ -176,11 +177,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, nil
 	}
 
-	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimControllerResizeError) {
-		return reconcile.Result{RequeueAfter: requeueDurationOnControllerResizeError}, r.evictPodsUsingPVC(ctx, logger, pvc)
-	}
-
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: requeueDurationOnControllerResizeError}, r.evictPodsUsingPVC(ctx, logger, pvc)
 }
 
 // evictPodsUsingPVC evicts all Pods that use the given PVC so that the volume can
