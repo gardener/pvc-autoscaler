@@ -365,6 +365,25 @@ var _ = Describe("Offline Resize Reconciler", func() {
 				}).Should(Succeed())
 			})
 		})
+		When("the PVC has neither resize condition", func() {
+			When("the pod carries the offline-resize scheduling gate", func() {
+				BeforeEach(func() {
+					pod.Spec.SchedulingGates = []corev1.PodSchedulingGate{{Name: common.SchedulingGateOfflineResize}}
+				})
+
+				It("should remove the offline-resize scheduling gate", func() {
+					result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(pvc)})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result).To(Equal(reconcile.Result{}))
+
+					Eventually(func(g Gomega) {
+						updated := &corev1.Pod{}
+						g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), updated)).To(Succeed())
+						g.Expect(updated.Spec.SchedulingGates).To(BeEmpty())
+					}).Should(Succeed())
+				})
+			})
+		})
 	})
 
 	Context("PVC not managed by any PVCA of this instance", func() {
