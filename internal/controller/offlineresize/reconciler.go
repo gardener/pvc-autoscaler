@@ -140,7 +140,7 @@ func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 // Reconcile drives offline-resize recovery for a single PersistentVolumeClaim.
 func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-	logger := log.FromContext(ctx, "controller", ControllerName, "pvc", req.NamespacedName)
+	logger := log.FromContext(ctx)
 
 	pvc := &corev1.PersistentVolumeClaim{}
 	if err := r.client.Get(ctx, req.NamespacedName, pvc); err != nil {
@@ -158,6 +158,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	controllerResizeError := utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimControllerResizeError)
 	fileSystemResizePending := utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending)
 	if fileSystemResizePending || !controllerResizeError {
+		logger.Info("removing scheduling gates", "controllerResizeError", controllerResizeError, "fileSystemResizePending", fileSystemResizePending)
+
 		return reconcile.Result{}, r.removeSchedulingGates(ctx, logger, pvc)
 	}
 
@@ -178,6 +180,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 		return reconcile.Result{}, nil
 	}
+	logger.Info("evicting pods for offline resize, will requeue")
 
 	return reconcile.Result{RequeueAfter: requeueDurationOnControllerResizeError}, r.evictPodsUsingPVC(ctx, logger, pvc)
 }
