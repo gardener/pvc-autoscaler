@@ -57,8 +57,9 @@ var _ = Describe("Pod Mutator", func() {
 			},
 			Status: corev1.PersistentVolumeClaimStatus{
 				Conditions: []corev1.PersistentVolumeClaimCondition{{
-					Type:   corev1.PersistentVolumeClaimControllerResizeError,
-					Status: corev1.ConditionTrue,
+					Type:    corev1.PersistentVolumeClaimControllerResizeError,
+					Status:  corev1.ConditionTrue,
+					Message: "while it is attached to a running VM",
 				}},
 			},
 		}}
@@ -197,6 +198,16 @@ var _ = Describe("Pod Mutator", func() {
 		When("the managing PVCA has no scaleUp rules", func() {
 			BeforeEach(func() {
 				pvca.Spec.VolumePolicies[0].ScaleUp = nil
+			})
+
+			It("should not add the gate", func() {
+				Expect(mutated.Spec.SchedulingGates).NotTo(ContainElement(offlineResizeGate))
+			})
+		})
+
+		When("the ControllerResizeError does not require an offline resize", func() {
+			BeforeEach(func() {
+				pvcs[0].Status.Conditions[0].Message = "failed to resize disk: quota exceeded"
 			})
 
 			It("should not add the gate", func() {
