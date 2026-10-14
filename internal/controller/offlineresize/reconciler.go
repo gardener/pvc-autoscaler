@@ -182,6 +182,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	}
 	logger.Info("evicting pods for offline resize, will requeue")
 
+	if !utils.IsOfflineResizeRequired(pvc) {
+		logger.Info("ControllerResizeError does not require an offline resize, skipping eviction")
+
+		return reconcile.Result{}, nil
+	}
+
 	return reconcile.Result{RequeueAfter: requeueDurationOnControllerResizeError}, r.evictPodsUsingPVC(ctx, logger, pvc)
 }
 
