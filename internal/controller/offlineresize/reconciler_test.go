@@ -6,6 +6,7 @@ package offlineresize_test
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -39,10 +40,14 @@ var _ = Describe("Offline Resize Reconciler", func() {
 		patch := client.MergeFrom(pvc.DeepCopy())
 		pvc.Status.Phase = corev1.ClaimBound
 		for _, condType := range conditions {
-			pvc.Status.Conditions = append(pvc.Status.Conditions, corev1.PersistentVolumeClaimCondition{
+			condition := corev1.PersistentVolumeClaimCondition{
 				Type:   condType,
 				Status: corev1.ConditionTrue,
-			})
+			}
+			if condType == corev1.PersistentVolumeClaimControllerResizeError {
+				condition.Message = "while it is attached to a running VM"
+			}
+			pvc.Status.Conditions = append(pvc.Status.Conditions, condition)
 		}
 		Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
 		Eventually(func(g Gomega) {
@@ -171,11 +176,34 @@ var _ = Describe("Offline Resize Reconciler", func() {
 			It("should evict the pod using the PVC", func() {
 				result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(pvc)})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(result).To(Equal(reconcile.Result{}))
+				Expect(result).To(Equal(reconcile.Result{RequeueAfter: 10 * time.Second}))
 
 				Eventually(func() bool {
 					return apierrors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{}))
 				}).Should(BeTrue())
+			})
+
+			When("the ControllerResizeError does not require an offline resize", func() {
+				BeforeEach(func() {
+					patch := client.MergeFrom(pvc.DeepCopy())
+					pvc.Status.Conditions[0].Message = "failed to resize disk: quota exceeded"
+					Expect(k8sClient.Status().Patch(ctx, pvc, patch)).To(Succeed())
+					Eventually(func(g Gomega) {
+						observed := &corev1.PersistentVolumeClaim{}
+						g.Expect(mgrClient.Get(ctx, client.ObjectKeyFromObject(pvc), observed)).To(Succeed())
+						g.Expect(observed.Status.Conditions[0].Message).To(Equal("failed to resize disk: quota exceeded"))
+					}).Should(Succeed())
+				})
+
+				It("should not evict the pod", func() {
+					result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(pvc)})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result).To(Equal(reconcile.Result{}))
+
+					Consistently(func() error {
+						return k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{})
+					}).Should(Succeed())
+				})
 			})
 
 			When("the pod is not running", func() {
@@ -186,7 +214,7 @@ var _ = Describe("Offline Resize Reconciler", func() {
 				It("should not evict the pod", func() {
 					result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(pvc)})
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result).To(Equal(reconcile.Result{}))
+					Expect(result).To(Equal(reconcile.Result{RequeueAfter: 10 * time.Second}))
 
 					Consistently(func() error {
 						return k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), &corev1.Pod{})
@@ -362,6 +390,25 @@ var _ = Describe("Offline Resize Reconciler", func() {
 					g.Expect(updated.Spec.SchedulingGates).To(BeEmpty())
 					g.Expect(updated.DeletionTimestamp).To(BeNil())
 				}).Should(Succeed())
+			})
+		})
+		When("the PVC has neither resize condition", func() {
+			When("the pod carries the offline-resize scheduling gate", func() {
+				BeforeEach(func() {
+					pod.Spec.SchedulingGates = []corev1.PodSchedulingGate{{Name: common.SchedulingGateOfflineResize}}
+				})
+
+				It("should remove the offline-resize scheduling gate", func() {
+					result, err := reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(pvc)})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result).To(Equal(reconcile.Result{}))
+
+					Eventually(func(g Gomega) {
+						updated := &corev1.Pod{}
+						g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pod), updated)).To(Succeed())
+						g.Expect(updated.Spec.SchedulingGates).To(BeEmpty())
+					}).Should(Succeed())
+				})
 			})
 		})
 	})
