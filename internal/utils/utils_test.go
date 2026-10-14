@@ -87,6 +87,38 @@ var _ = Describe("Utils", func() {
 		})
 	})
 
+	Describe("#GetPersistentVolumeClaimCondition", func() {
+		pvc := &corev1.PersistentVolumeClaim{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "sample-pvc",
+				Namespace: "default",
+			},
+			Status: corev1.PersistentVolumeClaimStatus{
+				Conditions: []corev1.PersistentVolumeClaimCondition{
+					{
+						Type:    corev1.PersistentVolumeClaimControllerResizeError,
+						Status:  corev1.ConditionTrue,
+						Message: "while it is attached to a running VM",
+					},
+					{
+						Type:   corev1.PersistentVolumeClaimFileSystemResizePending,
+						Status: corev1.ConditionTrue,
+					},
+				},
+			},
+		}
+
+		It("should return the matching condition", func() {
+			condition := utils.GetPersistentVolumeClaimCondition(pvc, corev1.PersistentVolumeClaimControllerResizeError)
+			Expect(condition.Type).To(Equal(corev1.PersistentVolumeClaimControllerResizeError))
+			Expect(condition.Message).To(Equal("while it is attached to a running VM"))
+		})
+
+		It("should return the zero-value condition when the condition is absent", func() {
+			Expect(utils.GetPersistentVolumeClaimCondition(pvc, corev1.PersistentVolumeClaimResizing)).To(Equal(corev1.PersistentVolumeClaimCondition{}))
+		})
+	})
+
 	Describe("#FindOwningPVCAAndPolicy", func() {
 		const (
 			namespace      = "default"
