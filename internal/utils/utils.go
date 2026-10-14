@@ -58,16 +58,24 @@ func IsPersistentVolumeClaimConditionTrue(obj *corev1.PersistentVolumeClaim, con
 	return IsPersistentVolumeClaimConditionPresentAndEqual(obj, conditionType, corev1.ConditionTrue)
 }
 
-// IsPersistentVolumeClaimConditionPresentAndEqual is a predicate which returns
-// whether the condition of the given type is equal to the given status.
-func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolumeClaim, conditionType corev1.PersistentVolumeClaimConditionType, status corev1.ConditionStatus) bool {
+// GetPersistentVolumeClaimCondition returns the condition of the given type from the
+// PersistentVolumeClaim's status.
+func GetPersistentVolumeClaimCondition(obj *corev1.PersistentVolumeClaim, conditionType corev1.PersistentVolumeClaimConditionType) corev1.PersistentVolumeClaimCondition {
 	for _, condition := range obj.Status.Conditions {
 		if condition.Type == conditionType {
-			return condition.Status == status
+			return condition
 		}
 	}
 
-	return false
+	return corev1.PersistentVolumeClaimCondition{}
+}
+
+// IsPersistentVolumeClaimConditionPresentAndEqual is a predicate which returns
+// whether the condition of the given type is equal to the given status.
+func IsPersistentVolumeClaimConditionPresentAndEqual(obj *corev1.PersistentVolumeClaim, conditionType corev1.PersistentVolumeClaimConditionType, status corev1.ConditionStatus) bool {
+	condition := GetPersistentVolumeClaimCondition(obj, conditionType)
+
+	return condition.Status == status
 }
 
 // FindOwningPVCAAndPolicy returns the PersistentVolumeClaimAutoscaler that manages the
