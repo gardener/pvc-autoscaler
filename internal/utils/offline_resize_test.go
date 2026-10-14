@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
+	corev1 "k8s.io/api/core/v1"
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
@@ -58,6 +59,34 @@ var _ = Describe("Offline Resize", func() {
 				func(_ *v1alpha1.PersistentVolumeClaimAutoscaler, p *v1alpha1.VolumePolicy) {
 					p.ScaleUp.ResizeStrategy = v1alpha1.OffVolumeResizeStrategy
 				}, false),
+		)
+	})
+
+	Describe("#IsOfflineResizeRequired", func() {
+		DescribeTable("should report whether the resize error requires an offline resize",
+			func(message string, want bool) {
+				pvc := &corev1.PersistentVolumeClaim{
+					Status: corev1.PersistentVolumeClaimStatus{
+						Conditions: []corev1.PersistentVolumeClaimCondition{{
+							Type:    corev1.PersistentVolumeClaimControllerResizeError,
+							Status:  corev1.ConditionTrue,
+							Message: message,
+						}},
+					},
+				}
+				Expect(utils.IsOfflineResizeRequired(pvc)).To(Equal(want))
+			},
+			Entry("Azure unsupported disk property change (full message, VM size embedded)",
+				"Change in disk property of VM of size 'Standard_A4_v2' is not supported.", true),
+			Entry("Azure resize-while-attached (full message, disk sizes embedded)",
+				"Disk of size 1024 GB (<=4096 GB) cannot be resized to 10240 GB (>4096 GB) while it is attached to a running VM. Please stop your VM or detach the disk and retry the operation", true),
+			Entry("matches case-insensitively",
+				"CHANGE IN DISK PROPERTY OF VM OF SIZE 'Standard_D2' IS NOT SUPPORTED.", true),
+			Entry("matches a fragment embedded in a longer wrapped message",
+				"failed to resize disk(/subscriptions/x/disk) with error(while it is attached to a running VM)", true),
+			Entry("does not match an unrelated resize error",
+				"failed to resize disk: quota exceeded for the subscription", false),
+			Entry("does not match an empty message", "", false),
 		)
 	})
 })
