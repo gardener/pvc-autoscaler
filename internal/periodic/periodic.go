@@ -29,11 +29,13 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/expansionfailure"
 	"github.com/gardener/pvc-autoscaler/internal/healthcheck"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/target/pvcfetcher"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
+	"github.com/gardener/pvc-autoscaler/internal/version"
 )
 
 // UnknownUtilizationValue is the value which will be used when the free
@@ -95,13 +97,15 @@ const (
 // processes [v1alpha1.PersistentVolumeClaimAutoscaler] items on a regular basis
 // and performs PVC resizing when thresholds are reached.
 type Runner struct {
-	client         client.Client
-	interval       time.Duration
-	metricsSource  metricssource.Source
-	eventRecorder  record.EventRecorder
-	pvcFetcher     pvcfetcher.Fetcher
-	heartbeat      *healthcheck.Heartbeat
-	autoscalerName string
+	client            client.Client
+	interval          time.Duration
+	metricsSource     metricssource.Source
+	eventRecorder     record.EventRecorder
+	pvcFetcher        pvcfetcher.Fetcher
+	recoverer         *expansionfailure.Recoverer
+	heartbeat         *healthcheck.Heartbeat
+	autoscalerName    string
+	kubernetesVersion string
 }
 
 var _ manager.Runnable = &Runner{}
@@ -131,6 +135,8 @@ func New(opts ...Option) (*Runner, error) {
 	if r.pvcFetcher == nil {
 		return nil, ErrNoPVCFetcher
 	}
+
+	r.recoverer = expansionfailure.New(r.client, r.eventRecorder)
 
 	return r, nil
 }
@@ -196,6 +202,17 @@ func WithHeartbeat(h *healthcheck.Heartbeat) Option {
 func WithAutoscalerName(name string) Option {
 	opt := func(r *Runner) {
 		r.autoscalerName = name
+	}
+
+	return opt
+}
+
+// WithKubernetesVersion configures the [Runner] with the version of the
+// Kubernetes cluster it runs against. It is used for recovery from infeasible volume
+// expansions (RecoverVolumeExpansionFailure), which is GA as of Kubernetes 1.34.
+func WithKubernetesVersion(kubernetesVersion string) Option {
+	opt := func(r *Runner) {
+		r.kubernetesVersion = kubernetesVersion
 	}
 
 	return opt
@@ -425,6 +442,27 @@ func (r *Runner) reconcilePVCA(
 				Reason:  ReasonMetricsFetchError,
 				Message: fmt.Sprintf("%s: %s", pvcObjKey.Name, err.Error()),
 			})
+
+			continue
+		}
+
+		if expansionfailure.IsResizeInfeasible(pvc) {
+			if !version.IsKubernetesVersionGreaterEqual134(r.kubernetesVersion) {
+				logger.Info("skipping recovery from infeasible pvc resize, requires Kubernetes >= 1.34", "pvc", pvcObjKey.Name, "kubernetesVersion", r.kubernetesVersion)
+				setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
+
+				continue
+			}
+
+			var resizingCondition *metav1.Condition
+			volumeRecommendation, resizingCondition, err = r.recoverer.Recover(ctx, logger, pvc, volumeRecommendation)
+			if err != nil {
+				logger.Error(err, "failed to recover from failed pvc resize")
+			}
+			if resizingCondition != nil {
+				resizingConditions.addCondition(*resizingCondition)
+			}
+			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
 			continue
 		}

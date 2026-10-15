@@ -41,6 +41,7 @@ build:
             - cmd/pvc-autoscaler
             - internal/common
             - internal/controller/offlineresize
+            - internal/expansionfailure
             - internal/healthcheck
             - internal/metrics
             - internal/metrics/source
@@ -49,6 +50,7 @@ build:
             - internal/target/pvcfetcher
             - internal/target/selectorfetcher
             - internal/utils
+            - internal/version
             - internal/webhook/pod
             - VERSION
         main: ./cmd/pvc-autoscaler
