@@ -105,9 +105,9 @@ func newRunner() (*Runner, error) {
 
 // calculateAndResize chains recommendResize and resizePVC the same way
 // reconcilePVCA does, so tests can exercise the full "decide then resize" flow.
-func (r *Runner) calculateAndResize(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
-	reason := scalingReason(pvc, policy, volumeRecommendation)
-	decision := r.recommendResize(logger, pvc, reason, policy, volumeRecommendation, resizingConditions)
+func calculateAndResize(ctx context.Context, r *Runner, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) (v1alpha1.VolumeRecommendation, error) {
+	reason, atMaxCapacity := scalingReason(pvc, policy, volumeRecommendation)
+	decision := r.recommendResize(logger, pvc, reason, atMaxCapacity, policy, volumeRecommendation, resizingConditions)
 	if decision == nil {
 		return volumeRecommendation, nil
 	}
@@ -500,9 +500,10 @@ var _ = Describe("Periodic Runner", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(volumePolicy).NotTo(BeNil())
 
-				decision := runner.recommendResize(GinkgoLogr, pvc, scalingReason(pvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
+				reason, atMaxCapacity := scalingReason(pvc, *volumePolicy, volumeRecommendation)
+				decision := runner.recommendResize(GinkgoLogr, pvc, reason, atMaxCapacity, *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision).To(BeNil())
-				Expect(scalingReason(pvc, *volumePolicy, volumeRecommendation)).To(BeEmpty())
+				Expect(reason).To(BeEmpty())
 			})
 
 			Context("Should reconcile when thresholds are reached", func() {
@@ -533,9 +534,10 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(volumePolicy).NotTo(BeNil())
 
-					decision := testRunner.recommendResize(GinkgoLogr, pvc, scalingReason(pvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
+					reason, atMaxCapacity := scalingReason(pvc, *volumePolicy, volumeRecommendation)
+					decision := testRunner.recommendResize(GinkgoLogr, pvc, reason, atMaxCapacity, *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 					Expect(decision).NotTo(BeNil())
-					Expect(scalingReason(pvc, *volumePolicy, volumeRecommendation)).To(Equal(common.ScalingReasonStorageThreshold))
+					Expect(reason).To(Equal(common.ScalingReasonStorageThreshold))
 
 					event := <-eventRecorder.Events
 					wantEvent := `Warning UsedSpaceThresholdReached used space (92%) exceeds the configured threshold (80%)`
@@ -555,9 +557,10 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(volumePolicy).NotTo(BeNil())
 
-					decision := testRunner.recommendResize(GinkgoLogr, pvc, scalingReason(pvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
+					reason, atMaxCapacity := scalingReason(pvc, *volumePolicy, volumeRecommendation)
+					decision := testRunner.recommendResize(GinkgoLogr, pvc, reason, atMaxCapacity, *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 					Expect(decision).NotTo(BeNil())
-					Expect(scalingReason(pvc, *volumePolicy, volumeRecommendation)).To(Equal(common.ScalingReasonInodesThreshold))
+					Expect(reason).To(Equal(common.ScalingReasonInodesThreshold))
 
 					event := <-eventRecorder.Events
 					wantEvent := `Warning UsedInodesThresholdReached used inodes (91%) exceeds the configured threshold (80%)`
@@ -1337,7 +1340,7 @@ var _ = Describe("Periodic Runner", func() {
 				func(
 					pvcConditionType *corev1.PersistentVolumeClaimConditionType,
 					prevSizeAnnotation *string,
-					reason string,
+					reason common.ScalingReason,
 					expectedLogSubstring string,
 					expectedMessageRegex string,
 					expectInProgress bool,
@@ -1457,7 +1460,7 @@ var _ = Describe("Periodic Runner", func() {
 					recommendedSize string,
 					usedSpacePercent *int,
 					usedInodesPercent *int,
-					reason string,
+					reason common.ScalingReason,
 					expectedLogSubstring string,
 					expectedMessageRegex string,
 				) {
@@ -1476,7 +1479,7 @@ var _ = Describe("Periodic Runner", func() {
 					aggregator := &resizingConditionAggregator{}
 					volumePolicy, errPolicy := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
 					Expect(errPolicy).NotTo(HaveOccurred())
-					updatedRecommendation, err := runner.calculateAndResize(parentCtx, logger, pvc, *volumePolicy, volumeRecommendation, aggregator)
+					updatedRecommendation, err := calculateAndResize(parentCtx, runner, logger, pvc, *volumePolicy, volumeRecommendation, aggregator)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buf.String()).To(ContainSubstring(expectedLogSubstring))
 
@@ -1533,7 +1536,7 @@ var _ = Describe("Periodic Runner", func() {
 				aggregator := &resizingConditionAggregator{}
 				volumePolicy, errPolicy := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
 				Expect(errPolicy).NotTo(HaveOccurred())
-				volumeRecommendation, err := runner.calculateAndResize(parentCtx, logger, pvc, *volumePolicy, volumeRecommendation, aggregator)
+				volumeRecommendation, err := calculateAndResize(parentCtx, runner, logger, pvc, *volumePolicy, volumeRecommendation, aggregator)
 				Expect(err).NotTo(HaveOccurred())
 
 				wantLog := `"resizing persistent volume claim","pvc":"test-pvc","from":"1Gi","to":"2Gi"}`
@@ -1554,7 +1557,7 @@ var _ = Describe("Periodic Runner", func() {
 				aggregator = &resizingConditionAggregator{}
 				volumePolicy, errPolicy = utils.GetVolumePolicy(resizedPvc.Name, pvca.Spec.VolumePolicies)
 				Expect(errPolicy).NotTo(HaveOccurred())
-				volumeRecommendation, err = runner.calculateAndResize(parentCtx, logger, &resizedPvc, *volumePolicy, volumeRecommendation, aggregator)
+				volumeRecommendation, err = calculateAndResize(parentCtx, runner, logger, &resizedPvc, *volumePolicy, volumeRecommendation, aggregator)
 				Expect(err).NotTo(HaveOccurred())
 
 				wantLog = `"resizing persistent volume claim","pvc":"test-pvc","from":"2Gi","to":"3Gi"}`
@@ -1573,9 +1576,10 @@ var _ = Describe("Periodic Runner", func() {
 				By("Expecting third attempt to report max capacity reached (already at max)")
 				volumePolicy, errPolicy = utils.GetVolumePolicy(resizedPvc.Name, pvca.Spec.VolumePolicies)
 				Expect(errPolicy).NotTo(HaveOccurred())
-				decision := runner.recommendResize(GinkgoLogr, &resizedPvc, scalingReason(&resizedPvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
+				reason, atMaxCapacity := scalingReason(&resizedPvc, *volumePolicy, volumeRecommendation)
+				decision := runner.recommendResize(GinkgoLogr, &resizedPvc, reason, atMaxCapacity, *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision).To(BeNil())
-				Expect(scalingReason(&resizedPvc, *volumePolicy, volumeRecommendation)).To(Equal(common.ScalingReasonMaxCapacity))
+				Expect(atMaxCapacity).To(BeTrue())
 
 				By("Expecting the counter to have incremented once, on the resize that landed at max")
 				Expect(testutil.ToFloat64(maxCapCounter)).To(Equal(baselineMaxCap + 1))
@@ -1583,7 +1587,8 @@ var _ = Describe("Periodic Runner", func() {
 				By("Expecting a subsequent check while already at max to increment")
 				volumePolicy, errPolicy = utils.GetVolumePolicy(resizedPvc.Name, pvca.Spec.VolumePolicies)
 				Expect(errPolicy).NotTo(HaveOccurred())
-				decision = runner.recommendResize(GinkgoLogr, &resizedPvc, scalingReason(&resizedPvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
+				reason, atMaxCapacity = scalingReason(&resizedPvc, *volumePolicy, volumeRecommendation)
+				decision = runner.recommendResize(GinkgoLogr, &resizedPvc, reason, atMaxCapacity, *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision).To(BeNil())
 				Expect(testutil.ToFloat64(maxCapCounter)).To(Equal(baselineMaxCap + 2))
 			})
@@ -1608,7 +1613,7 @@ var _ = Describe("Periodic Runner", func() {
 					aggregator := &resizingConditionAggregator{}
 					volumePolicy, errPolicy := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
 					Expect(errPolicy).NotTo(HaveOccurred())
-					_, err := runner.calculateAndResize(parentCtx, logger, pvc, *volumePolicy, volumeRecommendation, aggregator)
+					_, err := calculateAndResize(parentCtx, runner, logger, pvc, *volumePolicy, volumeRecommendation, aggregator)
 					Expect(err).NotTo(HaveOccurred())
 
 					var updatedPvc corev1.PersistentVolumeClaim
@@ -1636,9 +1641,10 @@ var _ = Describe("Periodic Runner", func() {
 
 				volumePolicy, errPolicy := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
 				Expect(errPolicy).NotTo(HaveOccurred())
-				decision := runner.recommendResize(GinkgoLogr, pvc, scalingReason(pvc, *volumePolicy, volumeRecommendation), *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
+				reason, atMaxCapacity := scalingReason(pvc, *volumePolicy, volumeRecommendation)
+				decision := runner.recommendResize(GinkgoLogr, pvc, reason, atMaxCapacity, *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision).To(BeNil())
-				Expect(scalingReason(pvc, *volumePolicy, volumeRecommendation)).To(Equal(common.ScalingReasonMaxCapacity))
+				Expect(atMaxCapacity).To(BeTrue())
 			})
 
 			DescribeTable("should handle cooldown duration",
@@ -1664,7 +1670,7 @@ var _ = Describe("Periodic Runner", func() {
 					aggregator := &resizingConditionAggregator{}
 					volumePolicy, errPolicy := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
 					Expect(errPolicy).NotTo(HaveOccurred())
-					updatedRecommendation, err := runner.calculateAndResize(parentCtx, logger, pvc, *volumePolicy, volumeRecommendation, aggregator)
+					updatedRecommendation, err := calculateAndResize(parentCtx, runner, logger, pvc, *volumePolicy, volumeRecommendation, aggregator)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(buf.String()).To(ContainSubstring(expectedLog))
 
