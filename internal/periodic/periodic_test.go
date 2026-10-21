@@ -479,7 +479,7 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				}
 
-				decision := runner.recommendResize(logger, pvc, "", pvca.Spec.VolumePolicies[0], volumeRecommendation, &resizingConditionAggregator{})
+				decision := runner.recommendResize(logger, pvc, "", pvca.Spec.VolumePolicies[0], volumeRecommendation)
 				Expect(decision).To(BeNil())
 			})
 
@@ -516,7 +516,7 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(volumePolicy).NotTo(BeNil())
 
 					reason, _ := scalingReason(pvc, *volumePolicy, volumeRecommendation)
-					decision := testRunner.recommendResize(logger, pvc, reason, *volumePolicy, volumeRecommendation, &resizingConditionAggregator{})
+					decision := testRunner.recommendResize(logger, pvc, reason, *volumePolicy, volumeRecommendation)
 					Expect(decision).NotTo(BeNil())
 					Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
 					Expect(reason).To(Equal(common.ScalingReasonSpaceThreshold))
@@ -539,7 +539,7 @@ var _ = Describe("Periodic Runner", func() {
 						},
 					}
 
-					decision := testRunner.recommendResize(logger, pvc, common.ScalingReasonInodesThreshold, pvca.Spec.VolumePolicies[0], volumeRecommendation, &resizingConditionAggregator{})
+					decision := testRunner.recommendResize(logger, pvc, common.ScalingReasonInodesThreshold, pvca.Spec.VolumePolicies[0], volumeRecommendation)
 					Expect(decision).NotTo(BeNil())
 					Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
 
@@ -569,7 +569,7 @@ var _ = Describe("Periodic Runner", func() {
 				policy.MaxCapacity = resource.MustParse("2Gi")
 				policy.ScaleUp.MinStepAbsolute = ptr.To(resource.MustParse("2Gi"))
 
-				decision := runner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, *policy, volumeRecommendation, &resizingConditionAggregator{})
+				decision := runner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, *policy, volumeRecommendation)
 				Expect(decision).NotTo(BeNil())
 				Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
 			})
@@ -594,8 +594,7 @@ var _ = Describe("Periodic Runner", func() {
 				policy := basePolicy.DeepCopy()
 				policy.ScaleUp.CooldownDuration = &metav1.Duration{Duration: time.Hour}
 
-				aggregator := &resizingConditionAggregator{}
-				decision := runner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, *policy, volumeRecommendation, aggregator)
+				decision := runner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, *policy, volumeRecommendation)
 				Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
 			})
 		})

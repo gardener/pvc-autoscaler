@@ -443,7 +443,7 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		targetSize := r.recommendResize(logger, pvc, scalingReason, *policy, volumeRecommendation, resizingConditions)
+		targetSize := r.recommendResize(logger, pvc, scalingReason, *policy, volumeRecommendation)
 		if targetSize == nil {
 			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
@@ -596,7 +596,7 @@ func (r *Runner) validatePVC(ctx context.Context, pvc *corev1.PersistentVolumeCl
 // resized for the given scalingReason and, when it should, returns the fully
 // computed target size. A nil return means no resize is warranted. It does not
 // mutate the PVC.
-func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason common.ScalingReason, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) *resource.Quantity {
+func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason common.ScalingReason, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) *resource.Quantity {
 	var (
 		threshold         = *policy.ScaleUp.UtilizationThresholdPercent
 		usedSpacePercent  = ptr.Deref(volumeRecommendation.Current.UsedSpacePercent, 0)
@@ -886,5 +886,6 @@ func isInCooldown(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, policy 
 			}
 		}
 	}
+
 	return false
 }
