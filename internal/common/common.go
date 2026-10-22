@@ -68,3 +68,15 @@ const (
 	// allowing the Pod to be scheduled, re-mount the volume and finish the resize.
 	SchedulingGateOfflineResize = "pvc.autoscaling.gardener.cloud/offline-resize"
 )
+
+// ScalingReason is a string alias that can be used to represent a scaling reason.
+type ScalingReason string
+
+var (
+	// ScalingReasonSpaceThreshold is the scaling reason reported when a PVC's
+	// used space exceeds the configured utilization threshold.
+	ScalingReasonSpaceThreshold ScalingReason = "passing storage threshold"
+	// ScalingReasonInodesThreshold is the scaling reason reported when a PVC's
+	// used inodes exceed the configured utilization threshold.
+	ScalingReasonInodesThreshold ScalingReason = "passing inodes threshold"
+)
