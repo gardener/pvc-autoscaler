@@ -236,6 +236,7 @@ func (r *Runner) reconcileAll(ctx context.Context) error {
 		pvcaList v1alpha1.PersistentVolumeClaimAutoscalerList
 	)
 
+	metrics.PVCAtMaxCapacity.Reset()
 	if err := r.client.List(ctx, &pvcaList, client.MatchingFields{v1alpha1.AutoscalerNameIndexKey: r.autoscalerName}); err != nil {
 		return err
 	}
@@ -429,7 +430,12 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		reason := scalingReason(*policy, volumeRecommendation)
+		reason, isAtMaxCapacity := scalingReason(pvc, *policy, volumeRecommendation)
+		maxCapacityValue := 0.0
+		if isAtMaxCapacity {
+			maxCapacityValue = 1
+		}
+		metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name, pvca.Name).Set(maxCapacityValue)
 		if r.isResizeInProgress(logger, pvc, reason, resizingConditions) {
 			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
@@ -824,19 +830,22 @@ func (r *Runner) setStatus(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 }
 
 // scalingReason classifies why the given PVC should/should not be scaled,
-// returning an empty string when no resize is warranted.
-func scalingReason(policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) common.ScalingReason {
+// returning an empty string when no resize is warranted. It also
+// reports whether the PVC is at its configured max capacity.
+func scalingReason(pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) (common.ScalingReason, bool) {
 	threshold := *policy.ScaleUp.UtilizationThresholdPercent
 	usedSpacePercent := ptr.Deref(volumeRecommendation.Current.UsedSpacePercent, 0)
 	usedInodesPercent := ptr.Deref(volumeRecommendation.Current.UsedInodesPercent, 0)
+	specSize := pvc.Spec.Resources.Requests.Storage()
+	isAtMaxCapacity := policy.MaxCapacity.Value()-specSize.Value() < common.ScalingResolutionBytes
 
 	switch {
 	case usedSpacePercent > threshold:
-		return common.ScalingReasonSpaceThreshold
+		return common.ScalingReasonSpaceThreshold, isAtMaxCapacity
 	case usedInodesPercent > threshold:
-		return common.ScalingReasonInodesThreshold
+		return common.ScalingReasonInodesThreshold, isAtMaxCapacity
 	default:
-		return common.ScalingReason("")
+		return common.ScalingReason(""), isAtMaxCapacity
 	}
 }
 
