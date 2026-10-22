@@ -31,7 +31,6 @@ import (
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/fake"
-	"github.com/gardener/pvc-autoscaler/internal/utils"
 	testutils "github.com/gardener/pvc-autoscaler/test/utils"
 )
 
@@ -479,7 +478,7 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				}
 
-				decision := runner.recommendResize(logger, pvc, "", pvca.Spec.VolumePolicies[0], volumeRecommendation)
+				decision := runner.recommendResize(logger, pvc, "", pvca.Spec.VolumePolicies[0], volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision).To(BeNil())
 			})
 
@@ -511,12 +510,8 @@ var _ = Describe("Periodic Runner", func() {
 						},
 					}
 
-					volumePolicy, err := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
-					Expect(err).NotTo(HaveOccurred())
-					Expect(volumePolicy).NotTo(BeNil())
-
-					reason, _ := scalingReason(pvc, *volumePolicy, volumeRecommendation)
-					decision := testRunner.recommendResize(logger, pvc, reason, *volumePolicy, volumeRecommendation)
+					reason := scalingReason(pvca.Spec.VolumePolicies[0], volumeRecommendation)
+					decision := testRunner.recommendResize(logger, pvc, reason, pvca.Spec.VolumePolicies[0], volumeRecommendation, &resizingConditionAggregator{})
 					Expect(decision).NotTo(BeNil())
 					Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
 					Expect(reason).To(Equal(common.ScalingReasonSpaceThreshold))
@@ -539,13 +534,43 @@ var _ = Describe("Periodic Runner", func() {
 						},
 					}
 
-					decision := testRunner.recommendResize(logger, pvc, common.ScalingReasonInodesThreshold, pvca.Spec.VolumePolicies[0], volumeRecommendation)
+					decision := testRunner.recommendResize(logger, pvc, common.ScalingReasonInodesThreshold, pvca.Spec.VolumePolicies[0], volumeRecommendation, &resizingConditionAggregator{})
 					Expect(decision).NotTo(BeNil())
 					Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
 
 					event := <-eventRecorder.Events
 					wantEvent := `Warning UsedInodesThresholdReached used inodes (91%) exceeds the configured threshold (80%)`
 					Expect(event).To(Equal(wantEvent))
+				})
+
+				It("should fire the MaxCapacityReached event and return nil when targetSize > maxCapacity and there is no meaningful headroom", func() {
+					var buf strings.Builder
+					w := io.MultiWriter(GinkgoWriter, &buf)
+					logger := zap.New(zap.WriteTo(w))
+
+					volumeRecommendation := v1alpha1.VolumeRecommendation{
+						Name: pvc.Name,
+						Current: v1alpha1.CurrentVolumeStatus{
+							UsedSpacePercent: ptr.To(95),
+						},
+					}
+
+					pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("1500Mi")
+					aggregator := &resizingConditionAggregator{}
+					decision := testRunner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, pvca.Spec.VolumePolicies[0], volumeRecommendation, aggregator)
+					Expect(decision).To(BeNil())
+
+					By("Verifying the threshold event was emitted first")
+					Expect(<-eventRecorder.Events).To(ContainSubstring("Warning UsedSpaceThresholdReached"))
+
+					By("Verifying the MaxCapacityReached event was emitted")
+					Expect(<-eventRecorder.Events).To(ContainSubstring("Warning MaxCapacityReached"))
+
+					By("Verifying the resizing condition reflects max capacity reached")
+					Expect(aggregator.getAggregatedCondition()).To(And(
+						HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
+						HaveField("Message", ContainSubstring("max capacity reached")),
+					))
 				})
 			})
 
@@ -561,15 +586,9 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				}
 
-				basePolicy, err := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(basePolicy).NotTo(BeNil())
-
-				policy := basePolicy.DeepCopy()
-				policy.MaxCapacity = resource.MustParse("2Gi")
-				policy.ScaleUp.MinStepAbsolute = ptr.To(resource.MustParse("2Gi"))
-
-				decision := runner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, *policy, volumeRecommendation)
+				pvca.Spec.VolumePolicies[0].ScaleUp.MinStepAbsolute = ptr.To(resource.MustParse("2Gi"))
+				pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("2Gi")
+				decision := runner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, pvca.Spec.VolumePolicies[0], volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision).NotTo(BeNil())
 				Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
 			})
@@ -587,14 +606,9 @@ var _ = Describe("Periodic Runner", func() {
 					LastResizeTime: &lastResizeTime,
 				}
 
-				basePolicy, err := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(basePolicy).NotTo(BeNil())
+				pvca.Spec.VolumePolicies[0].ScaleUp.CooldownDuration = &metav1.Duration{Duration: time.Hour}
 
-				policy := basePolicy.DeepCopy()
-				policy.ScaleUp.CooldownDuration = &metav1.Duration{Duration: time.Hour}
-
-				decision := runner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, *policy, volumeRecommendation)
+				decision := runner.recommendResize(logger, pvc, common.ScalingReasonSpaceThreshold, pvca.Spec.VolumePolicies[0], volumeRecommendation, &resizingConditionAggregator{})
 				Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
 			})
 		})
@@ -605,10 +619,9 @@ var _ = Describe("Periodic Runner", func() {
 					var buf strings.Builder
 					logger := zap.New(zap.WriteTo(io.MultiWriter(GinkgoWriter, &buf)))
 
-					policy := pvca.Spec.VolumePolicies[0].DeepCopy()
-					policy.ScaleUp.CooldownDuration = &metav1.Duration{Duration: time.Hour}
+					pvca.Spec.VolumePolicies[0].ScaleUp.CooldownDuration = &metav1.Duration{Duration: time.Hour}
 					if configure != nil {
-						configure(policy.ScaleUp)
+						configure(pvca.Spec.VolumePolicies[0].ScaleUp)
 					}
 
 					volumeRecommendation := v1alpha1.VolumeRecommendation{Name: pvc.Name}
@@ -618,7 +631,7 @@ var _ = Describe("Periodic Runner", func() {
 					}
 
 					aggregator := &resizingConditionAggregator{}
-					Expect(isInCooldown(logger, pvc, *policy, volumeRecommendation, aggregator)).To(Equal(expectInCooldown))
+					Expect(isInCooldown(logger, pvc, pvca.Spec.VolumePolicies[0], volumeRecommendation, aggregator)).To(Equal(expectInCooldown))
 
 					if expectInCooldown {
 						Expect(buf.String()).To(ContainSubstring("cooldown period not elapsed"))
@@ -1595,15 +1608,11 @@ var _ = Describe("Periodic Runner", func() {
 			})
 
 			It("should emit an event, increment the counter on each call and set a resizing condition", func() {
-				volumePolicy, err := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(volumePolicy).NotTo(BeNil())
-
 				maxCapCounter := metrics.MaxCapacityReachedTotal.WithLabelValues(pvc.Namespace, pvc.Name)
 				baselineMaxCap := testutil.ToFloat64(maxCapCounter)
 
 				aggregator := &resizingConditionAggregator{}
-				testRunner.recordMaxCapacityReached(pvc, *volumePolicy, aggregator)
+				testRunner.recordMaxCapacityReached(pvc, pvca.Spec.VolumePolicies[0], aggregator)
 
 				By("Verifying the event was emitted")
 				event := <-eventRecorder.Events
@@ -1622,27 +1631,21 @@ var _ = Describe("Periodic Runner", func() {
 				))
 
 				By("Verifying the counter increments again on a subsequent check while still at max")
-				testRunner.recordMaxCapacityReached(pvc, *volumePolicy, &resizingConditionAggregator{})
+				testRunner.recordMaxCapacityReached(pvc, pvca.Spec.VolumePolicies[0], &resizingConditionAggregator{})
 				Expect(testutil.ToFloat64(maxCapCounter)).To(Equal(baselineMaxCap + 2))
 			})
 
 			It("should not set a resizing condition when the resize strategy is Off", func() {
-				basePolicy, err := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(basePolicy).NotTo(BeNil())
-
-				policy := basePolicy.DeepCopy()
-				policy.ScaleUp.ResizeStrategy = v1alpha1.OffVolumeResizeStrategy
-
+				pvca.Spec.VolumePolicies[0].ScaleUp.ResizeStrategy = v1alpha1.OffVolumeResizeStrategy
 				aggregator := &resizingConditionAggregator{}
-				testRunner.recordMaxCapacityReached(pvc, *policy, aggregator)
+				testRunner.recordMaxCapacityReached(pvc, pvca.Spec.VolumePolicies[0], aggregator)
 
 				Expect(aggregator.getAggregatedCondition().Message).To(BeEmpty())
 			})
 		})
 
 		Describe("#scalingReason", func() {
-			It("should report the PVC at max capacity when headroom is less than the scaling resolution", func() {
+			It("should return the space threshold reason when used space exceeds the threshold", func() {
 				volumeRecommendation := v1alpha1.VolumeRecommendation{
 					Name: pvc.Name,
 					Current: v1alpha1.CurrentVolumeStatus{
@@ -1650,17 +1653,21 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				}
 
-				basePolicy, err := utils.GetVolumePolicy(pvc.Name, pvca.Spec.VolumePolicies)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(basePolicy).NotTo(BeNil())
-
-				// Max capacity is within one scaling resolution of the current 1Gi size.
-				policy := basePolicy.DeepCopy()
-				policy.MaxCapacity = resource.MustParse("1500Mi")
-
-				reason, isAtMaxCapacity := scalingReason(pvc, *policy, volumeRecommendation)
-				Expect(isAtMaxCapacity).To(BeTrue())
+				reason := scalingReason(pvca.Spec.VolumePolicies[0], volumeRecommendation)
 				Expect(reason).To(Equal(common.ScalingReasonSpaceThreshold))
+			})
+
+			It("should return no reason when utilization is below the threshold", func() {
+				volumeRecommendation := v1alpha1.VolumeRecommendation{
+					Name: pvc.Name,
+					Current: v1alpha1.CurrentVolumeStatus{
+						UsedSpacePercent:  ptr.To(50),
+						UsedInodesPercent: ptr.To(50),
+					},
+				}
+
+				reason := scalingReason(pvca.Spec.VolumePolicies[0], volumeRecommendation)
+				Expect(reason).To(BeEmpty())
 			})
 		})
 

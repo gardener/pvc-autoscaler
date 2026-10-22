@@ -429,21 +429,14 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		scalingReason, isAtMaxCapacity := scalingReason(pvc, *policy, volumeRecommendation)
-		if r.isResizeInProgress(logger, pvc, scalingReason, resizingConditions) {
+		reason := scalingReason(*policy, volumeRecommendation)
+		if r.isResizeInProgress(logger, pvc, reason, resizingConditions) {
 			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
 			continue
 		}
 
-		if isAtMaxCapacity {
-			r.recordMaxCapacityReached(pvc, *policy, resizingConditions)
-			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
-
-			continue
-		}
-
-		targetSize := r.recommendResize(logger, pvc, scalingReason, *policy, volumeRecommendation)
+		targetSize := r.recommendResize(logger, pvc, reason, *policy, volumeRecommendation, resizingConditions)
 		if targetSize == nil {
 			setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
@@ -463,7 +456,7 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		if volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, scalingReason, targetSize, volumeRecommendation, resizingConditions); err != nil {
+		if volumeRecommendation, err = r.resizePVC(ctx, logger, pvc, reason, targetSize, volumeRecommendation, resizingConditions); err != nil {
 			logger.Error(err, "failed to resize pvc")
 		}
 
@@ -595,8 +588,10 @@ func (r *Runner) validatePVC(ctx context.Context, pvc *corev1.PersistentVolumeCl
 // recommendResize decides whether the [corev1.PersistentVolumeClaim] should be
 // resized for the given scalingReason and, when it should, returns the fully
 // computed target size. A nil return means no resize is warranted. It does not
-// mutate the PVC.
-func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason common.ScalingReason, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) *resource.Quantity {
+// mutate the PVC. When the computed target size would reach or exceed the
+// configured max capacity and there is no meaningful headroom left, it records
+// the max-capacity-reached event and returns nil instead of a target size.
+func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolumeClaim, scalingReason common.ScalingReason, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation, resizingConditions *resizingConditionAggregator) *resource.Quantity {
 	var (
 		threshold         = *policy.ScaleUp.UtilizationThresholdPercent
 		usedSpacePercent  = ptr.Deref(volumeRecommendation.Current.UsedSpacePercent, 0)
@@ -653,7 +648,12 @@ func (r *Runner) recommendResize(logger logr.Logger, pvc *corev1.PersistentVolum
 	}
 
 	// We don't want to exceed the max capacity
-	if targetSize.Value() >= policy.MaxCapacity.Value() {
+	if targetSize.Value() > policy.MaxCapacity.Value() {
+		if policy.MaxCapacity.Value()-specSize.Value() < common.ScalingResolutionBytes {
+			r.recordMaxCapacityReached(pvc, policy, resizingConditions)
+
+			return nil
+		}
 		// Clamp to max capacity instead of overshooting it
 		targetSize = &policy.MaxCapacity
 	}
@@ -824,22 +824,19 @@ func (r *Runner) setStatus(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 }
 
 // scalingReason classifies why the given PVC should/should not be scaled,
-// returning an empty string when no resize is warranted. It also
-// reports whether the PVC is at its configured max capacity.
-func scalingReason(pvc *corev1.PersistentVolumeClaim, policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) (common.ScalingReason, bool) {
+// returning an empty string when no resize is warranted.
+func scalingReason(policy v1alpha1.VolumePolicy, volumeRecommendation v1alpha1.VolumeRecommendation) common.ScalingReason {
 	threshold := *policy.ScaleUp.UtilizationThresholdPercent
 	usedSpacePercent := ptr.Deref(volumeRecommendation.Current.UsedSpacePercent, 0)
 	usedInodesPercent := ptr.Deref(volumeRecommendation.Current.UsedInodesPercent, 0)
-	specSize := pvc.Spec.Resources.Requests.Storage()
-	isAtMaxCapacity := policy.MaxCapacity.Value()-specSize.Value() < common.ScalingResolutionBytes
 
 	switch {
 	case usedSpacePercent > threshold:
-		return common.ScalingReasonSpaceThreshold, isAtMaxCapacity
+		return common.ScalingReasonSpaceThreshold
 	case usedInodesPercent > threshold:
-		return common.ScalingReasonInodesThreshold, isAtMaxCapacity
+		return common.ScalingReasonInodesThreshold
 	default:
-		return common.ScalingReason(""), isAtMaxCapacity
+		return common.ScalingReason("")
 	}
 }
 
