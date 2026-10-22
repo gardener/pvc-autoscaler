@@ -47,6 +47,19 @@ var (
 		[]string{"namespace", "persistentvolumeclaim"},
 	)
 
+	// PVCAtMaxCapacity reports whether a targeted PVC is currently at its
+	// configured max capacity. Unlike MaxCapacityReachedTotal,
+	// which only ever increases, this is a snapshot that rises and falls as PVCs
+	// enter and leave the max-capacity state.
+	PVCAtMaxCapacity = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Name:      "pvc_at_max_capacity",
+			Help:      "Whether a targeted PVC is currently at its configured max capacity (1) or not (0)",
+		},
+		[]string{"namespace", "persistentvolumeclaim", "persistentvolumeclaimautoscaler"},
+	)
+
 	// SkippedTotal is a metric which increments each time a PVC is skipped
 	// from being reconciled.
 	SkippedTotal = prometheus.NewCounterVec(
@@ -60,5 +73,5 @@ var (
 )
 
 func init() {
-	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal)
+	ctrlmetrics.Registry.MustRegister(ResizedTotal, ThresholdReachedTotal, SkippedTotal, MaxCapacityReachedTotal, PVCAtMaxCapacity)
 }

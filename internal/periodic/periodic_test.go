@@ -200,6 +200,7 @@ var _ = Describe("Periodic Runner", func() {
 			runner, err = newRunner()
 			Expect(err).NotTo(HaveOccurred())
 			Expect(runner).NotTo(BeNil())
+			metrics.PVCAtMaxCapacity.Reset()
 
 			defaultVolumePolicies = []v1alpha1.VolumePolicy{
 				{
@@ -510,7 +511,7 @@ var _ = Describe("Periodic Runner", func() {
 						},
 					}
 
-					reason := scalingReason(pvca.Spec.VolumePolicies[0], volumeRecommendation)
+					reason, _ := scalingReason(pvc, pvca.Spec.VolumePolicies[0], volumeRecommendation)
 					decision := testRunner.recommendResize(logger, pvc, reason, pvca.Spec.VolumePolicies[0], volumeRecommendation, &resizingConditionAggregator{})
 					Expect(decision).NotTo(BeNil())
 					Expect(decision.Cmp(resource.MustParse("2Gi"))).To(BeZero())
@@ -767,6 +768,50 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Status", metav1.ConditionTrue),
 					HaveField("Reason", ReasonRecommendationsProvided),
 				)))
+			})
+
+			It("should raise and clear the max-capacity gauge as the PVC enters and leaves the max-capacity state", func() {
+				By("Registering metrics for the test PVC so it reaches recommendResize")
+				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
+				metricsSource.Register(&fake.Item{
+					NamespacedName:         client.ObjectKeyFromObject(pvc),
+					CapacityBytes:          1073741824,
+					AvailableBytes:         1073741824,
+					CapacityInodes:         10000,
+					AvailableInodes:        10000,
+					ConsumeBytesIncrement:  1000,
+					ConsumeInodesIncrement: 1000,
+				})
+
+				newCtx, cancelFunc := context.WithCancel(parentCtx)
+				go func() {
+					<-time.After(500 * time.Millisecond)
+					cancelFunc()
+				}()
+				metricsSource.Start(newCtx)
+				WithMetricsSource(metricsSource)(runner)
+
+				By("Setting max capacity so the 1Gi PVC is already at max")
+				pvcaPatch := client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("1Gi")
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+				waitForPVCACacheSync(parentCtx, pvca)
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				By("Expecting the gauge to report the PVC at max capacity")
+				Expect(testutil.ToFloat64(metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name, pvca.Name))).To(Equal(float64(1)))
+
+				By("Raising max capacity so the PVC is no longer at max")
+				pvcaPatch = client.MergeFrom(pvca.DeepCopy())
+				pvca.Spec.VolumePolicies[0].MaxCapacity = resource.MustParse("10Gi")
+				Expect(k8sClient.Patch(parentCtx, pvca, pvcaPatch)).To(Succeed())
+				waitForPVCACacheSync(parentCtx, pvca)
+
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				By("Expecting the gauge to be cleared")
+				Expect(testutil.ToFloat64(metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name, pvca.Name))).To(Equal(float64(0)))
 			})
 
 			It("should recommend a resize but not resize the PVC while the cooldown period has not elapsed", func() {
@@ -1653,7 +1698,7 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				}
 
-				reason := scalingReason(pvca.Spec.VolumePolicies[0], volumeRecommendation)
+				reason, _ := scalingReason(pvc, pvca.Spec.VolumePolicies[0], volumeRecommendation)
 				Expect(reason).To(Equal(common.ScalingReasonSpaceThreshold))
 			})
 
@@ -1666,7 +1711,7 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				}
 
-				reason := scalingReason(pvca.Spec.VolumePolicies[0], volumeRecommendation)
+				reason, _ := scalingReason(pvc, pvca.Spec.VolumePolicies[0], volumeRecommendation)
 				Expect(reason).To(BeEmpty())
 			})
 		})
@@ -1752,6 +1797,9 @@ var _ = Describe("Periodic Runner", func() {
 
 					Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
+					By("Expecting the PVC to be counted at max capacity via the gauge")
+					Expect(testutil.ToFloat64(metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name, pvca.Name))).To(Equal(float64(1)))
+
 					By("Expecting a terminal Resizing=False max-capacity condition")
 					updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
 					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
@@ -1836,6 +1884,9 @@ var _ = Describe("Periodic Runner", func() {
 					waitForPVCACacheSync(parentCtx, pvca)
 
 					Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+					By("Expecting the PVC to still be counted at max capacity via the gauge")
+					Expect(testutil.ToFloat64(metrics.PVCAtMaxCapacity.WithLabelValues(pvc.Namespace, pvc.Name, pvca.Name))).To(Equal(float64(1)))
 
 					By("Expecting no Resizing max-capacity condition for the Off strategy")
 					updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
