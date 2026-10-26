@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -19,10 +20,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
@@ -41,6 +44,10 @@ const (
 	// ReasonGateRemoved indicates that the offline-resize scheduling gate was removed
 	// from a Pod so it can be scheduled again.
 	ReasonGateRemoved = "OfflineResizeGateRemoved"
+
+	// requeueDurationOnControllerResizeError is how long the reconciler waits before
+	// retrying the eviction path while a PVC is stuck in the ControllerResizeError window.
+	requeueDurationOnControllerResizeError = time.Second * 10
 )
 
 // ErrNoClient is returned when the [Reconciler] is configured without a client.
@@ -102,40 +109,38 @@ func WithAutoscalerName(name string) Option {
 
 // SetupWithManager wires the [Reconciler] into the given manager. It watches
 // PersistentVolumeClaims and filters, via a predicate, to those which are managed by
-// the pvc-autoscaler (carry the previous-size annotation) and have one of the
-// conditions relevant to offline-resize recovery.
+// the pvc-autoscaler and have one of the conditions relevant to offline-resize recovery.
 func (r *Reconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		Named(ControllerName).
-		For(&corev1.PersistentVolumeClaim{}, builder.WithPredicates(managedPVCPredicate())).
+		For(&corev1.PersistentVolumeClaim{}, builder.WithPredicates(predicate.NewPredicateFuncs(PVCIsInResizeErrorOrFileSystemResizePending))).
 		WithOptions(controller.Options{MaxConcurrentReconciles: 5}).
+		// Eviction and gate removal both depend on the PVC's ownership and effective policy,
+		// which live on the PVCA, not the PVC. A PVC event alone would not fire when the owning
+		// PVCA's status.volumeRecommendations or spec.volumePolicies change, so without this
+		// watch a PVC would keep acting on a stale policy (e.g. not evicting pods after the
+		// strategy was flipped to PreferInPlace) until the next PVC event happened to
+		// re-trigger it.
+		Watches(
+			&v1alpha1.PersistentVolumeClaimAutoscaler{},
+			handler.EnqueueRequestsFromMapFunc(MapPVCAToPVCs),
+			builder.WithPredicates(PVCARecommendationsOrPoliciesChangedPredicate()),
+		).
+		// The gate is set on Pods, but Reconcile keys off the PVC. A Pod carrying the gate may
+		// be created after the PVC's resize conditions have already settled.
+		// Watching gated Pods re-enqueues their PVC so the gate is removed, and makes the Pods
+		// re-discoverable after a controller restart.
+		Watches(
+			&corev1.Pod{},
+			handler.EnqueueRequestsFromMapFunc(MapPodToPVCs),
+			builder.WithPredicates(PodWithSchedulingGatePredicate()),
+		).
 		Complete(r)
-}
-
-// managedPVCPredicate limits reconciliation to PersistentVolumeClaims that the
-// pvc-autoscaler has resized (they carry the previous-size annotation) and which
-// have either the ControllerResizeError or FileSystemResizePending condition.
-func managedPVCPredicate() predicate.Predicate {
-	relevant := func(obj client.Object) bool {
-		pvc, ok := obj.(*corev1.PersistentVolumeClaim)
-		if !ok {
-			return false
-		}
-
-		if _, ok := pvc.Annotations[common.AnnotationPreviousSize]; !ok {
-			return false
-		}
-
-		return utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimControllerResizeError) ||
-			utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending)
-	}
-
-	return predicate.NewPredicateFuncs(relevant)
 }
 
 // Reconcile drives offline-resize recovery for a single PersistentVolumeClaim.
 func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-	logger := log.FromContext(ctx, "controller", ControllerName, "pvc", req.NamespacedName)
+	logger := log.FromContext(ctx)
 
 	pvc := &corev1.PersistentVolumeClaim{}
 	if err := r.client.Get(ctx, req.NamespacedName, pvc); err != nil {
@@ -146,12 +151,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 		return reconcile.Result{}, fmt.Errorf("failed to get PersistentVolumeClaim: %w", err)
 	}
 
-	// Gate removal is intentionally unconditional: it is not gated on ownership or
-	// the PreferInPlace strategy. A gate could only ever have been added while the
-	// PVC was owned and the strategy was PreferInPlace, so if the PVC is no longer
-	// owned (e.g. the PVCA was deleted) or the strategy was flipped away since then,
-	// we must still remove the gate so the Pod is not stranded unschedulable forever.
-	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending) {
+	// Remove the gate regardless of ownership or policy: a gate left behind after the
+	// PVC stops being managed (or the strategy changes) would strand the Pod forever.
+	// Keep the gate only while the resize is still erroring and not yet pending offline,
+	// so the Pod stays off the volume until it is safe to schedule.
+	controllerResizeError := utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimControllerResizeError)
+	fileSystemResizePending := utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimFileSystemResizePending)
+	if fileSystemResizePending || !controllerResizeError {
+		logger.Info("removing scheduling gates", "controllerResizeError", controllerResizeError, "fileSystemResizePending", fileSystemResizePending)
+
 		return reconcile.Result{}, r.removeSchedulingGates(ctx, logger, pvc)
 	}
 
@@ -172,12 +180,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 
 		return reconcile.Result{}, nil
 	}
+	logger.Info("evicting pods for offline resize, will requeue")
 
-	if utils.IsPersistentVolumeClaimConditionTrue(pvc, corev1.PersistentVolumeClaimControllerResizeError) {
-		return reconcile.Result{}, r.evictPodsUsingPVC(ctx, logger, pvc)
-	}
-
-	return reconcile.Result{}, nil
+	return reconcile.Result{RequeueAfter: requeueDurationOnControllerResizeError}, r.evictPodsUsingPVC(ctx, logger, pvc)
 }
 
 // evictPodsUsingPVC evicts all Pods that use the given PVC so that the volume can
