@@ -12,7 +12,7 @@ import (
 )
 
 var _ = Describe("Version", func() {
-	Context("# IsKubernetesVersionGreaterEqual134", func() {
+	Context("#IsKubernetesVersionGreaterEqual134", func() {
 		DescribeTable("should report the correct result",
 			func(v string, expected bool) {
 				Expect(version.IsKubernetesVersionGreaterEqual134(v)).To(Equal(expected))
