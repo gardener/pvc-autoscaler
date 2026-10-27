@@ -21,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
-	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/expansionfailure"
 )
 
@@ -75,13 +74,9 @@ var _ = Describe("Expansion Failure", func() {
 		})
 
 		DescribeTable("should reduce requested storage after an infeasible resize",
-			func(failed, capacity string, annotationValue *string, expectedTarget string, status corev1.ClaimResourceStatus, expectRecovery bool) {
-				annotations := map[string]string{}
-				if annotationValue != nil {
-					annotations[common.AnnotationPreviousSize] = *annotationValue
-				}
+			func(failed, capacity, expectedTarget string, status corev1.ClaimResourceStatus, expectRecovery bool) {
 				pvc := &corev1.PersistentVolumeClaim{
-					ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default", Annotations: annotations},
+					ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse(failed)},
@@ -140,46 +135,13 @@ var _ = Describe("Expansion Failure", func() {
 					HaveField("Message", MatchRegexp(`reduced requested storage from `+failed+` to `+expectedTarget+` after infeasible resize \(`+string(status)+`\)`)),
 				))
 			},
-			Entry("should retry at a half-step (capacity baseline, ControllerResizeInfeasible)", "5Gi", "1Gi", nil, "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
-			Entry("should retry at a half-step (capacity baseline, NodeResizeInfeasible)", "5Gi", "1Gi", nil, "3Gi", corev1.PersistentVolumeClaimNodeResizeInfeasible, true),
-			Entry("should fall back to capacity when the half-step would meet or exceed the failed size", "2Gi", "1Gi", nil, "1Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
-			Entry("should be a no-op when capacity already equals the requested size", "1Gi", "1Gi", nil, "1Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
-			Entry("should use the annotation as baseline when present", "5Gi", "900Mi", strPtr("1Gi"), "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
-			Entry("should fall back to the annotation size when the half-step would meet or exceed the failed size", "2Gi", "900Mi", strPtr("1Gi"), "1Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
+			Entry("retries at a half-step above capacity (ControllerResizeInfeasible)", "5Gi", "1Gi", "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
+			Entry("retries at a half-step above capacity (NodeResizeInfeasible)", "5Gi", "1Gi", "3Gi", corev1.PersistentVolumeClaimNodeResizeInfeasible, true),
+			Entry("retries at a half-step for a smaller failed step", "4Gi", "2Gi", "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
+			Entry("rolls back to one scaling step above capacity when the half-step overshoots", "3Gi", "1536Mi", "2560Mi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
+			Entry("is a no-op when the only legal smaller size is not below the request", "2Gi", "1Gi", "2Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
+			Entry("is a no-op when capacity already equals the requested size", "1Gi", "1Gi", "1Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
+			Entry("is a no-op when the reported capacity is zero", "5Gi", "0", "5Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
 		)
-
-		It("should return an error when the prev-size annotation cannot be parsed", func() {
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:        "sample-pvc",
-					Namespace:   "default",
-					Annotations: map[string]string{common.AnnotationPreviousSize: "not-a-quantity"},
-				},
-				Spec: corev1.PersistentVolumeClaimSpec{
-					Resources: corev1.VolumeResourceRequirements{
-						Requests: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("5Gi")},
-					},
-				},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Capacity: corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")},
-					AllocatedResourceStatuses: map[corev1.ResourceName]corev1.ClaimResourceStatus{
-						corev1.ResourceStorage: corev1.PersistentVolumeClaimControllerResizeInfeasible,
-					},
-				},
-			}
-
-			c := fake.NewClientBuilder().
-				WithScheme(testScheme).
-				WithObjects(pvc).
-				Build()
-			Expect(c.Get(ctx, client.ObjectKeyFromObject(pvc), pvc)).To(Succeed())
-
-			logger := zap.New(zap.WriteTo(GinkgoWriter))
-			recoverer := expansionfailure.New(c, recorder)
-			_, _, err := recoverer.Recover(ctx, logger, pvc, v1alpha1.VolumeRecommendation{Name: pvc.Name})
-			Expect(err).To(MatchError(ContainSubstring("could not parse " + common.AnnotationPreviousSize + " annotation with value not-a-quantity")))
-		})
 	})
 })
-
-func strPtr(s string) *string { return &s }

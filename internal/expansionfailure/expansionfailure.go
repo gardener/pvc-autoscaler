@@ -48,25 +48,6 @@ func New(c client.Client, eventRecorder record.EventRecorder) *Recoverer {
 	}
 }
 
-// lastKnownGoodSize returns the PVC's last-known-good size. It prefers the
-// prev-size annotation (written by the autoscaler before each resize) because it
-// is the exact spec.requests value that was successfully provisioned. When the
-// annotation is absent it falls back to status.capacity.storage (the actual
-// provisioned volume size).
-func lastKnownGoodSize(pvc *corev1.PersistentVolumeClaim) (*resource.Quantity, error) {
-	if annotation, ok := pvc.Annotations[common.AnnotationPreviousSize]; ok {
-		q, err := resource.ParseQuantity(annotation)
-		if err != nil {
-			return nil, fmt.Errorf("could not parse %s annotation with value %s: %w", common.AnnotationPreviousSize, annotation, err)
-		}
-
-		return &q, nil
-	}
-	capacity := pvc.Status.Capacity.Storage()
-
-	return capacity, nil
-}
-
 // Recover reduces the [corev1.PersistentVolumeClaim]'s requested storage when the CSI driver has reported the
 // expansion as infeasible. It retries at half the step (lastKnownGood + max(ScalingResolutionBytes, failedStep/2)) and
 // returns the (possibly updated) volume recommendation or a nil condition when there is nothing to report.
@@ -74,23 +55,25 @@ func (r *Recoverer) Recover(ctx context.Context, logger logr.Logger, pvc *corev1
 	metrics.ResizeFailureRecoveryTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
 
 	currSpecSize := pvc.Spec.Resources.Requests.Storage()
-	lastGood, err := lastKnownGoodSize(pvc)
-	if err != nil {
-		return volumeRecommendation, nil, err
-	}
-	if lastGood.IsZero() {
+	statusCapacitySize := pvc.Status.Capacity.Storage()
+	if statusCapacitySize.IsZero() {
 		return volumeRecommendation, nil, nil
 	}
 
-	failedStep := currSpecSize.Value() - lastGood.Value()
+	failedStep := currSpecSize.Value() - statusCapacitySize.Value()
 	recoveryIncrement := int64(math.Max(float64(common.ScalingResolutionBytes), float64(failedStep)/2.0))
-	newTargetBytes := int64(math.Ceil(float64(lastGood.Value()+recoveryIncrement)/float64(common.ScalingResolutionBytes))) * common.ScalingResolutionBytes
+	newTargetBytes := int64(math.Ceil(float64(statusCapacitySize.Value()+recoveryIncrement)/float64(common.ScalingResolutionBytes))) * common.ScalingResolutionBytes
 	targetSize := resource.NewQuantity(newTargetBytes, resource.BinarySI)
 
-	// If the half-step meets or exceeds the size that just failed, roll back to the last-known-good size instead.
+	// If the half-step does not actually reduce the request below the size that just failed, fall back to the
+	// smallest size the Kubernetes >= 1.34 API will still accept: requests must be strictly greater than
+	// status.capacity, so we cannot roll back to the capacity itself
 	if targetSize.Cmp(*currSpecSize) >= 0 {
-		rollback := lastGood.DeepCopy()
-		targetSize = &rollback
+		rollbackBytes := statusCapacitySize.Value() + common.ScalingResolutionBytes
+		if rollbackBytes >= currSpecSize.Value() {
+			return volumeRecommendation, nil, nil
+		}
+		targetSize = resource.NewQuantity(rollbackBytes, resource.BinarySI)
 	}
 
 	infeasibleStatus := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
