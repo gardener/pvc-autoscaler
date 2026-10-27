@@ -28,6 +28,7 @@ import (
 
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
+	"github.com/gardener/pvc-autoscaler/internal/expansionfailure"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
 	metricssource "github.com/gardener/pvc-autoscaler/internal/metrics/source"
 	"github.com/gardener/pvc-autoscaler/internal/metrics/source/fake"
@@ -96,6 +97,7 @@ func newRunner() (*Runner, error) {
 		WithMetricsSource(metricsSource),
 		WithPVCFetcher(pvcFetcher),
 		WithAutoscalerName(""),
+		WithKubernetesVersion("v1.34.0"),
 	)
 
 	return runner, err
@@ -767,6 +769,58 @@ var _ = Describe("Periodic Runner", func() {
 					HaveField("Type", string(v1alpha1.ConditionTypeRecommendationAvailable)),
 					HaveField("Status", metav1.ConditionTrue),
 					HaveField("Reason", ReasonRecommendationsProvided),
+				)))
+			})
+
+			It("should roll back requested storage and skip regular scale-up when resize is infeasible", func() {
+				By("Simulating a failed infeasible expansion on the PVC")
+				specPatch := client.MergeFrom(pvc.DeepCopy())
+				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("3Gi")
+				Expect(k8sClient.Patch(parentCtx, pvc, specPatch)).To(Succeed())
+
+				statusPatch := client.MergeFrom(pvc.DeepCopy())
+				pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")}
+				pvc.Status.AllocatedResourceStatuses = map[corev1.ResourceName]corev1.ClaimResourceStatus{
+					corev1.ResourceStorage: corev1.PersistentVolumeClaimControllerResizeInfeasible,
+				}
+				Expect(k8sClient.Status().Patch(parentCtx, pvc, statusPatch)).To(Succeed())
+
+				By("Registering metrics that would otherwise cross the scale-up threshold")
+				metricsSource := fake.New(fake.WithInterval(10 * time.Millisecond))
+				metricsSource.Register(&fake.Item{
+					NamespacedName:         client.ObjectKeyFromObject(pvc),
+					CapacityBytes:          1073741824,
+					AvailableBytes:         53687091,
+					CapacityInodes:         10000,
+					AvailableInodes:        10000,
+					ConsumeBytesIncrement:  1000,
+					ConsumeInodesIncrement: 1000,
+				})
+
+				newCtx, cancelFunc := context.WithCancel(parentCtx)
+				go func() {
+					<-time.After(500 * time.Millisecond)
+					cancelFunc()
+				}()
+				metricsSource.Start(newCtx)
+				WithMetricsSource(metricsSource)(runner)
+
+				By("Running reconcile")
+				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
+
+				By("Verifying the PVC spec was rolled back via a half-step rather than grown")
+				var updatedPvc corev1.PersistentVolumeClaim
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &updatedPvc)).To(Succeed())
+				// capacity 1Gi, failed request 3Gi: capacity + max(1Gi, (3Gi-1Gi)/2) = 2Gi.
+				Expect(updatedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("2Gi")))
+
+				By("Verifying the Resizing condition reflects the recovery")
+				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
+				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
+				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
+					HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
+					HaveField("Status", metav1.ConditionTrue),
+					HaveField("Reason", expansionfailure.ReasonResizeFailureRecovery),
 				)))
 			})
 
