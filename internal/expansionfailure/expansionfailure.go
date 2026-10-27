@@ -49,8 +49,8 @@ func New(c client.Client, eventRecorder record.EventRecorder) *Recoverer {
 }
 
 // Recover reduces the [corev1.PersistentVolumeClaim]'s requested storage when the CSI driver has reported the
-// expansion as infeasible. It retries at half the step (lastKnownGood + max(ScalingResolutionBytes, failedStep/2)) and
-// returns the (possibly updated) volume recommendation or a nil condition when there is nothing to report.
+// expansion as infeasible. It retries at a half-step above the current capacity
+// (capacity + max(ScalingResolutionBytes, failedStep/2)).
 func (r *Recoverer) Recover(ctx context.Context, logger logr.Logger, pvc *corev1.PersistentVolumeClaim, volumeRecommendation v1alpha1.VolumeRecommendation) (v1alpha1.VolumeRecommendation, *metav1.Condition, error) {
 	metrics.ResizeFailureRecoveryTotal.WithLabelValues(pvc.Namespace, pvc.Name).Inc()
 
@@ -65,15 +65,9 @@ func (r *Recoverer) Recover(ctx context.Context, logger logr.Logger, pvc *corev1
 	newTargetBytes := int64(math.Ceil(float64(statusCapacitySize.Value()+recoveryIncrement)/float64(common.ScalingResolutionBytes))) * common.ScalingResolutionBytes
 	targetSize := resource.NewQuantity(newTargetBytes, resource.BinarySI)
 
-	// If the half-step does not actually reduce the request below the size that just failed, fall back to the
-	// smallest size the Kubernetes >= 1.34 API will still accept: requests must be strictly greater than
-	// status.capacity, so we cannot roll back to the capacity itself
 	if targetSize.Cmp(*currSpecSize) >= 0 {
-		rollbackBytes := statusCapacitySize.Value() + common.ScalingResolutionBytes
-		if rollbackBytes >= currSpecSize.Value() {
-			return volumeRecommendation, nil, nil
-		}
-		targetSize = resource.NewQuantity(rollbackBytes, resource.BinarySI)
+		logger.Info("skipping recovery, target size is not smaller than current request", "from", currSpecSize.String(), "to", targetSize.String())
+		return volumeRecommendation, nil, nil
 	}
 
 	infeasibleStatus := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]

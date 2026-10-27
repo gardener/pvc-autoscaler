@@ -772,15 +772,14 @@ var _ = Describe("Periodic Runner", func() {
 				)))
 			})
 
-			It("should roll back requested storage and skip scale-up when resize is infeasible", func() {
+			It("should roll back requested storage and skip regular scale-up when resize is infeasible", func() {
 				By("Simulating a failed infeasible expansion on the PVC")
 				specPatch := client.MergeFrom(pvc.DeepCopy())
-				pvc.Annotations = map[string]string{common.AnnotationPreviousSize: "1Gi"}
-				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("2Gi")
+				pvc.Spec.Resources.Requests[corev1.ResourceStorage] = resource.MustParse("3Gi")
 				Expect(k8sClient.Patch(parentCtx, pvc, specPatch)).To(Succeed())
 
 				statusPatch := client.MergeFrom(pvc.DeepCopy())
-				pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("900Mi")}
+				pvc.Status.Capacity = corev1.ResourceList{corev1.ResourceStorage: resource.MustParse("1Gi")}
 				pvc.Status.AllocatedResourceStatuses = map[corev1.ResourceName]corev1.ClaimResourceStatus{
 					corev1.ResourceStorage: corev1.PersistentVolumeClaimControllerResizeInfeasible,
 				}
@@ -791,7 +790,7 @@ var _ = Describe("Periodic Runner", func() {
 				metricsSource.Register(&fake.Item{
 					NamespacedName:         client.ObjectKeyFromObject(pvc),
 					CapacityBytes:          1073741824,
-					AvailableBytes:         1073741824,
+					AvailableBytes:         53687091,
 					CapacityInodes:         10000,
 					AvailableInodes:        10000,
 					ConsumeBytesIncrement:  1000,
@@ -809,17 +808,18 @@ var _ = Describe("Periodic Runner", func() {
 				By("Running reconcile")
 				Expect(runner.reconcileAll(parentCtx)).To(Succeed())
 
-				By("Verifying the PVC spec was rolled back rather than grown")
+				By("Verifying the PVC spec was rolled back via a half-step rather than grown")
 				var updatedPvc corev1.PersistentVolumeClaim
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &updatedPvc)).To(Succeed())
-				Expect(updatedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("1Gi")))
+				// capacity 1Gi, failed request 3Gi: capacity + max(1Gi, (3Gi-1Gi)/2) = 2Gi.
+				Expect(updatedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse("2Gi")))
 
 				By("Verifying the Resizing condition reflects the recovery")
 				updatedPVCA := &v1alpha1.PersistentVolumeClaimAutoscaler{}
 				Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvca), updatedPVCA)).To(Succeed())
 				Expect(updatedPVCA.Status.Conditions).To(ContainElement(And(
 					HaveField("Type", string(v1alpha1.ConditionTypeResizing)),
-					HaveField("Status", metav1.ConditionFalse),
+					HaveField("Status", metav1.ConditionTrue),
 					HaveField("Reason", expansionfailure.ReasonResizeFailureRecovery),
 				)))
 			})

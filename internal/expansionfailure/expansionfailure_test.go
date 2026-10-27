@@ -121,10 +121,10 @@ var _ = Describe("Expansion Failure", func() {
 				By("Verifying PVC spec was reduced to the expected target")
 				var updatedPvc corev1.PersistentVolumeClaim
 				Expect(c.Get(ctx, client.ObjectKeyFromObject(pvc), &updatedPvc)).To(Succeed())
-				Expect(updatedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(resource.MustParse(expectedTarget)))
+				Expect(updatedPvc.Spec.Resources.Requests.Storage().String()).To(Equal(expectedTarget))
 
 				Expect(updatedRecommendation.Target.Size).NotTo(BeNil())
-				Expect(*updatedRecommendation.Target.Size).To(Equal(resource.MustParse(expectedTarget)))
+				Expect(updatedRecommendation.Target.Size.String()).To(Equal(expectedTarget))
 				Expect(updatedRecommendation.LastResizeTime).To(BeNil())
 
 				Expect(resizingCondition).NotTo(BeNil())
@@ -135,13 +135,15 @@ var _ = Describe("Expansion Failure", func() {
 					HaveField("Message", MatchRegexp(`reduced requested storage from `+failed+` to `+expectedTarget+` after infeasible resize \(`+string(status)+`\)`)),
 				))
 			},
-			Entry("retries at a half-step above capacity (ControllerResizeInfeasible)", "5Gi", "1Gi", "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
-			Entry("retries at a half-step above capacity (NodeResizeInfeasible)", "5Gi", "1Gi", "3Gi", corev1.PersistentVolumeClaimNodeResizeInfeasible, true),
-			Entry("retries at a half-step for a smaller failed step", "4Gi", "2Gi", "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
-			Entry("rolls back to one scaling step above capacity when the half-step overshoots", "3Gi", "1536Mi", "2560Mi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
-			Entry("is a no-op when the only legal smaller size is not below the request", "2Gi", "1Gi", "2Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
-			Entry("is a no-op when capacity already equals the requested size", "1Gi", "1Gi", "1Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
-			Entry("is a no-op when the reported capacity is zero", "5Gi", "0", "5Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
+			Entry("half-step reduction (ControllerResizeInfeasible)", "5Gi", "1Gi", "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
+			Entry("half-step reduction (NodeResizeInfeasible)", "5Gi", "1Gi", "3Gi", corev1.PersistentVolumeClaimNodeResizeInfeasible, true),
+			Entry("larger half-step reduction", "7Gi", "1Gi", "4Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
+			Entry("odd failed step rounds the half-step up to the next 1Gi", "4Gi", "1Gi", "3Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
+			Entry("failed step of 2Gi reduces by the minimum 1Gi step", "3Gi", "1Gi", "2Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, true),
+			// Cases that do nothing (no feasible smaller size):
+			Entry("no-op: request is only one step above capacity", "2Gi", "1Gi", "2Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
+			Entry("no-op: request already equals capacity", "1Gi", "1Gi", "1Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
+			Entry("no-op: capacity is not reported (zero)", "5Gi", "0", "5Gi", corev1.PersistentVolumeClaimControllerResizeInfeasible, false),
 		)
 	})
 })
