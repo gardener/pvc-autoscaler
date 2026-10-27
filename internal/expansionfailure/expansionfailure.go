@@ -67,6 +67,7 @@ func (r *Recoverer) Recover(ctx context.Context, logger logr.Logger, pvc *corev1
 
 	if targetSize.Cmp(*currSpecSize) >= 0 {
 		logger.Info("skipping recovery, target size is not smaller than current request", "from", currSpecSize.String(), "to", targetSize.String())
+
 		return volumeRecommendation, nil, nil
 	}
 
