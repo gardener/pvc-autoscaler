@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -20,10 +21,31 @@ import (
 	"github.com/gardener/pvc-autoscaler/api/autoscaling/v1alpha1"
 	"github.com/gardener/pvc-autoscaler/internal/common"
 	"github.com/gardener/pvc-autoscaler/internal/metrics"
+	"github.com/gardener/pvc-autoscaler/internal/utils"
 )
 
 // ReasonResizeFailureRecovery indicates that the autoscaler reduced the requested storage on a PVC to recover from an infeasible volume expansion.
 const ReasonResizeFailureRecovery = "ResizeFailureRecovery"
+
+// resizeErrorConditionTypes are the PVC condition types a CSI driver uses to report a
+// terminal resize error together with a provider-specific message.
+var resizeErrorConditionTypes = []corev1.PersistentVolumeClaimConditionType{
+	corev1.PersistentVolumeClaimControllerResizeError,
+	corev1.PersistentVolumeClaimNodeResizeError,
+}
+
+// resizeLimitErrorFragments are lowercased, variable-free substrings of the
+// ControllerResizeError/NodeResizeError messages that CSI drivers emit when a requested
+// volume size exceeds a provider limit (volume-type maximum or quota) rather than reporting
+// the resize as infeasible.
+// TODO (RadaBDimitrova): externalize these fragments rather than carrying provider-specific knowledge in-tree.
+var resizeLimitErrorFragments = []string{
+	"is out of range. the value must be between", // Azure (disk.csi.azure.com), cloud code InvalidParameter
+	"is too large for volume type",               // AWS (ebs.csi.aws.com), cloud code InvalidParameterValue
+	"must be less than or equal to",              // GCP (pd.csi.storage.gke.io), cloud code InvalidArgument / googleapi: Error 400
+	"volumesizeexceedslimit",                     // OpenStack (cinder.csi.openstack.org), HTTP 413
+	"is larger than maximum allowed limit",       // OpenStack (cinder.csi.openstack.org), HTTP 413
+}
 
 // IsResizeInfeasible is a predicate which returns whether the storage resize on
 // the given PersistentVolumeClaim has been rejected by the CSI driver as infeasible.
@@ -31,6 +53,37 @@ func IsResizeInfeasible(obj *corev1.PersistentVolumeClaim) bool {
 	status, ok := obj.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
 
 	return ok && status == corev1.PersistentVolumeClaimControllerResizeInfeasible || status == corev1.PersistentVolumeClaimNodeResizeInfeasible
+}
+
+// HasResizeLimitError returns whether the given PersistentVolumeClaim has a
+// ControllerResizeError or NodeResizeError condition whose message matches a known
+// provider-specific resize-limit error (see [resizeLimitErrorFragments]). The condition
+// must currently be true; a stale, resolved condition does not match.
+func HasResizeLimitError(obj *corev1.PersistentVolumeClaim) bool {
+	for _, conditionType := range resizeErrorConditionTypes {
+		condition := utils.GetPersistentVolumeClaimCondition(obj, conditionType)
+		if condition.Status != corev1.ConditionTrue {
+			continue
+		}
+
+		message := strings.ToLower(condition.Message)
+		for _, fragment := range resizeLimitErrorFragments {
+			if strings.Contains(message, fragment) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+// ShouldRecover returns whether a volume expansion on the given PersistentVolumeClaim has
+// failed in a way the autoscaler can recover from by reducing the requested storage. This
+// is the case when the CSI driver reported the controller/node resize as infeasible, or
+// when the ControllerResizeError/NodeResizeError message matches a known provider-specific
+// resize-limit error (volume-type maximum or quota).
+func ShouldRecover(obj *corev1.PersistentVolumeClaim) bool {
+	return IsResizeInfeasible(obj) || HasResizeLimitError(obj)
 }
 
 // Recoverer reduces a [corev1.PersistentVolumeClaim]'s requested storage when a
@@ -71,17 +124,17 @@ func (r *Recoverer) Recover(ctx context.Context, logger logr.Logger, pvc *corev1
 		return volumeRecommendation, nil, nil
 	}
 
-	infeasibleStatus := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
+	resizeStatus := pvc.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
 
-	logger.Info("recovering from failed pvc resize", "from", currSpecSize.String(), "to", targetSize.String(), "status", string(infeasibleStatus))
+	logger.Info("recovering from failed pvc resize", "from", currSpecSize.String(), "to", targetSize.String(), "status", string(resizeStatus))
 	r.eventRecorder.Eventf(
 		pvc,
 		corev1.EventTypeWarning,
 		"ResizeFailureRecovery",
-		"reducing requested storage from %s to %s because volume expansion was reported as infeasible: %s",
+		"reducing requested storage from %s to %s because volume expansion failed: %s",
 		currSpecSize.String(),
 		targetSize.String(),
-		string(infeasibleStatus),
+		string(resizeStatus),
 	)
 
 	pvcPatch := client.MergeFromWithOptions(pvc.DeepCopy(), client.MergeFromWithOptimisticLock{})
@@ -97,7 +150,7 @@ func (r *Recoverer) Recover(ctx context.Context, logger logr.Logger, pvc *corev1
 			Type:    string(v1alpha1.ConditionTypeResizing),
 			Status:  metav1.ConditionFalse,
 			Reason:  ReasonResizeFailureRecovery,
-			Message: fmt.Sprintf("%s: failed to reduce requested storage from %s to %s after infeasible resize: %s", pvc.Name, currSpecSize.String(), targetSize.String(), err.Error()),
+			Message: fmt.Sprintf("%s: failed to reduce requested storage from %s to %s after failed resize: %s", pvc.Name, currSpecSize.String(), targetSize.String(), err.Error()),
 		}, err
 	}
 	volumeRecommendation.Target.Size = targetSize
@@ -106,6 +159,6 @@ func (r *Recoverer) Recover(ctx context.Context, logger logr.Logger, pvc *corev1
 		Type:    string(v1alpha1.ConditionTypeResizing),
 		Status:  metav1.ConditionTrue,
 		Reason:  ReasonResizeFailureRecovery,
-		Message: fmt.Sprintf("%s: reduced requested storage from %s to %s after infeasible resize (%s)", pvc.Name, currSpecSize.String(), targetSize.String(), string(infeasibleStatus)),
+		Message: fmt.Sprintf("%s: reduced requested storage from %s to %s after failed resize (%s)", pvc.Name, currSpecSize.String(), targetSize.String(), string(resizeStatus)),
 	}, nil
 }

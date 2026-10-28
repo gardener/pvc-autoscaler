@@ -208,7 +208,7 @@ func WithAutoscalerName(name string) Option {
 }
 
 // WithKubernetesVersion configures the [Runner] with the version of the
-// Kubernetes cluster it runs against. It is used for recovery from infeasible volume
+// Kubernetes cluster it runs against. It is used for recovery from failed volume
 // expansions (RecoverVolumeExpansionFailure), which is GA as of Kubernetes 1.34.
 func WithKubernetesVersion(kubernetesVersion string) Option {
 	opt := func(r *Runner) {
@@ -447,9 +447,9 @@ func (r *Runner) reconcilePVCA(
 			continue
 		}
 
-		if expansionfailure.IsResizeInfeasible(pvc) {
+		if expansionfailure.ShouldRecover(pvc) {
 			if !version.IsKubernetesVersionGreaterEqual134(r.kubernetesVersion) {
-				logger.Info("skipping recovery from infeasible pvc resize, requires Kubernetes >= 1.34", "pvc", pvcObjKey.Name, "kubernetesVersion", r.kubernetesVersion)
+				logger.Info("skipping recovery from failed pvc resize, requires Kubernetes >= 1.34", "pvc", pvcObjKey.Name, "kubernetesVersion", r.kubernetesVersion)
 				setVolumeRecommendationForPVC(&volumeRecommendations, pvc.Name, volumeRecommendation)
 
 				continue
