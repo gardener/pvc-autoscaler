@@ -27,13 +27,6 @@ import (
 // ReasonResizeFailureRecovery indicates that the autoscaler reduced the requested storage on a PVC to recover from an infeasible volume expansion.
 const ReasonResizeFailureRecovery = "ResizeFailureRecovery"
 
-// resizeErrorConditionTypes are the PVC condition types a CSI driver uses to report a
-// terminal resize error together with a provider-specific message.
-var resizeErrorConditionTypes = []corev1.PersistentVolumeClaimConditionType{
-	corev1.PersistentVolumeClaimControllerResizeError,
-	corev1.PersistentVolumeClaimNodeResizeError,
-}
-
 // resizeLimitErrorFragments are lowercased, variable-free substrings of the
 // ControllerResizeError/NodeResizeError messages that CSI drivers emit when a requested
 // volume size exceeds a provider limit (volume-type maximum or quota) rather than reporting
@@ -47,30 +40,28 @@ var resizeLimitErrorFragments = []string{
 	"is larger than maximum allowed limit",       // OpenStack (cinder.csi.openstack.org), HTTP 413
 }
 
-// IsResizeInfeasible is a predicate which returns whether the storage resize on
+// isResizeInfeasible is a predicate which returns whether the storage resize on
 // the given PersistentVolumeClaim has been rejected by the CSI driver as infeasible.
-func IsResizeInfeasible(obj *corev1.PersistentVolumeClaim) bool {
+func isResizeInfeasible(obj *corev1.PersistentVolumeClaim) bool {
 	status, ok := obj.Status.AllocatedResourceStatuses[corev1.ResourceStorage]
 
 	return ok && status == corev1.PersistentVolumeClaimControllerResizeInfeasible || status == corev1.PersistentVolumeClaimNodeResizeInfeasible
 }
 
-// HasResizeLimitError returns whether the given PersistentVolumeClaim has a
+// hasResizeLimitError returns whether the given PersistentVolumeClaim has a
 // ControllerResizeError or NodeResizeError condition whose message matches a known
 // provider-specific resize-limit error (see [resizeLimitErrorFragments]). The condition
 // must currently be true; a stale, resolved condition does not match.
-func HasResizeLimitError(obj *corev1.PersistentVolumeClaim) bool {
-	for _, conditionType := range resizeErrorConditionTypes {
-		condition := utils.GetPersistentVolumeClaimCondition(obj, conditionType)
-		if condition.Status != corev1.ConditionTrue {
-			continue
-		}
+func hasResizeLimitError(obj *corev1.PersistentVolumeClaim) bool {
+	condition := utils.GetPersistentVolumeClaimCondition(obj, corev1.PersistentVolumeClaimControllerResizeError)
+	if condition.Status != corev1.ConditionTrue {
+		return false
+	}
 
-		message := strings.ToLower(condition.Message)
-		for _, fragment := range resizeLimitErrorFragments {
-			if strings.Contains(message, fragment) {
-				return true
-			}
+	message := strings.ToLower(condition.Message)
+	for _, fragment := range resizeLimitErrorFragments {
+		if strings.Contains(message, fragment) {
+			return true
 		}
 	}
 
@@ -83,7 +74,7 @@ func HasResizeLimitError(obj *corev1.PersistentVolumeClaim) bool {
 // when the ControllerResizeError/NodeResizeError message matches a known provider-specific
 // resize-limit error (volume-type maximum or quota).
 func ShouldRecover(obj *corev1.PersistentVolumeClaim) bool {
-	return IsResizeInfeasible(obj) || HasResizeLimitError(obj)
+	return isResizeInfeasible(obj) || hasResizeLimitError(obj)
 }
 
 // Recoverer reduces a [corev1.PersistentVolumeClaim]'s requested storage when a

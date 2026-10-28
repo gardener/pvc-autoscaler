@@ -25,8 +25,8 @@ import (
 )
 
 var _ = Describe("Expansion Failure", func() {
-	Describe("#IsResizeInfeasible", func() {
-		newPVC := func(status corev1.ClaimResourceStatus) *corev1.PersistentVolumeClaim {
+	Describe("#ShouldRecover", func() {
+		pvcWithStatus := func(status corev1.ClaimResourceStatus) *corev1.PersistentVolumeClaim {
 			return &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
 				Status: corev1.PersistentVolumeClaimStatus{
@@ -37,36 +37,13 @@ var _ = Describe("Expansion Failure", func() {
 			}
 		}
 
-		It("returns false when the allocated resource statuses map is empty", func() {
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
-			}
-			Expect(expansionfailure.IsResizeInfeasible(pvc)).To(BeFalse())
-		})
-
-		It("returns false when the storage status indicates progress", func() {
-			Expect(expansionfailure.IsResizeInfeasible(newPVC(corev1.PersistentVolumeClaimControllerResizeInProgress))).To(BeFalse())
-			Expect(expansionfailure.IsResizeInfeasible(newPVC(corev1.PersistentVolumeClaimNodeResizeInProgress))).To(BeFalse())
-			Expect(expansionfailure.IsResizeInfeasible(newPVC(corev1.PersistentVolumeClaimNodeResizePending))).To(BeFalse())
-		})
-
-		It("returns true for ControllerResizeInfeasible", func() {
-			Expect(expansionfailure.IsResizeInfeasible(newPVC(corev1.PersistentVolumeClaimControllerResizeInfeasible))).To(BeTrue())
-		})
-
-		It("returns true for NodeResizeInfeasible", func() {
-			Expect(expansionfailure.IsResizeInfeasible(newPVC(corev1.PersistentVolumeClaimNodeResizeInfeasible))).To(BeTrue())
-		})
-	})
-
-	Describe("#HasResizeLimitError", func() {
-		newPVC := func(status corev1.ConditionStatus, message string) *corev1.PersistentVolumeClaim {
+		pvcWithResizeError := func(conditionType corev1.PersistentVolumeClaimConditionType, status corev1.ConditionStatus, message string) *corev1.PersistentVolumeClaim {
 			return &corev1.PersistentVolumeClaim{
 				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
 				Status: corev1.PersistentVolumeClaimStatus{
 					Conditions: []corev1.PersistentVolumeClaimCondition{
 						{
-							Type:    corev1.PersistentVolumeClaimControllerResizeError,
+							Type:    conditionType,
 							Status:  status,
 							Message: message,
 						},
@@ -75,40 +52,33 @@ var _ = Describe("Expansion Failure", func() {
 			}
 		}
 
-		It("returns false when there is no resize error condition", func() {
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
-			}
-			Expect(expansionfailure.HasResizeLimitError(pvc)).To(BeFalse())
+		It("returns false for an empty PVC", func() {
+			Expect(expansionfailure.ShouldRecover(&corev1.PersistentVolumeClaim{})).To(BeFalse())
 		})
+
+		It("returns false when the resize is making progress and no error is reported", func() {
+			Expect(expansionfailure.ShouldRecover(pvcWithStatus(corev1.PersistentVolumeClaimControllerResizeInProgress))).To(BeFalse())
+		})
+
+		DescribeTable("returns true when the CSI driver reports the resize as infeasible",
+			func(status corev1.ClaimResourceStatus) {
+				Expect(expansionfailure.ShouldRecover(pvcWithStatus(status))).To(BeTrue())
+			},
+			Entry("ControllerResizeInfeasible", corev1.PersistentVolumeClaimControllerResizeInfeasible),
+			Entry("NodeResizeInfeasible", corev1.PersistentVolumeClaimNodeResizeInfeasible),
+		)
 
 		It("returns false when the resize error condition is not true", func() {
-			Expect(expansionfailure.HasResizeLimitError(newPVC(corev1.ConditionFalse, "requested size 100Gi is too large for volume type gp3"))).To(BeFalse())
+			Expect(expansionfailure.ShouldRecover(pvcWithResizeError(corev1.PersistentVolumeClaimControllerResizeError, corev1.ConditionFalse, "requested size 100Gi is too large for volume type gp3"))).To(BeFalse())
 		})
 
-		It("returns false when the message does not match a known provider resize-limit error", func() {
-			Expect(expansionfailure.HasResizeLimitError(newPVC(corev1.ConditionTrue, "rpc error: code = DeadlineExceeded desc = context deadline exceeded"))).To(BeFalse())
+		It("returns false when the resize error message is not a known provider resize-limit error", func() {
+			Expect(expansionfailure.ShouldRecover(pvcWithResizeError(corev1.PersistentVolumeClaimControllerResizeError, corev1.ConditionTrue, "rpc error: code = DeadlineExceeded desc = context deadline exceeded"))).To(BeFalse())
 		})
 
-		It("matches a known resize-limit error reported on the NodeResizeError condition", func() {
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Conditions: []corev1.PersistentVolumeClaimCondition{
-						{
-							Type:    corev1.PersistentVolumeClaimNodeResizeError,
-							Status:  corev1.ConditionTrue,
-							Message: "requested size 20000Gi is too large for volume type gp3",
-						},
-					},
-				},
-			}
-			Expect(expansionfailure.HasResizeLimitError(pvc)).To(BeTrue())
-		})
-
-		DescribeTable("returns true for known provider resize-limit errors (embedded values and casing must not matter)",
+		DescribeTable("returns true for a known provider resize-limit error on the ControllerResizeError condition (embedded values and casing must not matter)",
 			func(message string) {
-				Expect(expansionfailure.HasResizeLimitError(newPVC(corev1.ConditionTrue, message))).To(BeTrue())
+				Expect(expansionfailure.ShouldRecover(pvcWithResizeError(corev1.PersistentVolumeClaimControllerResizeError, corev1.ConditionTrue, message))).To(BeTrue())
 			},
 			Entry("Azure", `disk.csi.azure.com: requested size 100Gi is out of range. The value must be between 1Gi and 64Gi`),
 			Entry("AWS", `ebs.csi.aws.com: requested size 20000Gi is too large for volume type gp3`),
@@ -117,51 +87,6 @@ var _ = Describe("Expansion Failure", func() {
 			Entry("OpenStack larger than maximum", `requested size 5Ti is larger than maximum allowed limit 1Ti`),
 			Entry("case-insensitive match", `REQUESTED SIZE IS TOO LARGE FOR VOLUME TYPE gp3`),
 		)
-	})
-
-	Describe("#ShouldRecover", func() {
-		newPVCWithStatus := func(status corev1.ClaimResourceStatus) *corev1.PersistentVolumeClaim {
-			return &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
-				Status: corev1.PersistentVolumeClaimStatus{
-					AllocatedResourceStatuses: map[corev1.ResourceName]corev1.ClaimResourceStatus{
-						corev1.ResourceStorage: status,
-					},
-				},
-			}
-		}
-
-		It("returns false when the resize is making progress and no error is reported", func() {
-			Expect(expansionfailure.ShouldRecover(newPVCWithStatus(corev1.PersistentVolumeClaimControllerResizeInProgress))).To(BeFalse())
-		})
-
-		It("returns false for an empty PVC", func() {
-			Expect(expansionfailure.ShouldRecover(&corev1.PersistentVolumeClaim{})).To(BeFalse())
-		})
-
-		DescribeTable("returns true for every terminal resize-failure status spelling",
-			func(status corev1.ClaimResourceStatus) {
-				Expect(expansionfailure.ShouldRecover(newPVCWithStatus(status))).To(BeTrue())
-			},
-			Entry("ControllerResizeInfeasible", corev1.PersistentVolumeClaimControllerResizeInfeasible),
-			Entry("NodeResizeInfeasible", corev1.PersistentVolumeClaimNodeResizeInfeasible),
-		)
-
-		It("returns true when a known provider resize-limit error is reported without a terminal status", func() {
-			pvc := &corev1.PersistentVolumeClaim{
-				ObjectMeta: metav1.ObjectMeta{Name: "sample-pvc", Namespace: "default"},
-				Status: corev1.PersistentVolumeClaimStatus{
-					Conditions: []corev1.PersistentVolumeClaimCondition{
-						{
-							Type:    corev1.PersistentVolumeClaimControllerResizeError,
-							Status:  corev1.ConditionTrue,
-							Message: "requested size 20000Gi is too large for volume type gp3",
-						},
-					},
-				},
-			}
-			Expect(expansionfailure.ShouldRecover(pvc)).To(BeTrue())
-		})
 	})
 
 	Describe("#Recover", func() {
