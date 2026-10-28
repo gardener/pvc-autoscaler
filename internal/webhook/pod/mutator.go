@@ -101,6 +101,10 @@ func (m *Mutator) shouldGate(ctx context.Context, logger logr.Logger, pod *corev
 			continue
 		}
 
+		if !utils.IsOfflineResizeRequired(pvc) {
+			continue
+		}
+
 		owner, policy, err := utils.FindOwningPVCAAndPolicy(ctx, m.client, m.autoscalerName, pvc.Name, pvc.Namespace)
 		if err != nil {
 			// Do not block Pod creation because of a transient lookup error.
