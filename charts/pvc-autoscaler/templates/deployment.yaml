@@ -38,7 +38,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: manager
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          image: {{ include "pvc-autoscaler.image" (dict "image" .Values.image "defaultTag" .Chart.AppVersion) | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --health-probe-bind-address=:8081
@@ -101,13 +101,17 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.resizePolicy }}
+          resizePolicy:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           volumeMounts:
             - name: cert
               mountPath: /tmp/k8s-webhook-server/serving-certs
               readOnly: true
         {{- if .Values.kubeRbacProxy.enabled }}
         - name: kube-rbac-proxy
-          image: "{{ .Values.kubeRbacProxy.image.repository }}:{{ .Values.kubeRbacProxy.image.tag }}"
+          image: {{ include "pvc-autoscaler.image" (dict "image" .Values.kubeRbacProxy.image "defaultTag" "") | quote }}
           imagePullPolicy: {{ .Values.kubeRbacProxy.image.pullPolicy }}
           args:
             - --secure-listen-address=0.0.0.0:8443
@@ -124,6 +128,10 @@ spec:
           {{- end }}
           {{- with .Values.kubeRbacProxy.resources }}
           resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.kubeRbacProxy.resizePolicy }}
+          resizePolicy:
             {{- toYaml . | nindent 12 }}
           {{- end }}
         {{- end }}

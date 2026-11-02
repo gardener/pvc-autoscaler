@@ -7,10 +7,14 @@ fullnameOverride: ""
 replicaCount: 1
 
 image:
+  # -- (string) Controller image registry
+  registry: europe-docker.pkg.dev
   # -- (string) Controller image repository
-  repository: europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler
+  repository: gardener-project/releases/gardener/pvc-autoscaler
   # -- (string) Controller image tag, defaults to the chart appVersion
   tag: ""
+  # -- (string) Controller image digest (`sha256:...`), appended as `tag@digest`
+  digest: ""
   # -- (string) Controller image pull policy
   pullPolicy: IfNotPresent
 
@@ -66,10 +70,14 @@ kubeRbacProxy:
   # -- (bool) Serve metrics through a kube-rbac-proxy sidecar
   enabled: true
   image:
+    # -- (string) kube-rbac-proxy image registry
+    registry: quay.io
     # -- (string) kube-rbac-proxy image repository
-    repository: quay.io/brancz/kube-rbac-proxy
+    repository: brancz/kube-rbac-proxy
     # -- (string) kube-rbac-proxy image tag
     tag: v0.23.0
+    # -- (string) kube-rbac-proxy image digest (`sha256:...`), appended as `tag@digest`
+    digest: ""
     # -- (string) kube-rbac-proxy image pull policy
     pullPolicy: IfNotPresent
   # -- (object) Resources for the kube-rbac-proxy container
@@ -80,6 +88,8 @@ kubeRbacProxy:
     requests:
       cpu: 5m
       memory: 64Mi
+  # -- (list) Resize policy for the kube-rbac-proxy container
+  resizePolicy: []
 
 serviceMonitor:
   # -- (bool) Create a ServiceMonitor for the controller metrics
@@ -127,6 +137,9 @@ resources:
   requests:
     cpu: 10m
     memory: 64Mi
+
+# -- (list) Resize policy for the controller container
+resizePolicy: []
 
 # -- (string) Priority class name for the controller pod
 priorityClassName: ""

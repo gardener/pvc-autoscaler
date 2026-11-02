@@ -32,8 +32,10 @@ The CRD is rendered from `templates/` so that `helm upgrade` updates it. It carr
 | nameOverride | string | `""` | Override the chart name used in resource names |
 | fullnameOverride | string | `""` | Override the fully qualified resource name |
 | replicaCount | int | `1` | Number of controller replicas |
-| image.repository | string | `"europe-docker.pkg.dev/gardener-project/releases/gardener/pvc-autoscaler"` | Controller image repository |
+| image.registry | string | `"europe-docker.pkg.dev"` | Controller image registry |
+| image.repository | string | `"gardener-project/releases/gardener/pvc-autoscaler"` | Controller image repository |
 | image.tag | string | `""` | Controller image tag, defaults to the chart appVersion |
+| image.digest | string | `""` | Controller image digest (`sha256:...`), appended as `tag@digest` |
 | image.pullPolicy | string | `"IfNotPresent"` | Controller image pull policy |
 | imagePullSecrets | list | `[]` | Image pull secrets for the controller pod |
 | controller.interval | string | `"30s"` | Interval of the periodic volume check |
@@ -53,10 +55,13 @@ The CRD is rendered from `templates/` so that `helm upgrade` updates it. It carr
 | webhook.tls.secretName | string | `""` | Existing webhook TLS secret, required without cert-manager |
 | webhook.tls.caBundle | string | `""` | Base64 encoded CA bundle of the TLS secret, required without cert-manager |
 | kubeRbacProxy.enabled | bool | `true` | Serve metrics through a kube-rbac-proxy sidecar |
-| kubeRbacProxy.image.repository | string | `"quay.io/brancz/kube-rbac-proxy"` | kube-rbac-proxy image repository |
+| kubeRbacProxy.image.registry | string | `"quay.io"` | kube-rbac-proxy image registry |
+| kubeRbacProxy.image.repository | string | `"brancz/kube-rbac-proxy"` | kube-rbac-proxy image repository |
 | kubeRbacProxy.image.tag | string | `"v0.23.0"` | kube-rbac-proxy image tag |
+| kubeRbacProxy.image.digest | string | `""` | kube-rbac-proxy image digest (`sha256:...`), appended as `tag@digest` |
 | kubeRbacProxy.image.pullPolicy | string | `"IfNotPresent"` | kube-rbac-proxy image pull policy |
 | kubeRbacProxy.resources | object | `{"limits":{"cpu":"500m","memory":"128Mi"},"requests":{"cpu":"5m","memory":"64Mi"}}` | Resources for the kube-rbac-proxy container |
+| kubeRbacProxy.resizePolicy | list | `[]` | Resize policy for the kube-rbac-proxy container |
 | serviceMonitor.enabled | bool | `false` | Create a ServiceMonitor for the controller metrics |
 | serviceMonitor.labels | object | `{}` | Extra labels for the ServiceMonitor |
 | serviceMonitor.interval | string | `""` | Scrape interval, empty uses the Prometheus default |
@@ -67,6 +72,7 @@ The CRD is rendered from `templates/` so that `helm upgrade` updates it. It carr
 | podSecurityContext | object | `{"fsGroup":65532,"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod security context |
 | securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}` | Container security context |
 | resources | object | `{"limits":{"cpu":"500m","memory":"128Mi"},"requests":{"cpu":"10m","memory":"64Mi"}}` | Resources for the controller container |
+| resizePolicy | list | `[]` | Resize policy for the controller container |
 | priorityClassName | string | `""` | Priority class name for the controller pod |
 | nodeSelector | object | `{}` | Node selector for the controller pod |
 | tolerations | list | `[]` | Tolerations for the controller pod |

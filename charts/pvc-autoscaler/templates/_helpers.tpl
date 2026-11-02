@@ -31,6 +31,18 @@ app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
+{{- define "pvc-autoscaler.image" -}}
+{{- $image := .image -}}
+{{- if $image.registry -}}
+{{- printf "%s/%s:%s" $image.registry $image.repository (default .defaultTag $image.tag) -}}
+{{- else -}}
+{{- printf "%s:%s" $image.repository (default .defaultTag $image.tag) -}}
+{{- end -}}
+{{- with $image.digest -}}
+@{{ . }}
+{{- end -}}
+{{- end }}
+
 {{- define "pvc-autoscaler.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
 {{- default (include "pvc-autoscaler.fullname" .) .Values.serviceAccount.name }}
