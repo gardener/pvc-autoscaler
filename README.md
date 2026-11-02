@@ -47,6 +47,16 @@ recommended that you create a different overlay that uses [config/base](./config
 kustomize build config/overlays/default | kubectl apply -f -
 ```
 
+`pvc-autoscaler` can also be installed with the Helm chart located in
+[charts/pvc-autoscaler](./charts/pvc-autoscaler). Refer to its
+[README](./charts/pvc-autoscaler/README.md) for the available values.
+
+``` shell
+helm install pvc-autoscaler ./charts/pvc-autoscaler \
+  --namespace pvc-autoscaler-system \
+  --create-namespace
+```
+
 `pvc-autoscaler` uses Prometheus as a metrics source in order to monitor the
 persistent volumes usage. By default it will use the
 http://prometheus-k8s.monitoring.svc.cluster.local:9090 endpoint.

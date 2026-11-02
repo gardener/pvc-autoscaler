@@ -1,0 +1,8 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "pvc-autoscaler.fullname" . }}-manager
+  labels:
+    {{- include "pvc-autoscaler.labels" . | nindent 4 }}
+rules:
+  {{- (.Files.Get "files/rbac/role.yaml" | fromYaml).rules | toYaml | nindent 2 }}

@@ -1,0 +1,11 @@
+{{- if .Values.webhook.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ include "pvc-autoscaler.fullname" . }}-selfsigned
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pvc-autoscaler.labels" . | nindent 4 }}
+spec:
+  selfSigned: {}
+{{- end }}

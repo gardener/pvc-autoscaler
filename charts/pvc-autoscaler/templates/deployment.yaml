@@ -1,0 +1,146 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pvc-autoscaler.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pvc-autoscaler.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "pvc-autoscaler.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "pvc-autoscaler.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "pvc-autoscaler.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: manager
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --health-probe-bind-address=:8081
+            {{- if .Values.kubeRbacProxy.enabled }}
+            - --metrics-bind-address=127.0.0.1:8080
+            {{- else }}
+            - --metrics-bind-address=:8080
+            {{- end }}
+            - --leader-elect
+            - --leader-election-id={{ include "pvc-autoscaler.fullname" . }}
+            - --interval={{ .Values.controller.interval }}
+            - --prometheus-address={{ .Values.prometheus.address }}
+            {{- with .Values.prometheus.queries.availableBytes }}
+            - --metrics-available-bytes-query={{ . }}
+            {{- end }}
+            {{- with .Values.prometheus.queries.capacityBytes }}
+            - --metrics-capacity-bytes-query={{ . }}
+            {{- end }}
+            {{- with .Values.prometheus.queries.availableInodes }}
+            - --metrics-available-inodes-query={{ . }}
+            {{- end }}
+            {{- with .Values.prometheus.queries.capacityInodes }}
+            - --metrics-capacity-inodes-query={{ . }}
+            {{- end }}
+            {{- with .Values.controller.autoscalerName }}
+            - --autoscaler-name={{ . }}
+            {{- end }}
+            {{- range .Values.controller.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          ports:
+            - name: webhook-server
+              containerPort: 9443
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+            {{- if not .Values.kubeRbacProxy.enabled }}
+            - name: metrics
+              containerPort: 8080
+              protocol: TCP
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: cert
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+        {{- if .Values.kubeRbacProxy.enabled }}
+        - name: kube-rbac-proxy
+          image: "{{ .Values.kubeRbacProxy.image.repository }}:{{ .Values.kubeRbacProxy.image.tag }}"
+          imagePullPolicy: {{ .Values.kubeRbacProxy.image.pullPolicy }}
+          args:
+            - --secure-listen-address=0.0.0.0:8443
+            - --upstream=http://127.0.0.1:8080/
+            - --logtostderr=true
+            - --v=0
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.kubeRbacProxy.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- end }}
+      volumes:
+        - name: cert
+          secret:
+            secretName: {{ include "pvc-autoscaler.webhookSecretName" . }}
+            defaultMode: 420
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

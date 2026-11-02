@@ -1,0 +1,24 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "pvc-autoscaler.fullname" . }}
+  labels:
+    {{- include "pvc-autoscaler.labels" . | nindent 4 }}
+  {{- include "pvc-autoscaler.webhookAnnotations" . | nindent 2 }}
+webhooks:
+  - name: mpod.autoscaling.gardener.cloud
+    admissionReviewVersions:
+      - v1
+    clientConfig:
+      {{- include "pvc-autoscaler.webhookClientConfig" (dict "context" . "path" "/mutate--v1-pod") | nindent 6 }}
+    failurePolicy: Ignore
+    sideEffects: None
+    rules:
+      - apiGroups:
+          - ""
+        apiVersions:
+          - v1
+        operations:
+          - CREATE
+        resources:
+          - pods
