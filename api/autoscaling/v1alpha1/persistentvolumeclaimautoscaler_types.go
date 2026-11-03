@@ -19,6 +19,8 @@ import (
 // +kubebuilder:resource:shortName=pvca
 // +kubebuilder:printcolumn:name="AutoscalerName",type=string,JSONPath=`.spec.autoscalerName`
 // +kubebuilder:printcolumn:name="Target",type=string,JSONPath=`.spec.targetRef.name`
+// +kubebuilder:printcolumn:name="Volumes",type=integer,JSONPath=`.status.volumeCount`
+// +kubebuilder:printcolumn:name="Threshold",type=integer,JSONPath=`.spec.volumePolicies[0].scaleUp.utilizationThresholdPercent`
 
 // PersistentVolumeClaimAutoscaler is the Schema for the
 // persistentvolumeclaimautoscalers API
@@ -68,6 +70,10 @@ type PersistentVolumeClaimAutoscalerSpec struct {
 type PersistentVolumeClaimAutoscalerStatus struct {
 	// VolumeRecommendations specifies the status and recommendations for the PVCs managed by the autoscaler.
 	VolumeRecommendations []VolumeRecommendation `json:"volumeRecommendations,omitempty"`
+
+	// VolumeCount specifies the number of PVCs listed in VolumeRecommendations.
+	// +optional
+	VolumeCount int `json:"volumeCount,omitempty"`
 
 	// Conditions specifies the status conditions.
 	Conditions []metav1.Condition `json:"conditions,omitempty" patchStrategy:"merge" patchMergeKey:"type" protobuf:"bytes,1,rep,name=conditions"`
