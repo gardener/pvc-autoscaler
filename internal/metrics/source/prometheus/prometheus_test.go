@@ -47,6 +47,7 @@ func vector(samples ...sample) model.Vector {
 // which returns a vector keyed by the query string.
 type fakeAPI struct {
 	promv1.API
+
 	responses map[string]model.Vector
 }
 
