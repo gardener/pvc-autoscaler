@@ -168,7 +168,6 @@ var _ = Describe("Prometheus", func() {
 		}
 
 		It("should retain a PVC when all four series are present", func() {
-			key := types.NamespacedName{Namespace: "foo", Name: "pvc-a"}
 			p := newSource(map[string]model.Vector{
 				// AvailableBytes is a legitimate 0 (full volume) and must be kept.
 				availBytesQuery:  vector(sample{namespace: "foo", pvc: "pvc-a", value: 0}),
@@ -179,17 +178,18 @@ var _ = Describe("Prometheus", func() {
 
 			metrics, err := p.Get(context.Background())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(metrics).To(HaveKey(key))
-			Expect(metrics[key]).To(Equal(&metricssource.VolumeInfo{
-				AvailableBytes:  0,
-				CapacityBytes:   100,
-				AvailableInodes: 10,
-				CapacityInodes:  20,
-			}))
+			Expect(metrics).To(HaveKeyWithValue(
+				types.NamespacedName{Namespace: "foo", Name: "pvc-a"},
+				&metricssource.VolumeInfo{
+					AvailableBytes:  0,
+					CapacityBytes:   100,
+					AvailableInodes: 10,
+					CapacityInodes:  20,
+				}),
+			)
 		})
 
 		It("should drop a PVC when a series is missing", func() {
-			key := types.NamespacedName{Namespace: "foo", Name: "pvc-a"}
 			p := newSource(map[string]model.Vector{
 				capBytesQuery:    vector(sample{namespace: "foo", pvc: "pvc-a", value: 100}),
 				availInodesQuery: vector(sample{namespace: "foo", pvc: "pvc-a", value: 10}),
@@ -198,12 +198,10 @@ var _ = Describe("Prometheus", func() {
 
 			metrics, err := p.Get(context.Background())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(metrics).NotTo(HaveKey(key))
+			Expect(metrics).NotTo(HaveKey(types.NamespacedName{Namespace: "foo", Name: "pvc-a"}))
 		})
 
 		It("should keep complete PVCs and drop incomplete ones", func() {
-			complete := types.NamespacedName{Namespace: "foo", Name: "pvc-complete"}
-			incomplete := types.NamespacedName{Namespace: "foo", Name: "pvc-incomplete"}
 			p := newSource(map[string]model.Vector{
 				availBytesQuery: vector(
 					sample{namespace: "foo", pvc: "pvc-complete", value: 50},
@@ -224,14 +222,18 @@ var _ = Describe("Prometheus", func() {
 
 			metrics, err := p.Get(context.Background())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(metrics).To(HaveKey(complete))
-			Expect(metrics).NotTo(HaveKey(incomplete))
-			Expect(metrics[complete]).To(Equal(&metricssource.VolumeInfo{
-				AvailableBytes:  50,
-				CapacityBytes:   100,
-				AvailableInodes: 10,
-				CapacityInodes:  20,
-			}))
+			Expect(metrics).To(And(
+				HaveKeyWithValue(
+					types.NamespacedName{Namespace: "foo", Name: "pvc-complete"},
+					&metricssource.VolumeInfo{
+						AvailableBytes:  50,
+						CapacityBytes:   100,
+						AvailableInodes: 10,
+						CapacityInodes:  20,
+					},
+				),
+				Not(HaveKey(types.NamespacedName{Namespace: "foo", Name: "pvc-incomplete"})),
+			))
 		})
 	})
 })
