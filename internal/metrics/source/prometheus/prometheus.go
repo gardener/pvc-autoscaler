@@ -163,6 +163,7 @@ type valueMapperFunc func(val int, info *metricssource.VolumeInfo)
 // Get implements the [metricssource.Source] interface
 func (p *Prometheus) Get(ctx context.Context) (metricssource.Metrics, error) {
 	result := make(metricssource.Metrics)
+	validSourceCounts := make(map[types.NamespacedName]int)
 
 	// Maps queries to mappers for setting the values to the respective
 	// metricssource.VolumeInfo fields.
@@ -181,9 +182,23 @@ func (p *Prometheus) Get(ctx context.Context) (metricssource.Metrics, error) {
 		},
 	}
 
+	// Use the same timestamp for all metric fetches.
+	timestamp := time.Now()
 	for query, mapper := range queryToMapper {
-		if err := p.getMetric(ctx, query, result, mapper); err != nil {
+		if err := p.getMetric(ctx, query, result, mapper, validSourceCounts, timestamp); err != nil {
 			return nil, err
+		}
+	}
+
+	// Drop PVCs for which not all queries returned a series. A partially
+	// populated VolumeInfo would carry Go zero values for the missing fields
+	// which is indistinguishable from a genuine zero and could trigger a volume resize.
+	logger := log.FromContext(ctx)
+	requiredSeries := len(queryToMapper)
+	for key, count := range validSourceCounts {
+		if count < requiredSeries {
+			logger.Info("dropping PVC with incomplete metrics", "pvc", key, "seriesPresent", count, "seriesRequired", requiredSeries)
+			delete(result, key)
 		}
 	}
 
@@ -192,8 +207,8 @@ func (p *Prometheus) Get(ctx context.Context) (metricssource.Metrics, error) {
 
 // getMetric retrieves the given metric specified by `query' and maps the values
 // to `metrics' using a provided valueMapperFunc.
-func (p *Prometheus) getMetric(ctx context.Context, query string, metrics metricssource.Metrics, mapValue valueMapperFunc) error {
-	result, warnings, err := p.api.Query(ctx, query, time.Now())
+func (p *Prometheus) getMetric(ctx context.Context, query string, metrics metricssource.Metrics, mapValue valueMapperFunc, validSourceCounts map[types.NamespacedName]int, timestamp time.Time) error {
+	result, warnings, err := p.api.Query(ctx, query, timestamp)
 	if err != nil {
 		return err
 	}
@@ -229,6 +244,7 @@ func (p *Prometheus) getMetric(ctx context.Context, query string, metrics metric
 			volInfo = &metricssource.VolumeInfo{}
 			metrics[key] = volInfo
 		}
+		validSourceCounts[key]++
 		metricValue := int(val.Value)
 		mapValue(metricValue, volInfo)
 	}
