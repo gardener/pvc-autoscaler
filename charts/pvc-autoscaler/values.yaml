@@ -1,0 +1,151 @@
+# -- (string) Override the chart name used in resource names
+nameOverride: ""
+# -- (string) Override the fully qualified resource name
+fullnameOverride: ""
+
+# -- (int) Number of controller replicas
+replicaCount: 1
+
+image:
+  # -- (string) Controller image registry
+  registry: europe-docker.pkg.dev
+  # -- (string) Controller image repository
+  repository: gardener-project/releases/gardener/pvc-autoscaler
+  # -- (string) Controller image tag, defaults to the chart appVersion
+  tag: ""
+  # -- (string) Controller image digest (`sha256:...`), appended as `tag@digest`
+  digest: ""
+  # -- (string) Controller image pull policy
+  pullPolicy: IfNotPresent
+
+# -- (list) Image pull secrets for the controller pod
+imagePullSecrets: []
+
+controller:
+  # -- (string) Interval of the periodic volume check
+  interval: 30s
+  # -- (string) Only reconcile PVCAs with this `spec.autoscalerName`
+  autoscalerName: ""
+  # -- (list) Extra command line arguments for the controller
+  extraArgs: []
+
+prometheus:
+  # -- (string) Prometheus compatible API address used as metrics source
+  address: http://prometheus-k8s.monitoring.svc.cluster.local:9090
+  queries:
+    # -- (string) Available bytes query, empty uses the controller default
+    availableBytes: ""
+    # -- (string) Capacity bytes query, empty uses the controller default
+    capacityBytes: ""
+    # -- (string) Free inodes query, empty uses the controller default
+    availableInodes: ""
+    # -- (string) Total inodes query, empty uses the controller default
+    capacityInodes: ""
+
+serviceAccount:
+  # -- (bool) Create a service account for the controller
+  create: true
+  # -- (string) Service account name, defaults to the fully qualified name
+  name: ""
+  # -- (object) Annotations for the service account
+  annotations: {}
+
+crds:
+  # -- (bool) Install the PersistentVolumeClaimAutoscaler CRD
+  enabled: true
+  # -- (bool) Keep the CRD on `helm uninstall`
+  keep: true
+
+webhook:
+  certManager:
+    # -- (bool) Issue the webhook certificate with cert-manager
+    enabled: true
+  tls:
+    # -- (string) Existing webhook TLS secret, required without cert-manager
+    secretName: ""
+    # -- (string) Base64 encoded CA bundle of the TLS secret, required without cert-manager
+    caBundle: ""
+
+kubeRbacProxy:
+  # -- (bool) Serve metrics through a kube-rbac-proxy sidecar
+  enabled: true
+  image:
+    # -- (string) kube-rbac-proxy image registry
+    registry: quay.io
+    # -- (string) kube-rbac-proxy image repository
+    repository: brancz/kube-rbac-proxy
+    # -- (string) kube-rbac-proxy image tag
+    tag: v0.23.0
+    # -- (string) kube-rbac-proxy image digest (`sha256:...`), appended as `tag@digest`
+    digest: ""
+    # -- (string) kube-rbac-proxy image pull policy
+    pullPolicy: IfNotPresent
+  # -- (object) Resources for the kube-rbac-proxy container
+  resources:
+    limits:
+      cpu: 500m
+      memory: 128Mi
+    requests:
+      cpu: 5m
+      memory: 64Mi
+  # -- (list) Resize policy for the kube-rbac-proxy container
+  resizePolicy: []
+
+serviceMonitor:
+  # -- (bool) Create a ServiceMonitor for the controller metrics
+  enabled: false
+  # -- (object) Extra labels for the ServiceMonitor
+  labels: {}
+  # -- (string) Scrape interval, empty uses the Prometheus default
+  interval: ""
+
+networkPolicy:
+  # -- (bool) Create a NetworkPolicy for the webhook port
+  enabled: false
+  # -- (list) Peers allowed to reach the webhook port
+  from:
+    - namespaceSelector:
+        matchLabels:
+          webhook: enabled
+
+# -- (object) Annotations for the controller pod
+podAnnotations: {}
+# -- (object) Labels for the controller pod
+podLabels: {}
+
+# -- (object) Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- (object) Container security context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# -- (object) Resources for the controller container
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# -- (list) Resize policy for the controller container
+resizePolicy: []
+
+# -- (string) Priority class name for the controller pod
+priorityClassName: ""
+# -- (object) Node selector for the controller pod
+nodeSelector: {}
+# -- (list) Tolerations for the controller pod
+tolerations: []
+# -- (object) Affinity for the controller pod
+affinity: {}

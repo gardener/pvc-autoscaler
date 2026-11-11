@@ -35,12 +35,13 @@ SHELL = /usr/bin/env bash -o pipefail
 .SHELLFLAGS = -ec
 
 REPO_ROOT                         := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+CHART_DIR                         := $(REPO_ROOT)/charts/pvc-autoscaler
 LOCAL_KUBECONFIG                  := $(REPO_ROOT)/example/local/kubeconfig
 DEV_SETUP_WITH_LPP_RESIZE_SUPPORT ?= true
 KINDEST_NODE_IMAGE_TAG		      ?= v1.33.12@sha256:3f5c8443c620245e4d355cfe09e96a91ead32ceaa569d3f1ca9edf0cb2fe2ff4
 
 ## Rules
-tools-for-generate: controller-gen golangci-lint goimports yq
+tools-for-generate: controller-gen golangci-lint goimports yq helm-docs
 kind-up kind-down minikube-up minikube-down pvc-autoscaler-up pvc-autoscaler-dev pvc-autoscaler-down test-e2e-local ci-e2e-kind: export KUBECONFIG = $(LOCAL_KUBECONFIG)
 ci-e2e-kind: export ARTIFACTS ?= /tmp/artifacts
 
@@ -76,6 +77,15 @@ endef
 generate: controller-gen ## Generate DeepCopy, DeepCopyInto, and DeepCopyObject method implementations. Also generates WebhookConfiguration, ClusterRole and CRD objects.
 	$(call run-generate)
 	$(MAKE) build-installer
+	$(MAKE) generate-chart
+
+.PHONY: generate-chart
+generate-chart: helm-docs ## Sync the Helm chart with the generated CRD and RBAC, and regenerate its README.
+	rm -rf $(CHART_DIR)/files
+	mkdir -p $(CHART_DIR)/files/crds $(CHART_DIR)/files/rbac
+	cp config/crd/bases/*.yaml $(CHART_DIR)/files/crds/
+	cp config/rbac/role.yaml $(CHART_DIR)/files/rbac/role.yaml
+	$(HELM_DOCS) --chart-search-root $(CHART_DIR) --sort-values-order file
 
 .PHONY: sast
 sast: gosec
@@ -257,6 +267,7 @@ GOLANGCI_LINT = $(LOCALBIN)/golangci-lint
 MINIKUBE ?= $(LOCALBIN)/minikube
 YQ ?= $(LOCALBIN)/yq
 HELM ?= $(LOCALBIN)/helm
+HELM_DOCS ?= $(LOCALBIN)/helm-docs
 KIND ?= $(LOCALBIN)/kind
 SKAFFOLD ?= $(LOCALBIN)/skaffold
 KUBECTL ?= $(LOCALBIN)/kubectl
@@ -277,6 +288,8 @@ MINIKUBE_VERSION ?= v1.39.0
 YQ_VERSION ?= v4.54.1
 # renovate: datasource=github-releases depName=helm/helm
 HELM_VERSION ?= v4.3.1
+# renovate: datasource=github-releases depName=norwoodj/helm-docs
+HELM_DOCS_VERSION ?= v1.14.2
 # renovate: datasource=github-releases depName=kubernetes-sigs/kind
 KIND_VERSION ?= v0.33.0
 # renovate: datasource=github-releases depName=GoogleContainerTools/skaffold
@@ -315,6 +328,11 @@ version_gomod = $(shell go list -f '{{ .Version }}' -m $(1))
 # Use this function to get the major and minor version of a go module from go.mod
 # $1 - go module
 major_minor_version_gomod = $(shell go list -f '{{ .Version }}' -m $(1) | awk -F. '{ printf "%s.%s", $$1, $$2 }')
+
+.PHONY: helm-docs
+helm-docs: $(HELM_DOCS) | $(LOCALBIN)  ## Download helm-docs locally if necessary.
+$(HELM_DOCS): $(call gen-tool-version,$(HELM_DOCS),$(HELM_DOCS_VERSION))
+	$(call go-install-tool,$(HELM_DOCS),github.com/norwoodj/helm-docs/cmd/helm-docs,$(HELM_DOCS_VERSION))
 
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) | $(LOCALBIN)  ## Download kustomize locally if necessary.
