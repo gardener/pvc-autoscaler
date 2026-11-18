@@ -2047,6 +2047,7 @@ var _ = Describe("Periodic Runner", func() {
 					names = append(names, vr.Name)
 				}
 				Expect(names).To(Equal([]string{"pvc-a", "pvc-b", "pvc-c"}))
+				Expect(updatedPVCA.Status.VolumeCount).To(Equal(3))
 			})
 		})
 	})
