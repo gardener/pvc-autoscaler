@@ -1,0 +1,13 @@
+apiVersion: v2
+name: pvc-autoscaler
+description: A Helm chart for pvc-autoscaler, a Kubernetes controller which resizes persistent volumes when their available space or inodes drop below a threshold
+type: application
+version: 0.1.0
+appVersion: "v0.3.2"
+home: https://github.com/gardener/pvc-autoscaler
+sources:
+  - https://github.com/gardener/pvc-autoscaler
+keywords:
+  - autoscaling
+  - persistentvolumeclaim
+  - storage

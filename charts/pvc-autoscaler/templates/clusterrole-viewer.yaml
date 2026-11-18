@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "pvc-autoscaler.fullname" . }}-viewer
+  labels:
+    {{- include "pvc-autoscaler.labels" . | nindent 4 }}
+rules:
+  - apiGroups:
+      - autoscaling.gardener.cloud
+    resources:
+      - persistentvolumeclaimautoscalers
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - autoscaling.gardener.cloud
+    resources:
+      - persistentvolumeclaimautoscalers/status
+    verbs:
+      - get

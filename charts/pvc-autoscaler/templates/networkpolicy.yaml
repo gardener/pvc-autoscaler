@@ -1,0 +1,21 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "pvc-autoscaler.fullname" . }}-allow-webhook-traffic
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pvc-autoscaler.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "pvc-autoscaler.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- toYaml .Values.networkPolicy.from | nindent 8 }}
+      ports:
+        - port: 9443
+          protocol: TCP
+{{- end }}

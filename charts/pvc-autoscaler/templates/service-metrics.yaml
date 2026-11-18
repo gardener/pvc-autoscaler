@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pvc-autoscaler.fullname" . }}-metrics
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "pvc-autoscaler.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+spec:
+  ports:
+    {{- if .Values.kubeRbacProxy.enabled }}
+    - name: https
+      port: 8443
+      protocol: TCP
+      targetPort: https
+    {{- else }}
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: metrics
+    {{- end }}
+  selector:
+    {{- include "pvc-autoscaler.selectorLabels" . | nindent 4 }}
