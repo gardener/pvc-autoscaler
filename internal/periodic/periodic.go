@@ -544,6 +544,14 @@ func (r *Runner) updateVolumeRecommendationForPVC(volumeRecommendations []v1alph
 		volumeRecommendation.Target.Size = pvc.Spec.Resources.Requests.Storage()
 	}
 
+	if volumeRecommendation.LastResizeTime == nil {
+		if ts, ok := pvc.Annotations[common.AnnotationLastResizeTime]; ok {
+			if t, err := time.Parse(time.RFC3339, ts); err == nil {
+				volumeRecommendation.LastResizeTime = &metav1.Time{Time: t}
+			}
+		}
+	}
+
 	// Detect whether the metrics source is reporting stale data. Stale
 	// metrics data would be when the volume info metrics reported by the
 	// metrics source deviate from the current PVC size indicated by
@@ -805,6 +813,8 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 	if pvc.Annotations == nil {
 		pvc.Annotations = map[string]string{}
 	}
+	currentTime := metav1.Now()
+	pvc.Annotations[common.AnnotationLastResizeTime] = currentTime.Format(time.RFC3339)
 	pvc.Annotations[common.AnnotationPreviousSize] = currSpecSize.String()
 
 	pvc.Spec.Resources.Requests[corev1.ResourceStorage] = *targetSize
@@ -820,7 +830,7 @@ func (r *Runner) resizePVC(ctx context.Context, logger logr.Logger, pvc *corev1.
 	}
 
 	volumeRecommendation.Target.Size = targetSize
-	volumeRecommendation.LastResizeTime = ptr.To(metav1.Now())
+	volumeRecommendation.LastResizeTime = &currentTime
 
 	resizingConditions.addCondition(metav1.Condition{
 		Type:    string(v1alpha1.ConditionTypeResizing),
