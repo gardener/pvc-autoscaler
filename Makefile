@@ -282,7 +282,7 @@ KIND_VERSION ?= v0.33.0
 # renovate: datasource=github-releases depName=GoogleContainerTools/skaffold
 SKAFFOLD_VERSION ?= v2.25.0
 # renovate: datasource=github-releases depName=kubernetes/kubernetes
-KUBECTL_VERSION ?= v1.37.1
+KUBECTL_VERSION ?= v1.37.2
 # renovate: datasource=github-releases depName=securego/gosec
 GOSEC_VERSION ?= v2.29.0
 # renovate: datasource=github-releases depName=incu6us/goimports-reviser
