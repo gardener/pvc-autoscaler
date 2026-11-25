@@ -55,6 +55,9 @@ If your Prometheus instance is running at a different endpoint, make sure that
 you configure the `--prometheus-address` option for the
 `pvc-autoscaler-controller-manager` deployment.
 
+See [docs/usage/configuration.md](./docs/usage/configuration.md) for all
+controller flags and metrics source options.
+
 # Usage
 
 In order to start monitoring and automatically resize a persistent volume, when
