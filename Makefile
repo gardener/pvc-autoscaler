@@ -268,7 +268,7 @@ GOIMPORTSREVISER ?= $(LOCALBIN)/goimports-reviser
 
 ## Tool Versions
 # renovate: datasource=github-releases depName=kubernetes-sigs/kustomize extractVersion=^kustomize\/(?<version>.*)$
-KUSTOMIZE_VERSION ?= v5.8.2
+KUSTOMIZE_VERSION ?= v5.8.3
 # renovate: datasource=github-releases depName=golangci/golangci-lint
 GOLANGCI_LINT_VERSION ?= v2.14.0
 # renovate: datasource=github-releases depName=kubernetes/minikube
