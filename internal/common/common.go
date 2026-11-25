@@ -60,6 +60,14 @@ const (
 	// work on this PVC.
 	AnnotationPreviousSize = "pvc.autoscaling.gardener.cloud/prev-size"
 
+	// AnnotationLastResizeTime records the time of the most recent autoscaler-initiated
+	// resize, formatted as RFC3339. It is written atomically with the resize patch so
+	// that the cooldown anchor survives even if the subsequent PVCA status update is
+	// lost (e.g. a conflicting status write or a controller restart between the two
+	// patches). The PVCA status LastResizeTime is a cache of this value and is
+	// re-derived from the annotation when missing.
+	AnnotationLastResizeTime = "pvc.autoscaling.gardener.cloud/last-resize-time"
+
 	// SchedulingGateOfflineResize is the name of the scheduling gate that the
 	// pvc-autoscaler adds to Pods whose PVC failed to resize online (while the Pod
 	// is still running). The gate holds the Pod unscheduled so that

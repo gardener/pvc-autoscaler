@@ -339,6 +339,60 @@ var _ = Describe("Periodic Runner", func() {
 					},
 				}))
 			})
+
+			It("should re-derive LastResizeTime from the PVC annotation when the status value is missing", func() {
+				By("Recording a last-resize-time annotation on the PVC (as a resize patch would)")
+				resizeTime := time.Now().Add(-10 * time.Minute).UTC().Truncate(time.Second)
+				annotationPatch := client.MergeFrom(pvc.DeepCopy())
+				if pvc.Annotations == nil {
+					pvc.Annotations = map[string]string{}
+				}
+				pvc.Annotations[common.AnnotationLastResizeTime] = resizeTime.Format(time.RFC3339)
+				Expect(k8sClient.Patch(parentCtx, pvc, annotationPatch)).To(Succeed())
+
+				volInfo := &metricssource.VolumeInfo{
+					AvailableBytes:  9 * 1024 * 1024,
+					CapacityBytes:   1024 * 1024 * 1024,
+					CapacityInodes:  1000,
+					AvailableInodes: 1000,
+				}
+
+				By("Calling updateVolumeRecommendationForPVC with an empty incoming recommendation")
+				volumeRecommendation, err := runner.updateVolumeRecommendationForPVC(nil, pvc, volInfo)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(volumeRecommendation.LastResizeTime).NotTo(BeNil())
+				Expect(volumeRecommendation.LastResizeTime.Time).To(BeTemporally("==", resizeTime))
+			})
+
+			It("should keep an existing LastResizeTime and not overwrite it from the annotation", func() {
+				By("Recording an older last-resize-time annotation on the PVC")
+				annotationTime := time.Now().Add(-1 * time.Hour).UTC().Truncate(time.Second)
+				annotationPatch := client.MergeFrom(pvc.DeepCopy())
+				if pvc.Annotations == nil {
+					pvc.Annotations = map[string]string{}
+				}
+				pvc.Annotations[common.AnnotationLastResizeTime] = annotationTime.Format(time.RFC3339)
+				Expect(k8sClient.Patch(parentCtx, pvc, annotationPatch)).To(Succeed())
+
+				volInfo := &metricssource.VolumeInfo{
+					AvailableBytes:  9 * 1024 * 1024,
+					CapacityBytes:   1024 * 1024 * 1024,
+					CapacityInodes:  1000,
+					AvailableInodes: 1000,
+				}
+
+				By("Seeding a more recent LastResizeTime in the incoming recommendation")
+				statusTime := metav1.NewTime(time.Now().UTC().Truncate(time.Second))
+				incoming := []v1alpha1.VolumeRecommendation{{
+					Name:           pvc.Name,
+					LastResizeTime: &statusTime,
+				}}
+
+				volumeRecommendation, err := runner.updateVolumeRecommendationForPVC(incoming, pvc, volInfo)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(volumeRecommendation.LastResizeTime).NotTo(BeNil())
+				Expect(volumeRecommendation.LastResizeTime.Time).To(BeTemporally("==", statusTime.Time))
+			})
 		})
 
 		Describe("#validatePVC", func() {
@@ -1662,6 +1716,12 @@ var _ = Describe("Periodic Runner", func() {
 					Expect(k8sClient.Get(parentCtx, client.ObjectKeyFromObject(pvc), &resizedPvc)).To(Succeed())
 					Expect(resizedPvc.Spec.Resources.Requests[corev1.ResourceStorage]).To(Equal(targetSize))
 					Expect(resizedPvc.Annotations).To(HaveKeyWithValue(common.AnnotationPreviousSize, "1Gi"))
+
+					By("Verifying the resize time was recorded on the PVC atomically with the resize")
+					Expect(resizedPvc.Annotations).To(HaveKey(common.AnnotationLastResizeTime))
+					annotatedTime, parseErr := time.Parse(time.RFC3339, resizedPvc.Annotations[common.AnnotationLastResizeTime])
+					Expect(parseErr).NotTo(HaveOccurred())
+					Expect(annotatedTime).To(BeTemporally("~", time.Now(), time.Minute))
 
 					By("Verifying the returned recommendation records the new target size and resize time")
 					Expect(updatedRecommendation.Target.Size).NotTo(BeNil())
