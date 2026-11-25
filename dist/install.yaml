@@ -47,6 +47,12 @@ spec:
     - jsonPath: .spec.targetRef.name
       name: Target
       type: string
+    - jsonPath: .status.volumeCount
+      name: Volumes
+      type: integer
+    - jsonPath: .spec.volumePolicies[0].scaleUp.utilizationThresholdPercent
+      name: Threshold
+      type: integer
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -251,6 +257,9 @@ spec:
                   - type
                   type: object
                 type: array
+              volumeCount:
+                description: VolumeCount specifies the number of PVCs listed in VolumeRecommendations.
+                type: integer
               volumeRecommendations:
                 description: VolumeRecommendations specifies the status and recommendations
                   for the PVCs managed by the autoscaler.

@@ -859,6 +859,7 @@ func (r *Runner) setStatus(ctx context.Context, pvca *v1alpha1.PersistentVolumeC
 		return strings.Compare(vr1.Name, vr2.Name)
 	})
 	pvca.Status.VolumeRecommendations = volumeRecommendations
+	pvca.Status.VolumeCount = len(volumeRecommendations)
 
 	if apiequality.Semantic.DeepEqual(original.Status, pvca.Status) {
 		return nil
